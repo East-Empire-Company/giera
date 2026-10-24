@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "generated_at": "2026-10-24T13:57:33.838Z",
+  "text_model": "nemotron-bolt",
+  "voice_id": "C8ZVSJxcymeT86xT429O",
+  "entries": {
+    "dig_grass": {
+      "id": "dig_grass",
+      "kind": "sfx",
+      "cache_key": "b91930029cf5db9dcc4d03b38e177ec09c7759d1c54ecb9e6f44a0efd59b6c95",
+      "path": "assets/audio/generated/dig_grass-b91930029cf5db9dcc4d03b38e177ec09c7759d1c54ecb9e6f44a0efd59b6c95.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "8",
+      "text": "short soft turf impact, small shovel bite, dull, no music"
+    },
+    "dig_stone": {
+      "id": "dig_stone",
+      "kind": "sfx",
+      "cache_key": "839dedbcb01feff6dc8ebdcb2dab789842460c23038fdc7bba523255a45903e0",
+      "path": "assets/audio/generated/dig_stone-839dedbcb01feff6dc8ebdcb2dab789842460c23038fdc7bba523255a45903e0.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "8",
+      "text": "short pickaxe strike on stone, sharp click, no music"
+    },
+    "dig_wood": {
+      "id": "dig_wood",
+      "kind": "sfx",
+      "cache_key": "917de26139942f355bcd0f010711e70b69f9e09e931ca42d96b738b13376bce0",
+      "path": "assets/audio/generated/dig_wood-917de26139942f355bcd0f010711e70b69f9e09e931ca42d96b738b13376bce0.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "8",
+      "text": "short axe chop on wood, hollow knock, no music"
+    },
+    "place_block": {
+      "id": "place_block",
+      "kind": "sfx",
+      "cache_key": "8c8c024d53bd4003911fca3a8b63343a63d701b59e9e240a871f7ecc07d9eb22",
+      "path": "assets/audio/generated/place_block-8c8c024d53bd4003911fca3a8b63343a63d701b59e9e240a871f7ecc07d9eb22.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "7",
+      "text": "soft block placement click, satisfying, no music"
+    },
+    "step": {
+      "id": "step",
+      "kind": "sfx",
+      "cache_key": "a724ed749dc3ef83cc500dd0bfd584f282e0445e311328701058e3c853a992bb",
+      "path": "assets/audio/generated/step-a724ed749dc3ef83cc500dd0bfd584f282e0445e311328701058e3c853a992bb.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "6",
+      "text": "light footstep on grass, very short, no music"
+    },
+    "jump": {
+      "id": "jump",
+      "kind": "sfx",
+      "cache_key": "ba4e10883c34b7533f74730db04e40b781053cd1b9d0d3c182d48a5889059499",
+      "path": "assets/audio/generated/jump-ba4e10883c34b7533f74730db04e40b781053cd1b9d0d3c182d48a5889059499.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "7",
+      "text": "light cartoon jump whoosh, playful, no music"
+    },
+    "craft_ok": {
+      "id": "craft_ok",
+      "kind": "sfx",
+      "cache_key": "f23e4d80866b7357bfd7a83cbc5a1ee20746dc55dd344de4a7f750ffa398ddd4",
+      "path": "assets/audio/generated/craft_ok-f23e4d80866b7357bfd7a83cbc5a1ee20746dc55dd344de4a7f750ffa398ddd4.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "10",
+      "text": "bright short success chime, magical sparkle, no music"
+    },
+    "objective_done": {
+      "id": "objective_done",
+      "kind": "sfx",
+      "cache_key": "95daf5e717420f8851a13feef220b38e6900c02d8bdac57379c0a3e7889bf46d",
+      "path": "assets/audio/generated/objective_done-95daf5e717420f8851a13feef220b38e6900c02d8bdac57379c0a3e7889bf46d.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "15",
+      "text": "warm two-note success fanfare, child friendly, no music"
+    },
+    "ui_click": {
+      "id": "ui_click",
+      "kind": "sfx",
+      "cache_key": "c70e0891812ab572e5f0f77cf201db40ee17b806e719627489181c6c9344f5c7",
+      "path": "assets/audio/generated/ui_click-c70e0891812ab572e5f0f77cf201db40ee17b806e719627489181c6c9344f5c7.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "6",
+      "text": "soft short UI click, subtle, no music"
+    },
+    "ui_open": {
+      "id": "ui_open",
+      "kind": "sfx",
+      "cache_key": "52182c67d8306bbb4c67cabb46efd93e55350b9d9cfa5fe44622e1e4ddb2e647",
+      "path": "assets/audio/generated/ui_open-52182c67d8306bbb4c67cabb46efd93e55350b9d9cfa5fe44622e1e4ddb2e647.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "7",
+      "text": "soft short panel open whoosh, subtle, no music"
+    },
+    "water_enter": {
+      "id": "water_enter",
+      "kind": "sfx",
+      "cache_key": "3626cb1420a9ad5438e3b6fcef005fb8df3ec109230f0f59ff345d9eebc17bac",
+      "path": "assets/audio/generated/water_enter-3626cb1420a9ad5438e3b6fcef005fb8df3ec109230f0f59ff345d9eebc17bac.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "10",
+      "text": "gentle short water splash, no music"
+    },
+    "npc_chat_pop": {
+      "id": "npc_chat_pop",
+      "kind": "sfx",
+      "cache_key": "63f24524e8292733208eabcf5521b090dcb1a3f56b4104a154593d0f1287c3f0",
+      "path": "assets/audio/generated/npc_chat_pop-63f24524e8292733208eabcf5521b090dcb1a3f56b4104a154593d0f1287c3f0.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "6",
+      "text": "soft short chat bubble pop, subtle, no music"
+    },
+    "ambience_forest": {
+      "id": "ambience_forest",
+      "kind": "sfx",
+      "cache_key": "c6398ef135c6716a61571e222b2324fc0d2a7e2148710e22b8af65ae85742de8",
+      "path": "assets/audio/generated/ambience_forest-c6398ef135c6716a61571e222b2324fc0d2a7e2148710e22b8af65ae85742de8.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "364",
+      "text": "soft continuous forest ambience, light wind in leaves, distant birds, steady texture, no events, no music"
+    },
+    "music_day_loop": {
+      "id": "music_day_loop",
+      "kind": "music",
+      "cache_key": "f188f7e8ca01e8bdbb2ce83fb0e80a8bf37585052140a78b0befc800b709964f",
+      "path": "assets/audio/generated/music_day_loop-f188f7e8ca01e8bdbb2ce83fb0e80a8bf37585052140a78b0befc800b709964f.mp3",
+      "model_id": "music_v2_5",
+      "prompt": "cheerful cozy chiptune game loop, 4 bars, 100 BPM, key of C major, square wave lead, soft triangle bass, gentle noise percussion, no vocals, no dramatic build, no ending"
+    },
+    "music_night_loop": {
+      "id": "music_night_loop",
+      "kind": "music",
+      "cache_key": "b2ef4bdf89c807224fa6435e2ea40597386d89a7f4a6f5c582f5f775bf35cc7f",
+      "path": "assets/audio/generated/music_night_loop-b2ef4bdf89c807224fa6435e2ea40597386d89a7f4a6f5c582f5f775bf35cc7f.mp3",
+      "model_id": "music_v2_5",
+      "prompt": "calm music box lullaby loop, 4 bars, 80 BPM, soft chimes, no vocals, no ending"
+    }
+  }
+}

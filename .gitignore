@@ -1,0 +1,16 @@
+node_modules/
+.cache/
+dist/
+coverage/
+test-results/
+playwright-report/
+server/data/
+server/data-test/
+server/cache/tts/
+.ai/evidence/
+.env
+.env.*
+!.env.example
+.serena/
+.superpowers/
+<project>/

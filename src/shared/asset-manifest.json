@@ -1,0 +1,62 @@
+{
+  "tiles": {
+    "stone": "assets/textures/tiles/stone.png",
+    "cobblestone": "assets/textures/tiles/cobblestone.png",
+    "dirt": "assets/textures/tiles/dirt.png",
+    "grass_top": "assets/textures/tiles/grass_top.png",
+    "grass_side": "assets/textures/tiles/grass_side.png",
+    "sand": "assets/textures/tiles/sand.png",
+    "oak_log_top": "assets/textures/tiles/oak_log_top.png",
+    "oak_log_side": "assets/textures/tiles/oak_log_side.png",
+    "ginkgo_leaves": "assets/textures/tiles/ginkgo_leaves.png",
+    "oak_planks": "assets/textures/tiles/oak_planks.png",
+    "glass": "assets/textures/tiles/glass.png",
+    "water": "assets/textures/tiles/water.png",
+    "default_mineral_coal": "assets/textures/tiles/default_mineral_coal.png",
+    "default_mineral_iron": "assets/textures/tiles/default_mineral_iron.png",
+    "default_mineral_gold": "assets/textures/tiles/default_mineral_gold.png"
+  },
+  "models": {
+    "playerOne": "assets/models/character-a.meshopt.glb",
+    "playerTwo": "assets/models/character-b.meshopt.glb"
+  },
+  "sky": {
+    "clouds": "assets/sky/clouds.png",
+    "sideClouds": "assets/sky/skybox_sideClouds.png"
+  },
+  "particles": {
+    "dirt01": "assets/particles/dirt_01.png",
+    "dirt02": "assets/particles/dirt_02.png",
+    "spark01": "assets/particles/spark_01.png",
+    "smoke01": "assets/particles/smoke_01.png",
+    "star01": "assets/particles/star_01.png"
+  },
+  "ui": {
+    "button": "assets/ui/kenney/button_rectangle_depth_gradient.png",
+    "roundButton": "assets/ui/kenney/button_round_depth_line.png",
+    "squareButton": "assets/ui/kenney/button_square_depth_line.png",
+    "checkmark": "assets/ui/kenney/check_square_color_checkmark.png",
+    "star": "assets/ui/kenney/star.png"
+  },
+  "icons": {
+    "axe": "assets/ui/icons/axe_iron.png",
+    "pickaxe": "assets/ui/icons/pick_iron.png",
+    "coal": "assets/ui/icons/ore_coal.png",
+    "iron": "assets/ui/icons/ore_iron.png",
+    "gold": "assets/ui/icons/ore_gold.png"
+  },
+  "normalMaps": {
+    "water": "assets/textures/water-normal.jpg"
+  },
+  "overlays": {
+    "crack": "assets/textures/crackover.png"
+  },
+  "fonts": {
+    "file0": "assets/fonts/pixelify-sans.css",
+    "file1": "assets/fonts/pixelify-sans-0.ttf",
+    "file2": "assets/fonts/pixelify-sans-1.ttf",
+    "file3": "assets/fonts/OFL.txt",
+    "file4": "assets/fonts/pixelify-sans-3.ttf",
+    "file5": "assets/fonts/pixelify-sans-2.ttf"
+  }
+}

@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: giera
+  namespace: giera
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: giera
+  template:
+    metadata:
+      labels:
+        app: giera
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3s-mikrus-1
+      imagePullSecrets:
+        - name: forgejo-registry
+      containers:
+        - name: app
+          image: forgejo.tail5d39b4.ts.net/jakub/giera:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: GIERA_DATA_DIR
+              value: /data
+          volumeMounts:
+            - name: giera-data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command:
+                - bun
+                - -e
+                - "await fetch('http://127.0.0.1:8080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - bun
+                - -e
+                - "await fetch('http://127.0.0.1:8080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+        - name: ts-funnel
+          image: tailscale/tailscale:stable
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: ts-sidecar-auth
+                  key: TS_AUTHKEY
+            - name: TS_HOSTNAME
+              value: giera
+            - name: TS_USERSPACE
+              value: "false"
+            - name: TS_SERVE_CONFIG
+              value: /config/serve.json
+            - name: TS_STATE_DIR
+              value: /var/lib/tailscale
+            - name: TS_KUBE_SECRET
+              value: ""
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN", "NET_RAW"]
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/tailscale
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: giera-data
+          persistentVolumeClaim:
+            claimName: giera-data
+        - name: config
+          configMap:
+            name: ts-funnel-config
+        - name: state
+          persistentVolumeClaim:
+            claimName: ts-funnel-state
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: giera
+  namespace: giera
+spec:
+  selector:
+    app: giera
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

@@ -1,0 +1,31 @@
+{
+  "text_model": "nemotron-bolt",
+  "voice_copy_prompt_version": "polish-kid-lines-v4-nemotron-only",
+  "sfx": [
+    { "id": "dig_grass", "kind": "sfx", "text": "short soft turf impact, small shovel bite, dull, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.7, "output_format": "mp3_44100_128" },
+    { "id": "dig_stone", "kind": "sfx", "text": "short pickaxe strike on stone, sharp click, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.7, "output_format": "mp3_44100_128" },
+    { "id": "dig_wood", "kind": "sfx", "text": "short axe chop on wood, hollow knock, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.7, "output_format": "mp3_44100_128" },
+    { "id": "place_block", "kind": "sfx", "text": "soft block placement click, satisfying, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.6, "output_format": "mp3_44100_128" },
+    { "id": "step", "kind": "sfx", "text": "light footstep on grass, very short, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.5, "output_format": "mp3_44100_128" },
+    { "id": "jump", "kind": "sfx", "text": "light cartoon jump whoosh, playful, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.6, "output_format": "mp3_44100_128" },
+    { "id": "craft_ok", "kind": "sfx", "text": "bright short success chime, magical sparkle, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.8, "output_format": "mp3_44100_128" },
+    { "id": "objective_done", "kind": "sfx", "text": "warm two-note success fanfare, child friendly, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 1.2, "output_format": "mp3_44100_128" },
+    { "id": "ui_click", "kind": "sfx", "text": "soft short UI click, subtle, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.5, "output_format": "mp3_44100_128" },
+    { "id": "ui_open", "kind": "sfx", "text": "soft short panel open whoosh, subtle, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.6, "output_format": "mp3_44100_128" },
+    { "id": "water_enter", "kind": "sfx", "text": "gentle short water splash, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.8, "output_format": "mp3_44100_128" },
+    { "id": "npc_chat_pop", "kind": "sfx", "text": "soft short chat bubble pop, subtle, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.5, "output_format": "mp3_44100_128" },
+    { "id": "ambience_forest", "kind": "sfx", "text": "soft continuous forest ambience, light wind in leaves, distant birds, steady texture, no events, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 30, "loop": true, "output_format": "mp3_44100_128" }
+  ],
+  "music": [
+    { "id": "music_day_loop", "kind": "music", "prompt": "cheerful cozy chiptune game loop, 4 bars, 100 BPM, key of C major, square wave lead, soft triangle bass, gentle noise percussion, no vocals, no dramatic build, no ending", "model_id": "music_v2_5", "music_length_ms": 60000, "force_instrumental": true, "loop": true, "output_format": "mp3_44100_128" },
+    { "id": "music_night_loop", "kind": "music", "prompt": "calm music box lullaby loop, 4 bars, 80 BPM, soft chimes, no vocals, no ending", "model_id": "music_v2_5", "music_length_ms": 60000, "force_instrumental": true, "loop": true, "output_format": "mp3_44100_128" }
+  ],
+  "voice": [
+    { "id": "voice_gather_wood", "kind": "voice", "topic": "Encourage the child to collect nearby wood.", "model_id": "eleven_v4_turbo", "language_code": "pl", "voice_settings": { "stability": 0.55, "similarity_boost": 0.8, "style": 0.2, "speed": 0.95 }, "output_format": "mp3_44100_128" },
+    { "id": "voice_craft_stick", "kind": "voice", "topic": "Encourage the child to craft a stick from collected wood.", "model_id": "eleven_v4_turbo", "language_code": "pl", "voice_settings": { "stability": 0.55, "similarity_boost": 0.8, "style": 0.2, "speed": 0.95 }, "output_format": "mp3_44100_128" },
+    { "id": "voice_find_stone", "kind": "voice", "topic": "Guide the child to find stone nearby.", "model_id": "eleven_v4_turbo", "language_code": "pl", "voice_settings": { "stability": 0.55, "similarity_boost": 0.8, "style": 0.2, "speed": 0.95 }, "output_format": "mp3_44100_128" },
+    { "id": "voice_craft_tool", "kind": "voice", "topic": "Encourage the child to craft a simple tool.", "model_id": "eleven_v4_turbo", "language_code": "pl", "voice_settings": { "stability": 0.55, "similarity_boost": 0.8, "style": 0.2, "speed": 0.95 }, "output_format": "mp3_44100_128" },
+    { "id": "voice_finish_house", "kind": "voice", "topic": "Celebrate finishing the small house.", "model_id": "eleven_v4_turbo", "language_code": "pl", "voice_settings": { "stability": 0.55, "similarity_boost": 0.8, "style": 0.2, "speed": 0.95 }, "output_format": "mp3_44100_128" },
+    { "id": "voice_return_play", "kind": "voice", "topic": "Invite the child to explore and build freely.", "model_id": "eleven_v4_turbo", "language_code": "pl", "voice_settings": { "stability": 0.55, "similarity_boost": 0.8, "style": 0.2, "speed": 0.95 }, "output_format": "mp3_44100_128" }
+  ]
+}

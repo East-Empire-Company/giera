@@ -1,0 +1,16 @@
+{
+  "type": "client",
+  "name": "give_quest",
+  "description": "Ustawia nowy cel zadania dla dziecka z 6-krokowej listy samouczka.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "step_id": {
+        "type": "string",
+        "enum": ["gather_wood", "craft_planks", "craft_sticks", "find_stone", "craft_tool", "build_house"],
+        "description": "Identyfikator kroku zadania."
+      }
+    },
+    "required": ["step_id"]
+  }
+}
