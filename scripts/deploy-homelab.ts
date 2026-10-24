@@ -135,8 +135,13 @@ const must = (ok: boolean): boolean => {
 };
 
 must(
-  await step("cluster reachable", () => {
-    const res = run("kubectl", ["get", "nodes", "-o", "name"]);
+  await step("cluster reachable", async () => {
+    let res = { ok: false, out: "" };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = run("kubectl", ["get", "nodes", "-o", "name"]);
+      if (res.ok) break;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
     return { ok: res.ok, detail: res.ok ? res.out : res.out };
   })
 );
