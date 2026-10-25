@@ -68,4 +68,24 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(objIcon).not.toBeNull();
     expect(objIcon.src).toContain("oak_log_side.png");
   });
+
+  it("shows tycoon star count and tier in the HUD chip", () => {
+    const inventory = new GameInventory();
+    const objectives = new ObjectiveManager();
+    const hud = new GameHUD({ inventory, objectives });
+
+    const chip = document.querySelector(".hud-tycoon-chip");
+    expect(chip).not.toBeNull();
+    const chipIcon = chip?.querySelector("img") as HTMLImageElement;
+    expect(chipIcon.src).toContain("star.png");
+
+    hud.updateTycoon(7, 2);
+
+    expect(document.querySelector(".hud-tycoon-stars")?.textContent).toBe("7");
+    expect(document.querySelector(".hud-tycoon-tier")?.textContent).toBe("Poziom 2");
+
+    hud.updateTycoon(7, 2);
+    expect(document.querySelector(".hud-tycoon-stars")?.textContent).toBe("7");
+    expect(document.querySelector(".hud-tycoon-tier")?.textContent).toBe("Poziom 2");
+  });
 });

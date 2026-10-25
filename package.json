@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "serve": "bun server/index.ts",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "shots": "playwright test tests/e2e/shots.spec.ts",
     "pipeline": "bun scripts/pipeline.ts",

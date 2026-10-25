@@ -97,7 +97,7 @@ function stageList(fast: boolean): { name: string; run: () => Promise<StageResul
   const pw = (project: string) => ["bunx", "playwright", "test", `--project=${project}`];
   const stages: { name: string; run: () => Promise<StageResult> }[] = [
     { name: "typecheck", run: () => runCmd("typecheck", ["bun", "run", "typecheck"]) },
-    { name: "unit", run: () => runCmd("unit", ["bun", "run", "test"]) },
+    { name: "unit", run: () => runCmd("unit", ["bun", "run", "test:coverage"]) },
     { name: "content", run: () => runCmd("content", ["bun", "scripts/pipeline-content.ts"]) },
     { name: "build", run: () => runCmd("build", ["bun", "run", "build"]) },
     {
