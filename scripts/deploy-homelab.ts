@@ -146,10 +146,57 @@ must(
   })
 );
 
-await step("registry mirror present on cluster nodes", () => {
-  const res = run("ssh", ["-F", resolve(HOME, "cluster-migration/ssh/config"), "-o", "ConnectTimeout=10", "k3s-cp-1-lan", "sudo -n cat /etc/rancher/k3s/registries.yaml 2>/dev/null | head -5"]);
-  return { ok: res.ok && res.out.includes("forgejo"), detail: res.ok ? res.out : res.out };
+await step("registry mirror present on cluster nodes", async () => {
+  const pod = "giera-mirror-check";
+  const overrides = JSON.stringify({
+    spec: {
+      nodeSelector: { "kubernetes.io/hostname": "k3s-mikrus-1" },
+      containers: [
+        {
+          name: "mirror-check",
+          image: "busybox",
+          command: ["sh", "-c", "cat /host/etc/rancher/k3s/registries.yaml | head -8"],
+          volumeMounts: [{ name: "host", mountPath: "/host" }],
+        },
+      ],
+      volumes: [{ name: "host", hostPath: { path: "/", type: "Directory" } }],
+    },
+  });
+  run("kubectl", ["-n", NAMESPACE, "delete", "pod", pod, "--ignore-not-found"]);
+  const created = run("kubectl", [
+    "-n",
+    NAMESPACE,
+    "run",
+    pod,
+    "--image=busybox",
+    "--restart=Never",
+    `--overrides=${overrides}`,
+  ]);
+  if (!created.ok) {
+    run("kubectl", ["-n", NAMESPACE, "delete", "pod", pod, "--ignore-not-found"]);
+    return { ok: false, detail: created.out };
+  }
+  let out = "";
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const logs = run("kubectl", ["-n", NAMESPACE, "logs", pod]);
+    if (logs.ok && logs.out.trim()) {
+      out = logs.out;
+      break;
+    }
+  }
+  run("kubectl", ["-n", NAMESPACE, "delete", "pod", pod, "--ignore-not-found"]);
+  const ok = out.includes("forgejo");
+  return { ok, detail: ok ? out.split("\n").slice(0, 5).join(" | ") : out || "no registry mirror found" };
 });
+
+must(
+  await step("registry proxy ready on cluster", () => {
+    const res = run("kubectl", ["-n", "forgejo", "get", "deploy", "ts-proxy", "-o", "jsonpath={.status.readyReplicas}"]);
+    const ready = Number(res.out.trim() || "0");
+    return { ok: res.ok && ready >= 1, detail: `ts-proxy ready replicas: ${res.out.trim() || "0"}` };
+  })
+);
 
 const creds = registryPassword();
 must(await step("registry credentials", () => ({ ok: creds.ok, detail: creds.detail })));
