@@ -42,6 +42,7 @@ type GameBridge = {
   audio: AudioManager;
   stats: GameStats;
   tycoon: TycoonManager;
+  detailedAvatars: { ready: boolean; p1: boolean; p2: boolean };
   qa?: { simTime: number; frame: number; events: { ev: string; id?: string; t: number }[] };
 };
 declare global {
@@ -125,6 +126,24 @@ async function boot(): Promise<void> {
   const player2 = new PlayerController({ id: "p2", spawn: [4.5, spawnY, 5] });
   const avatar2 = player2.loadAvatar();
   scene.add(avatar2.object);
+
+  const detailedAvatars = { ready: false, p1: false, p2: false };
+  void Promise.all([
+    player.loadDetailedAvatar().then((avatar) => {
+      if (avatar) {
+        scene.add(avatar.object);
+        detailedAvatars.p1 = true;
+      }
+    }),
+    player2.loadDetailedAvatar().then((avatar) => {
+      if (avatar) {
+        scene.add(avatar.object);
+        detailedAvatars.p2 = true;
+      }
+    }),
+  ]).finally(() => {
+    detailedAvatars.ready = true;
+  });
 
   const dummyY = surfaceHeight(1.5, 3, seed);
   const trainingDummy = new TrainingDummy({ x: 1.5, y: dummyY, z: 3 });
@@ -310,6 +329,7 @@ async function boot(): Promise<void> {
     audio,
     stats,
     tycoon,
+    detailedAvatars,
     qa: qa ? qaState : undefined,
   };
 
@@ -547,10 +567,10 @@ async function boot(): Promise<void> {
         jump: p2Jump,
         sprint: p2Sprint,
       });
-      avatar2.update(delta);
+      player2.avatar?.update(delta);
     }
 
-    avatar.update(delta);
+    player.avatar?.update(delta);
     sky.update(elapsed, player.position);
     hud.updateTycoon(tycoon.collectedStars, tycoon.dropperTier);
 

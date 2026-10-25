@@ -78,6 +78,27 @@ export class PlayerController {
     return char;
   }
 
+  attachAvatar(next: StylizedCharacter | Avatar): void {
+    this.avatar?.dispose();
+    this.avatar = next;
+    this.syncAvatar();
+  }
+
+  async loadDetailedAvatar(): Promise<Avatar | null> {
+    try {
+      const detailed = await Avatar.load(
+        this.profile.avatarId,
+        this.profile.accentColor,
+        this.profile.clothing,
+        this.profile.scale
+      );
+      this.attachAvatar(detailed);
+      return detailed;
+    } catch {
+      return null;
+    }
+  }
+
   rotateCamera(deltaYaw: number, deltaPitch: number): void {
     this.yaw = (this.yaw - deltaYaw) % (Math.PI * 2);
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + deltaPitch));

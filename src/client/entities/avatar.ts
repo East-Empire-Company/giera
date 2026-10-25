@@ -23,12 +23,13 @@ export class Avatar {
   static async load(
     id: PlayerAvatarId,
     accentColor: THREE.ColorRepresentation,
-    clothing?: { torso: string; arms: string; legs: string }
+    clothing?: { torso: string; arms: string; legs: string },
+    scale = 0.66
   ): Promise<Avatar> {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const gltf = await loader.loadAsync(`/${assetManifest.models[id]}`);
     const accent = new THREE.Color(accentColor);
-    gltf.scene.scale.setScalar(0.66);
+    gltf.scene.scale.setScalar(scale);
     gltf.scene.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       const partColor = object.name.startsWith("torso")

@@ -186,6 +186,11 @@ must(
   })
 );
 
+if (failed) {
+  console.error(`\nDEPLOY ABORTED — prerequisites or build+push failed; image ${IMAGE}:${sha} not confirmed pushed. Refusing to apply manifests or touch the rollout.`);
+  process.exit(1);
+}
+
 must(
   await step("namespace", () => {
     const res = run("kubectl", ["get", "ns", NAMESPACE]);

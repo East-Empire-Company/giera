@@ -22,6 +22,7 @@ type Giera = {
     syncAvatar: () => void;
   };
   world: { loadedChunkCount: number };
+  detailedAvatars: { ready: boolean; p1: boolean; p2: boolean };
   qa: { frame: number };
 };
 
@@ -33,7 +34,7 @@ async function settle(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
-      return g.qa.frame >= 120 && g.world.loadedChunkCount >= 289;
+      return g.qa.frame >= 120 && g.world.loadedChunkCount >= 289 && g.detailedAvatars.ready === true;
     },
     { timeout: 60_000 }
   );

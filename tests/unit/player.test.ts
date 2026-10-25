@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import { PlayerController } from "../../src/client/entities/player";
+import { createStylizedCharacter } from "../../src/client/entities/stylized-avatar";
 import type { AABB } from "../../src/shared/physics";
 
 describe("PlayerController", () => {
@@ -46,5 +48,27 @@ describe("PlayerController", () => {
     expect(player.position.x).toBe(0);
     expect(player.position.z).toBe(0);
     expect(player.velocity.y).toBe(0);
+  });
+
+  it("swaps to a replacement avatar, disposing and detaching the old one", () => {
+    const player = new PlayerController({ id: "p1", spawn: [3, 40, 5] });
+    const stylized = player.loadAvatar();
+    const scene = new THREE.Scene();
+    scene.add(stylized.object);
+
+    const replacement = createStylizedCharacter("gniewko");
+    player.attachAvatar(replacement);
+
+    expect(player.avatar).toBe(replacement);
+    expect(stylized.object.parent).toBeNull();
+    expect(replacement.object.position.equals(player.position)).toBe(true);
+  });
+
+  it("keeps the stylized avatar when the detailed model cannot load", async () => {
+    const player = new PlayerController({ id: "p1", spawn: [3, 40, 5] });
+    const stylized = player.loadAvatar();
+
+    await expect(player.loadDetailedAvatar()).resolves.toBeNull();
+    expect(player.avatar).toBe(stylized);
   });
 });
