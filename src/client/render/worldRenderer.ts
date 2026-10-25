@@ -52,10 +52,29 @@ export function createTileMaterials(atlasTexture: THREE.Texture, waterNormal: TH
     const tileRect = new THREE.Vector4(tile.uv[0], tile.uv[1], tile.uv[2], tile.uv[3]);
     material.onBeforeCompile = (shader) => {
       shader.uniforms.gieraTileRect = { value: tileRect };
+      if (foliage) {
+        shader.vertexShader = shader.vertexShader.replace(
+          "#include <common>",
+          "#include <common>\nvarying vec3 gieraFoliageTint;"
+        );
+        shader.vertexShader = shader.vertexShader.replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+          vec3 gieraWorldPosition = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
+          float gieraPatch = fract( sin( dot( floor( gieraWorldPosition.xz * 0.31 ), vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+          gieraFoliageTint = mix( vec3( 0.88, 1.04, 0.90 ), vec3( 1.08, 1.0, 0.78 ), gieraPatch );`
+        );
+      }
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <common>",
         "#include <common>\nuniform vec4 gieraTileRect;"
       );
+      if (foliage) {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          "#include <common>",
+          "#include <common>\nvarying vec3 gieraFoliageTint;"
+        );
+      }
       if (!shader.fragmentShader.includes("#include <map_fragment>")) {
         throw new Error("Three.js map shader chunk changed; #include <map_fragment> missing");
       }
@@ -67,6 +86,7 @@ export function createTileMaterials(atlasTexture: THREE.Texture, waterNormal: TH
           #ifdef DECODE_VIDEO_TEXTURE
             sampledDiffuseColor = sRGBTransferEOTF( sampledDiffuseColor );
           #endif
+          ${foliage ? "sampledDiffuseColor.rgb *= gieraFoliageTint;" : ""}
           vec2 edge = abs(localUv - 0.5) * 2.0;
           float bevel = 1.0 - smoothstep(0.85, 0.98, max(edge.x, edge.y));
           sampledDiffuseColor.rgb *= (0.88 + 0.12 * bevel);
