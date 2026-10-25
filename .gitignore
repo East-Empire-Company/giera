@@ -5,6 +5,7 @@ node_modules/
 dist/
 coverage/
 test-results/
+tests/goldens/.staging/
 playwright-report/
 server/data/
 server/data-test/

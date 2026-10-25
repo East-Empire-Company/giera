@@ -190,16 +190,19 @@ async function runAccept(): Promise<number> {
   ensureDirs();
   mkdirSync(GOLDENS_DIR, { recursive: true });
   if (stage === "goldens") {
+    const staging = resolve(GOLDENS_DIR, ".staging");
     const capture = await runCmd("goldens-capture", ["bunx", "playwright", "test", "--project=goldens"], {
-      GIERA_GOLDENS_INIT: "1",
+      GIERA_GOLDENS_STAGE: "1",
     });
-    if (capture.status !== "pass") {
-      console.error("Golden capture failed; baseline left untouched.");
+    if (capture.status !== "pass" || !existsSync(staging)) {
+      rmSync(staging, { recursive: true, force: true });
+      console.error("Golden capture failed; baselines left untouched.");
       return 1;
     }
-    for (const f of readdirSync(GOLDEN_CAPTURE_DIR)) {
-      if (f.endsWith(".png")) copyFileSync(resolve(GOLDEN_CAPTURE_DIR, f), resolve(GOLDENS_DIR, f));
+    for (const f of readdirSync(staging)) {
+      if (f.endsWith(".png")) copyFileSync(resolve(staging, f), resolve(GOLDENS_DIR, f));
     }
+    rmSync(staging, { recursive: true, force: true });
   } else if (stage === "mechanics") {
     const values = valueOf("--values");
     if (!values) {

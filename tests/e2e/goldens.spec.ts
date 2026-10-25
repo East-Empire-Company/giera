@@ -9,6 +9,8 @@ const GOLDENS_DIR = resolve(import.meta.dirname, "../goldens");
 const CAPTURE_DIR = resolve(import.meta.dirname, "../../.ai/evidence/pipeline/golden-captured");
 const DIFF_DIR = resolve(import.meta.dirname, "../../.ai/evidence/pipeline/golden-diff");
 const INIT = process.env.GIERA_GOLDENS_INIT === "1";
+const STAGE = process.env.GIERA_GOLDENS_STAGE === "1";
+const STAGE_DIR = resolve(GOLDENS_DIR, ".staging");
 const THRESHOLD = 0.1;
 const MAX_DIFF_RATIO = 0.001;
 
@@ -38,6 +40,11 @@ async function settle(page: Page): Promise<void> {
     },
     { timeout: 60_000 }
   );
+  const avatars = await page.evaluate(() => (window as unknown as { __GIERA__: Giera }).__GIERA__.detailedAvatars);
+  expect(
+    avatars.p1 && avatars.p2,
+    `detailed hero models failed to load: ${JSON.stringify(avatars)}`
+  ).toBe(true);
 }
 
 async function capture(page: Page, name: string): Promise<void> {
@@ -45,6 +52,11 @@ async function capture(page: Page, name: string): Promise<void> {
   const shot = await page.screenshot();
   mkdirSync(CAPTURE_DIR, { recursive: true });
   writeFileSync(resolve(CAPTURE_DIR, `${name}.png`), shot);
+  if (STAGE) {
+    mkdirSync(STAGE_DIR, { recursive: true });
+    writeFileSync(resolve(STAGE_DIR, `${name}.png`), shot);
+    return;
+  }
   if (INIT) {
     mkdirSync(GOLDENS_DIR, { recursive: true });
     writeFileSync(resolve(GOLDENS_DIR, `${name}.png`), shot);

@@ -162,11 +162,21 @@ function addPoloTrim(torso: THREE.Mesh, size: THREE.Vector3): void {
   torso.add(placket);
 }
 
+function worldBottom(mesh: THREE.Mesh): number {
+  mesh.updateWorldMatrix(true, false);
+  return new THREE.Box3().setFromObject(mesh).min.y;
+}
+
 function applyChildProportions(root: THREE.Object3D, legScale: number, headScale: number): void {
   const head = findMesh(root, /head/i);
   if (head) head.scale.multiplyScalar(headScale);
   for (const leg of [findMesh(root, /leg-left/i), findMesh(root, /leg-right/i)]) {
-    if (leg) leg.scale.y *= legScale;
+    if (!leg) continue;
+    const before = worldBottom(leg);
+    leg.scale.y *= legScale;
+    const rise = worldBottom(leg) - before;
+    const parentScale = leg.parent ? leg.parent.getWorldScale(new THREE.Vector3()).y : 1;
+    if (parentScale > 0) leg.position.y -= rise / parentScale;
   }
 }
 
