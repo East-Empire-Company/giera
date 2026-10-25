@@ -16,8 +16,13 @@ export class StylizedCharacter {
   readonly leftLegPivot: THREE.Group;
   readonly rightLegPivot: THREE.Group;
 
+  readonly frontSign = 1;
   private motion: AvatarMotion = "idle";
   private animTime = 0;
+
+  freezePose(time: number): void {
+    this.animTime = time;
+  }
 
   constructor(options: {
     id: ProtagonistHeroId;

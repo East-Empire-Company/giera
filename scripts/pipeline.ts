@@ -180,7 +180,7 @@ async function runPipeline(fast: boolean, goldensInit: boolean): Promise<number>
   return results.some((r) => r.status === "fail") ? 1 : 0;
 }
 
-function runAccept(): number {
+async function runAccept(): Promise<number> {
   const stage = valueOf("--stage");
   const reason = valueOf("--reason");
   if (!stage || !reason) {
@@ -190,9 +190,12 @@ function runAccept(): number {
   ensureDirs();
   mkdirSync(GOLDENS_DIR, { recursive: true });
   if (stage === "goldens") {
-    if (!existsSync(GOLDEN_CAPTURE_DIR)) {
-      console.error(`No captured goldens at ${GOLDEN_CAPTURE_DIR}. Run the goldens stage first.`);
-      return 2;
+    const capture = await runCmd("goldens-capture", ["bunx", "playwright", "test", "--project=goldens"], {
+      GIERA_GOLDENS_INIT: "1",
+    });
+    if (capture.status !== "pass") {
+      console.error("Golden capture failed; baseline left untouched.");
+      return 1;
     }
     for (const f of readdirSync(GOLDEN_CAPTURE_DIR)) {
       if (f.endsWith(".png")) copyFileSync(resolve(GOLDEN_CAPTURE_DIR, f), resolve(GOLDENS_DIR, f));
@@ -255,7 +258,7 @@ Stop server: lsof -ti :5173 | xargs kill
 }
 
 const exitCode = flag("--accept")
-  ? runAccept()
+  ? await runAccept()
   : flag("--manual")
     ? await runManual()
     : await runPipeline(flag("--fast"), flag("--goldens-init"));

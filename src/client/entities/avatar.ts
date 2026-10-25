@@ -12,12 +12,18 @@ export class Avatar {
   private readonly actions: Record<string, THREE.AnimationAction> = {};
   private active?: THREE.AnimationAction;
   private motion: AvatarMotion = "idle";
+  readonly frontSign = -1;
 
   private constructor(object: THREE.Group, animations: THREE.AnimationClip[]) {
+
     this.object = object;
     this.mixer = new THREE.AnimationMixer(object);
     for (const clip of animations) this.actions[clip.name.toLowerCase()] = this.mixer.clipAction(clip);
     this.setMotion("idle");
+  }
+
+  freezePose(time: number): void {
+    this.mixer.setTime(time);
   }
 
   static async load(

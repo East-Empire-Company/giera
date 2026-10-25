@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { PlayerController } from "../../src/client/entities/player";
 import { createStylizedCharacter } from "../../src/client/entities/stylized-avatar";
+import type { Avatar } from "../../src/client/entities/avatar";
 import type { AABB } from "../../src/shared/physics";
 
 describe("PlayerController", () => {
@@ -70,5 +71,24 @@ describe("PlayerController", () => {
 
     await expect(player.loadDetailedAvatar()).resolves.toBeNull();
     expect(player.avatar).toBe(stylized);
+  });
+
+  it("orients both avatar rigs along the facing direction", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
+    player.yaw = Math.PI;
+    const expected = { x: -Math.sin(player.yaw), z: -Math.cos(player.yaw) };
+
+    const stylized = player.loadAvatar();
+    player.syncAvatar();
+    const stylizedForward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), stylized.object.rotation.y);
+    expect(stylizedForward.x).toBeCloseTo(expected.x, 5);
+    expect(stylizedForward.z).toBeCloseTo(expected.z, 5);
+
+    const gltfRig = { frontSign: -1, object: new THREE.Group(), setMotion: () => {}, update: () => {} } as unknown as Avatar;
+    player.avatar = gltfRig;
+    player.syncAvatar();
+    const gltfForward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), gltfRig.object.rotation.y);
+    expect(gltfForward.x).toBeCloseTo(expected.x, 5);
+    expect(gltfForward.z).toBeCloseTo(expected.z, 5);
   });
 });

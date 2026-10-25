@@ -135,7 +135,7 @@ export class PlayerController {
   syncAvatar(): void {
     if (!this.avatar) return;
     this.avatar.object.position.copy(this.position);
-    this.avatar.object.rotation.y = this.yaw + Math.PI;
+    this.avatar.object.rotation.y = this.yaw + (this.avatar.frontSign > 0 ? Math.PI : 0);
   }
 
   updateMotion(isMoving: boolean, isSprinting: boolean): void {

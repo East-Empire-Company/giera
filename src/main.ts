@@ -7,6 +7,7 @@ import { PlayerController } from "./client/entities/player";
 import { NPCManager } from "./client/entities/npc";
 import { ItemDropManager } from "./client/entities/drops";
 import { TrainingDummy } from "./client/entities/dummy";
+import { applyHeroDetails } from "./client/entities/hero-details";
 import { GameHUD } from "./client/game/hud";
 import { GameInventory } from "./client/game/inventory";
 import { ObjectiveManager } from "./client/game/objectives";
@@ -131,12 +132,14 @@ async function boot(): Promise<void> {
   void Promise.all([
     player.loadDetailedAvatar().then((avatar) => {
       if (avatar) {
+        applyHeroDetails(avatar.object, "ziemek");
         scene.add(avatar.object);
         detailedAvatars.p1 = true;
       }
     }),
     player2.loadDetailedAvatar().then((avatar) => {
       if (avatar) {
+        applyHeroDetails(avatar.object, "gniewko");
         scene.add(avatar.object);
         detailedAvatars.p2 = true;
       }
@@ -571,6 +574,10 @@ async function boot(): Promise<void> {
     }
 
     player.avatar?.update(delta);
+    if (qa) {
+      player.avatar?.freezePose(0.5);
+      player2.avatar?.freezePose(0.5);
+    }
     sky.update(elapsed, player.position);
     hud.updateTycoon(tycoon.collectedStars, tycoon.dropperTier);
 

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { Avatar } from "./avatar";
+import { applyHeroDetails } from "./hero-details";
 
 export type NPCDef = {
   id: string;
@@ -160,6 +161,10 @@ export class NPCInstance {
     const avatar = await Avatar.load(this.def.avatarId, this.def.accentColor);
     avatar.object.scale.setScalar(scale);
     avatar.object.position.copy(this.position);
+    applyHeroDetails(avatar.object, this.def.id === "mina" ? "mina" : "staszek");
+    const toCenterX = -this.position.x;
+    const toCenterZ = -this.position.z;
+    avatar.object.rotation.y = Math.atan2(-toCenterX, -toCenterZ);
     this.avatar = avatar;
     return avatar;
   }
