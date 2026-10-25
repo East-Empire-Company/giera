@@ -1,11 +1,32 @@
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { spawn } from "node:child_process";
 
 const BASE = "http://127.0.0.1:5173";
 const URL = `${BASE}/?seed=424242`;
 const EVIDENCE = resolve(".ai/evidence/qa");
 mkdirSync(EVIDENCE, { recursive: true });
+
+async function ensureDevServer() {
+  try {
+    if ((await fetch(BASE)).ok) return null;
+  } catch {
+    // fall through and start our own
+  }
+  const server = spawn("bun", ["run", "dev", "--port", "5173", "--strictPort"], { stdio: "ignore" });
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    try {
+      if ((await fetch(BASE)).ok) return server;
+    } catch {
+      // still booting
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  server.kill("SIGTERM");
+  throw new Error("dev server did not start on 5173");
+}
 
 const results = [];
 const check = (name, pass, detail) => {
@@ -14,6 +35,7 @@ const check = (name, pass, detail) => {
 };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const devServer = await ensureDevServer();
 const browser = await chromium.launch({
   headless: false,
   args: ["--use-gl=angle", "--use-angle=metal", "--window-size=1280,760", "--window-position=40,40"],
@@ -473,3 +495,4 @@ console.log(`\n${summary.passed} passed, ${summary.failed} failed`);
 console.log("Browser window left open for inspection.");
 await pause(240000);
 await browser.close();
+devServer?.kill("SIGTERM");

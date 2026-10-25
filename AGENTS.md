@@ -51,6 +51,10 @@ Report lands in `.ai/evidence/pipeline/report.md` + `report.json`.
 
 Hardware-only checks (Xbox pads, real mic STT, touch overlay, Xbox Edge fps) live in `tests/MANUAL-CHECKLIST.md`. Run `bun run manual` to boot the dev server and print the checklist path.
 
+## Visible QA session
+
+`bun run qa:session` opens a real browser window (headed Chromium) and plays through the loop a child would: walk, jump, mine, gather wood, place blocks, craft, cycle music, split screen, talk to an NPC, hit the training dummy, collect tycoon stars, tier up, bounce on the trampoline, open the LAN dialog. It boots its own dev server when 5173 is free, writes screenshots and `visible-session-results.json` to `.ai/evidence/qa/`, and asserts no page errors. Use it when the question is "does it actually feel right", not "does the spec still hold" — the latter is the pipeline's job.
+
 ## Deploy
 
 Target: homelab k3s cluster (node k3s-mikrus-1, namespace `giera`, Forgejo registry, Tailscale funnel).
