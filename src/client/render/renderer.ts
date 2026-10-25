@@ -57,7 +57,7 @@ export function createRenderer(canvas: HTMLCanvasElement): WebGLRenderer {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1;
+  renderer.toneMappingExposure = 0.78;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
   return renderer;
@@ -69,8 +69,8 @@ export class SkyCycle {
   private readonly sun: DirectionalLight;
   private readonly hemisphere: HemisphereLight;
   private readonly fog: FogExp2;
-  private readonly nightColor = new Color("#0b1430");
-  private readonly dayColor = new Color("#bfe3ff");
+  private readonly nightColor = new Color("#273956");
+  private readonly dayColor = new Color("#84bfe4");
   private readonly currentColor = new Color();
   private readonly sunPosition = new Vector3();
   private readonly cloudLayers: Array<{ mesh: Mesh; material: MeshBasicMaterial }>;
@@ -81,13 +81,13 @@ export class SkyCycle {
     this.sky = new Sky();
     this.sky.scale.setScalar(450000);
     const uniforms = this.sky.material.uniforms;
-    uniforms["turbidity"].value = 6;
-    uniforms["rayleigh"].value = 2.2;
-    uniforms["mieCoefficient"].value = 0.005;
-    uniforms["mieDirectionalG"].value = 0.8;
+    uniforms["turbidity"].value = 2.4;
+    uniforms["rayleigh"].value = 1.8;
+    uniforms["mieCoefficient"].value = 0.0025;
+    uniforms["mieDirectionalG"].value = 0.76;
     scene.add(this.sky);
 
-    this.sun = new DirectionalLight(0xffffff, 2.2);
+    this.sun = new DirectionalLight("#fff1d6", 1.8);
     this.sun.position.set(-100, 100, 0);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -100,9 +100,9 @@ export class SkyCycle {
     this.sun.shadow.camera.updateProjectionMatrix();
     scene.add(this.sun, this.sun.target);
 
-    this.hemisphere = new HemisphereLight("#bfe3ff", "#6b5a44", 0.55);
+    this.hemisphere = new HemisphereLight("#c5e2f4", "#82785f", 0.72);
     scene.add(this.hemisphere);
-    this.fog = new FogExp2("#bfe3ff", 0.016);
+    this.fog = new FogExp2("#a9d0e8", 0.012);
     scene.fog = this.fog;
 
     this.cloudLayers = [

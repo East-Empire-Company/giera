@@ -4,16 +4,16 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 
 | Runtime path | Source file | Author | License |
 |---|---|---|---|
-| `assets/textures/tiles/stone.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/stone_generic.png` | ARoachIFoundOnMyPillow | CC0 |
-| `assets/textures/tiles/cobblestone.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/cobblestone.png` | ARoachIFoundOnMyPillow | CC0 |
-| `assets/textures/tiles/dirt.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/dirt.png` | ARoachIFoundOnMyPillow | CC0 |
-| `assets/textures/tiles/grass_top.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/grass_top.png` | ARoachIFoundOnMyPillow | CC0 |
-| `assets/textures/tiles/grass_side.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/grass_side.png` | ARoachIFoundOnMyPillow | CC0 |
-| `assets/textures/tiles/sand.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/sand_ugly.png` | ARoachIFoundOnMyPillow | CC0 |
+| `assets/textures/tiles/stone.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/stone.png` | Kenney | CC0 |
+| `assets/textures/tiles/cobblestone.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/gravel_stone.png` | Kenney | CC0 |
+| `assets/textures/tiles/dirt.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/dirt.png` | Kenney | CC0 |
+| `assets/textures/tiles/grass_top.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/grass_top.png` | Kenney | CC0 |
+| `assets/textures/tiles/grass_side.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/dirt_grass.png` | Kenney | CC0 |
+| `assets/textures/tiles/sand.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/sand.png` | Kenney | CC0 |
 | `assets/textures/tiles/oak_log_top.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/oak_log_top.png` | ARoachIFoundOnMyPillow | CC0 |
 | `assets/textures/tiles/oak_log_side.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/oak_log_side.png` | ARoachIFoundOnMyPillow | CC0 |
-| `assets/textures/tiles/ginkgo_leaves.png` | [16*16 Block Textures](https://opengameart.org/content/1616-block-textures) / `blocks/ginkgo_leaves.png` | ARoachIFoundOnMyPillow | CC0 |
-| `assets/textures/tiles/oak_planks.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/oak_planks.png` | ARoachIFoundOnMyPillow | CC0 |
+| `assets/textures/tiles/ginkgo_leaves.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/leaves_transparent.png` | Kenney | CC0 |
+| `assets/textures/tiles/oak_planks.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/wood.png` | Kenney | CC0 |
 | `assets/textures/tiles/glass.png` | [16x16 Block Texture Set](https://opengameart.org/content/16x16-block-texture-set) / `blocks/glass.png` | ARoachIFoundOnMyPillow | CC0 |
 | `assets/textures/tiles/water.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Tiles/water.png` | Kenney | CC0 |
 | `assets/textures/tiles/default_mineral_coal.png` | [Assorted Minecraft style textures](https://opengameart.org/content/assorted-minecraft-style-textures) / `default_mineral_coal.png` | JoeEnderman | CC0 |

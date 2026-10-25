@@ -1,4 +1,4 @@
-const DAY_SECONDS = 600;
+const DAY_SECONDS = 1800;
 
 export type DaylightSample = { daylight: number; sunPosition: { x: number; y: number; z: number } };
 

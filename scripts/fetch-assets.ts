@@ -29,17 +29,17 @@ const sourceInfo: Record<AssetSourceId, { title: string; author: string; license
 
 const assetPicks: Record<string, Record<string, AssetPick>> = {
   tiles: {
-    stone: { source: "aroach-block-textures", member: "blocks/stone_generic.png", path: "assets/textures/tiles/stone.png" },
-    cobblestone: { source: "aroach-block-textures", member: "blocks/cobblestone.png", path: "assets/textures/tiles/cobblestone.png" },
-    dirt: { source: "aroach-block-textures", member: "blocks/dirt.png", path: "assets/textures/tiles/dirt.png" },
-    grass_top: { source: "aroach-block-textures", member: "blocks/grass_top.png", path: "assets/textures/tiles/grass_top.png" },
-    grass_side: { source: "aroach-block-textures", member: "blocks/grass_side.png", path: "assets/textures/tiles/grass_side.png" },
-    sand: { source: "aroach-block-textures", member: "blocks/sand_ugly.png", path: "assets/textures/tiles/sand.png" },
+    stone: { source: "kenney-voxel-pack", member: "PNG/Tiles/stone.png", path: "assets/textures/tiles/stone.png" },
+    cobblestone: { source: "kenney-voxel-pack", member: "PNG/Tiles/gravel_stone.png", path: "assets/textures/tiles/cobblestone.png" },
+    dirt: { source: "kenney-voxel-pack", member: "PNG/Tiles/dirt.png", path: "assets/textures/tiles/dirt.png" },
+    grass_top: { source: "kenney-voxel-pack", member: "PNG/Tiles/grass_top.png", path: "assets/textures/tiles/grass_top.png" },
+
+    grass_side: { source: "kenney-voxel-pack", member: "PNG/Tiles/dirt_grass.png", path: "assets/textures/tiles/grass_side.png" },
+    sand: { source: "kenney-voxel-pack", member: "PNG/Tiles/sand.png", path: "assets/textures/tiles/sand.png" },
     oak_log_top: { source: "aroach-block-textures", member: "blocks/oak_log_top.png", path: "assets/textures/tiles/oak_log_top.png" },
     oak_log_side: { source: "aroach-block-textures", member: "blocks/oak_log_side.png", path: "assets/textures/tiles/oak_log_side.png" },
-    ginkgo_leaves: { source: "aroach-foliage-textures", member: "blocks/ginkgo_leaves.png", path: "assets/textures/tiles/ginkgo_leaves.png" },
-    oak_planks: { source: "aroach-block-textures", member: "blocks/oak_planks.png", path: "assets/textures/tiles/oak_planks.png" },
-    glass: { source: "aroach-block-textures", member: "blocks/glass.png", path: "assets/textures/tiles/glass.png" },
+    ginkgo_leaves: { source: "kenney-voxel-pack", member: "PNG/Tiles/leaves_transparent.png", path: "assets/textures/tiles/ginkgo_leaves.png" },
+    oak_planks: { source: "kenney-voxel-pack", member: "PNG/Tiles/wood.png", path: "assets/textures/tiles/oak_planks.png" },
     water: { source: "kenney-voxel-pack", member: "PNG/Tiles/water.png", path: "assets/textures/tiles/water.png" },
     default_mineral_coal: { source: "joeenderman-textures-1", member: "default_mineral_coal.png", path: "assets/textures/tiles/default_mineral_coal.png" },
     default_mineral_iron: { source: "joeenderman-textures-1", member: "default_mineral_iron.png", path: "assets/textures/tiles/default_mineral_iron.png" },

@@ -3,12 +3,15 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
-const BASE = "http://127.0.0.1:5173";
-const URL = `${BASE}/?seed=424242`;
-const EVIDENCE = resolve(".ai/evidence/qa");
+const BASE = process.argv[2] ?? "http://127.0.0.1:5173";
+const GAME_URL = `${BASE}/?seed=424242`;
+const TARGET = new URL(BASE).host.replace(/[^a-z0-9.-]/gi, "_");
+const LOCAL = BASE.startsWith("http://127.0.0.1") || BASE.startsWith("http://localhost");
+const EVIDENCE = resolve(".ai/evidence/qa", LOCAL ? "" : TARGET);
 mkdirSync(EVIDENCE, { recursive: true });
 
 async function ensureDevServer() {
+  if (!BASE.startsWith("http://127.0.0.1") && !BASE.startsWith("http://localhost")) return null;
   try {
     if ((await fetch(BASE)).ok) return null;
   } catch {
@@ -48,7 +51,7 @@ page.on("console", (m) => {
   if (m.type() === "error") pageErrors.push(m.text());
 });
 
-await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+await page.goto(GAME_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
 await page.waitForFunction(() => window.__GIERA__?.ready === true, undefined, { timeout: 60000 });
 await page.evaluate(() => {
   const A = window.__GIERA__.audio;
@@ -484,7 +487,7 @@ check("no page errors during the session", pageErrors.length === 0, pageErrors.s
 
 const summary = {
   when: new Date().toISOString(),
-  url: URL,
+  url: GAME_URL,
   passed: results.filter((r) => r.pass).length,
   failed: results.filter((r) => !r.pass).length,
   results,

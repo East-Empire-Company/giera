@@ -22,6 +22,7 @@ export type BlockDef = {
   id: BlockId;
   name: string;
   tiles: BlockTiles;
+
   hardness: number;
   solid: boolean;
   liquid: boolean;

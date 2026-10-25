@@ -4,6 +4,8 @@ import { meshChunk, type ChunkMesh } from "../../shared/mesher";
 import { generateBlock, surfaceHeight } from "../../shared/worldgen";
 import type { ChunkBuildRequest, ChunkBuildResponse } from "../../shared/chunk-worker-protocol";
 import atlasManifest from "../../shared/atlas-manifest.json";
+import { placeGroundDecor, scatterGroundDecor } from "./ground-decor";
+import { BLOCK_ID } from "../../shared/blocks";
 
 type ChunkView = { data: Uint8Array; mesh?: THREE.Mesh };
 type ChunkJob = {
@@ -52,32 +54,27 @@ export function createTileMaterials(atlasTexture: THREE.Texture, waterNormal: TH
     const tileRect = new THREE.Vector4(tile.uv[0], tile.uv[1], tile.uv[2], tile.uv[3]);
     material.onBeforeCompile = (shader) => {
       shader.uniforms.gieraTileRect = { value: tileRect };
-      if (foliage) {
-        shader.vertexShader = shader.vertexShader.replace(
-          "#include <common>",
-          "#include <common>\nvarying vec3 gieraFoliageTint;"
-        );
-        shader.vertexShader = shader.vertexShader.replace(
-          "#include <begin_vertex>",
-          `#include <begin_vertex>
-          vec3 gieraWorldPosition = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
-          float gieraPatch = fract( sin( dot( floor( gieraWorldPosition.xz * 0.31 ), vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
-          gieraFoliageTint = mix( vec3( 0.88, 1.04, 0.90 ), vec3( 1.08, 1.0, 0.78 ), gieraPatch );`
-        );
-      }
-      shader.fragmentShader = shader.fragmentShader.replace(
+      shader.vertexShader = shader.vertexShader.replace(
         "#include <common>",
-        "#include <common>\nuniform vec4 gieraTileRect;"
+        "#include <common>\nvarying vec3 gieraWorldTint;\nvarying vec3 gieraWorldNormal;"
       );
-      if (foliage) {
-        shader.fragmentShader = shader.fragmentShader.replace(
-          "#include <common>",
-          "#include <common>\nvarying vec3 gieraFoliageTint;"
-        );
-      }
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        vec4 gieraWorld = modelMatrix * vec4( transformed, 1.0 );
+        float gieraCell = fract( sin( dot( floor( gieraWorld.xz * 0.37 ), vec2( 127.1, 311.7 ) ) ) * 43758.5453123 );
+        float gieraBroad = fract( sin( dot( floor( gieraWorld.xz * 0.09 ), vec2( 269.5, 183.3 ) ) ) * 24634.6345 );
+        float gieraVariation = ( gieraCell - 0.5 ) * 0.16 + ( gieraBroad - 0.5 ) * 0.22;
+        gieraWorldTint = vec3( 1.0 + gieraVariation * 0.85, 1.0 + gieraVariation, 1.0 + gieraVariation * 0.55 );
+        gieraWorldNormal = normalize( mat3( modelMatrix ) * objectNormal );`
+      );
       if (!shader.fragmentShader.includes("#include <map_fragment>")) {
         throw new Error("Three.js map shader chunk changed; #include <map_fragment> missing");
       }
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <common>",
+        "#include <common>\nuniform vec4 gieraTileRect;\nvarying vec3 gieraWorldTint;\nvarying vec3 gieraWorldNormal;"
+      );
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <map_fragment>",
         `#ifdef USE_MAP
@@ -86,10 +83,12 @@ export function createTileMaterials(atlasTexture: THREE.Texture, waterNormal: TH
           #ifdef DECODE_VIDEO_TEXTURE
             sampledDiffuseColor = sRGBTransferEOTF( sampledDiffuseColor );
           #endif
-          ${foliage ? "sampledDiffuseColor.rgb *= gieraFoliageTint;" : ""}
+          sampledDiffuseColor.rgb *= gieraWorldTint;
+          float gieraFacing = clamp( gieraWorldNormal.y * 0.5 + 0.5, 0.0, 1.0 );
+          sampledDiffuseColor.rgb *= mix( 0.93, 1.07, gieraFacing );
           vec2 edge = abs(localUv - 0.5) * 2.0;
-          float bevel = 1.0 - smoothstep(0.85, 0.98, max(edge.x, edge.y));
-          sampledDiffuseColor.rgb *= (0.88 + 0.12 * bevel);
+          float bevel = 1.0 - smoothstep(0.82, 0.99, max(edge.x, edge.y));
+          sampledDiffuseColor.rgb *= (0.86 + 0.14 * bevel);
           diffuseColor *= sampledDiffuseColor;
         #endif`
       );
@@ -163,6 +162,8 @@ export class WorldRenderer {
   private readonly scene: THREE.Scene;
   private readonly onProgress?: (loaded: number, total: number) => void;
   private completed = 0;
+  private readonly decor = new THREE.Group();
+  private decorCenter: { x: number; z: number } | null = null;
 
   constructor(options: {
     scene: THREE.Scene;
@@ -173,6 +174,8 @@ export class WorldRenderer {
     onProgress?: (loaded: number, total: number) => void;
   }) {
     this.scene = options.scene;
+    this.decor.name = "ground-decor";
+    this.scene.add(this.decor);
     this.seed = options.seed;
     this.onProgress = options.onProgress;
     this.materials = createTileMaterials(options.atlasTexture, options.waterNormal);
@@ -231,6 +234,30 @@ export class WorldRenderer {
       ...(otherCenters ?? []).map((c) => ({ cx: Math.floor(c.worldX / CHUNK_SIZE), cz: Math.floor(c.worldZ / CHUNK_SIZE) })),
     ];
     this.removeOutside(allCenters, radius + 1);
+    this.refreshGroundDecor(worldX, worldZ, radius);
+  }
+
+  private refreshGroundDecor(worldX: number, worldZ: number, radius: number): void {
+    const center = { x: Math.round(worldX), z: Math.round(worldZ) };
+    if (this.decorCenter && this.decorCenter.x === center.x && this.decorCenter.z === center.z) return;
+    this.decorCenter = center;
+
+    this.decor.clear();
+    const items = scatterGroundDecor(this.seed, Math.max(24, radius * CHUNK_SIZE * 0.75), center.x, center.z);
+    const surfaceAt = (x: number, z: number): number => {
+      for (let y = 70; y > 30; y--) {
+        const id = this.getBlock(x, y, z);
+        if (id !== 0 && id !== BLOCK_ID.water) return y;
+      }
+      return Number.NaN;
+    };
+    const decor = placeGroundDecor(
+      items,
+      this.seed,
+      (x, y, z) => this.getBlock(x, y, z) === BLOCK_ID.grass,
+      surfaceAt
+    );
+    this.decor.add(decor);
   }
 
   getBlock(x: number, y: number, z: number): number {
