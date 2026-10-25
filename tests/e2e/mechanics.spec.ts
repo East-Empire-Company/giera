@@ -291,6 +291,10 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     }
     await page.keyboard.up("Space");
     expect(maxVy).toBeGreaterThan(SPEC.jumpVyMin);
+    const jumpEvents = await page.evaluate(() =>
+      (window as unknown as G).__GIERA__.qa.events.filter((e) => e.id === "jump").length
+    );
+    expect(jumpEvents).toBeGreaterThanOrEqual(1);
     expect(errors).toEqual([]);
   });
 

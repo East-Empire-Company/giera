@@ -529,12 +529,17 @@ async function boot(): Promise<void> {
     const jump = keys.has("Space") || tInput.jump || (p1Pad?.jump ?? false);
     const sprint = keys.has("ShiftLeft") || (p1Pad?.sprint ?? false);
 
+    const wasOnGround = player.onGround;
     player.step(delta, (x, y, z) => world.getBlock(x, y, z) !== 0, {
       forward,
       right,
       jump,
       sprint,
     });
+    const nearTrampoline = Math.hypot(player.position.x - tycoon.trampolinePos.x, player.position.z - tycoon.trampolinePos.z) < 1.1;
+    if (jump && wasOnGround && !player.onGround && player.velocity.y > 0 && !nearTrampoline) {
+      audio.play("jump", { rate: 1.15, volume: 0.9 });
+    }
 
     if (lanClient) {
       lanClient.sendInput(player.position, player.yaw, player.pitch, "idle");
@@ -564,12 +569,17 @@ async function boot(): Promise<void> {
         player2.rotateCamera(lookYaw * 2.0 * delta, lookPitch * 1.5 * delta);
       }
 
+      const wasOnGround2 = player2.onGround;
+      const nearTrampoline2 = Math.hypot(player2.position.x - tycoon.trampolinePos.x, player2.position.z - tycoon.trampolinePos.z) < 1.1;
       player2.step(delta, (x, y, z) => world.getBlock(x, y, z) !== 0, {
         forward: p2Forward,
         right: p2Right,
         jump: p2Jump,
         sprint: p2Sprint,
       });
+      if (p2Jump && wasOnGround2 && !player2.onGround && player2.velocity.y > 0 && !nearTrampoline2) {
+        audio.play("jump", { rate: 1.15, volume: 0.9 });
+      }
       player2.avatar?.update(delta);
     }
 
