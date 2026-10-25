@@ -58,6 +58,12 @@ describe("save store", () => {
     expect(parseSaveData(JSON.stringify({ inventory: state.inventory }))).toBeNull();
     expect(parseSaveData(JSON.stringify({ seed: "424242", inventory: state.inventory }))).toBeNull();
     expect(parseSaveData(JSON.stringify({ seed: 1 }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ seed: 1, inventory: {} }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ seed: 1, inventory: state.inventory, objectives: {} }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ seed: 1, inventory: state.inventory, edits: "nope" }))).toBeNull();
+    expect(
+      parseSaveData(JSON.stringify({ seed: 1, inventory: state.inventory, objectives: state.objectives, edits: state.edits }))
+    ).toBeNull();
   });
 
   it("serializes save state to JSON", () => {

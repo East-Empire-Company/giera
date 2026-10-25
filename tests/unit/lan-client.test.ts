@@ -209,4 +209,16 @@ describe("LanClient", () => {
     expect(FakeWebSocket.instances.length).toBe(1);
     expect(statuses).toEqual(["connecting", "connected", "disconnected"]);
   });
+
+  it("cancels a pending reconnect when disconnect runs during the backoff window", () => {
+    const client = makeClient({});
+    client.connect();
+    FakeWebSocket.instances[0].open();
+
+    FakeWebSocket.instances[0].onclose?.();
+    client.disconnect();
+    vi.advanceTimersByTime(10000);
+
+    expect(FakeWebSocket.instances.length).toBe(1);
+  });
 });

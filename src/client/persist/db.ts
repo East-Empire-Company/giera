@@ -19,10 +19,32 @@ export function formatSaveData(state: SavedGameState): string {
   return JSON.stringify(state);
 }
 
+function isSavedGameState(data: unknown): data is SavedGameState {
+  if (typeof data !== "object" || data === null) return false;
+  const d = data as Record<string, unknown>;
+  const inv = d.inventory as Record<string, unknown> | undefined;
+  const objectives = d.objectives as Record<string, unknown> | undefined;
+  return (
+    typeof d.seed === "number" &&
+    typeof inv === "object" &&
+    inv !== null &&
+    Array.isArray(inv.hotbar) &&
+    typeof inv.activeSlot === "number" &&
+    typeof inv.blocks === "object" &&
+    inv.blocks !== null &&
+    typeof objectives === "object" &&
+    objectives !== null &&
+    typeof objectives.stepIndex === "number" &&
+    typeof d.edits === "object" &&
+    d.edits !== null &&
+    typeof d.savedAt === "string"
+  );
+}
+
 export function parseSaveData(raw: string): SavedGameState | null {
   try {
-    const data = JSON.parse(raw) as SavedGameState;
-    if (typeof data.seed === "number" && data.inventory) {
+    const data: unknown = JSON.parse(raw);
+    if (isSavedGameState(data)) {
       return data;
     }
   } catch {
@@ -74,7 +96,7 @@ export async function loadGameState(): Promise<SavedGameState | null> {
       const tx = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
       const req = store.get(SAVE_KEY);
-      req.onsuccess = () => resolve((req.result as SavedGameState) ?? null);
+      req.onsuccess = () => resolve(isSavedGameState(req.result) ? req.result : null);
       req.onerror = () => reject(req.error);
     });
   } catch {

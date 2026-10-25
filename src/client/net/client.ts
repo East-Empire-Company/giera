@@ -81,9 +81,9 @@ export class LanClient {
 
       this.ws.onclose = () => {
         this.callbacks.onStatusChange?.("disconnected");
-        if (this.shouldReconnect) {
-          setTimeout(() => this.connect(), 2000);
-        }
+        setTimeout(() => {
+          if (this.shouldReconnect) this.connect();
+        }, 2000);
       };
 
       this.ws.onerror = (e) => {
@@ -91,9 +91,9 @@ export class LanClient {
       };
     } catch (e) {
       this.callbacks.onStatusChange?.("disconnected");
-      if (this.shouldReconnect) {
-        setTimeout(() => this.connect(), 2000);
-      }
+      setTimeout(() => {
+        if (this.shouldReconnect) this.connect();
+      }, 2000);
     }
   }
 
