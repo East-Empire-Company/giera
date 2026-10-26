@@ -5,7 +5,8 @@ import { MicController } from "./client/audio/mic";
 import { LanClient } from "./client/net/client";
 import { PlayerController } from "./client/entities/player";
 import { NPCManager } from "./client/entities/npc";
-import { fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
+import { chatterDelayMs, fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
+import { fallbackLine } from "./shared/npc-fallbacks";
 import { executeNpcClientTool, NPC_ALLOWED_TOOLS } from "../server/npc-bridge";
 import { ItemDropManager } from "./client/entities/drops";
 import { TrainingDummy } from "./client/entities/dummy";
@@ -310,6 +311,8 @@ async function boot(): Promise<void> {
 
   const npcHistory = new Map<string, NpcHistoryEntry[]>();
   const npcThinkTimers = new Map<string, number>();
+  const npcFailures = new Map<string, number>();
+  const npcThinkPending = new Set<string>();
   const npcThinkRng = makeRng(20261026);
   const npcNextThink = new Map<string, number>(
     npcManager.npcs.map((n) => [n.def.id, 15 + npcThinkRng() * 20])
@@ -409,7 +412,7 @@ async function boot(): Promise<void> {
               );
               return reply.say;
             } catch {
-              return fallbackSay(text);
+              return fallbackLine(nearest.def.id, text);
             }
           },
           onMicStart: () => mic.start(),
@@ -667,11 +670,12 @@ async function boot(): Promise<void> {
     });
     if (!qa && !hud.isNpcDialogOpen()) {
       for (const n of npcManager.npcs) {
+        if (npcThinkPending.has(n.def.id)) continue;
         const t = (npcThinkTimers.get(n.def.id) ?? 0) + delta;
         npcThinkTimers.set(n.def.id, t);
         if (t < (npcNextThink.get(n.def.id) ?? 20)) continue;
         npcThinkTimers.set(n.def.id, 0);
-        npcNextThink.set(n.def.id, 20 + npcThinkRng() * 20);
+        npcThinkPending.add(n.def.id);
         void reasonNpc(
           n.def.id,
           "(Pauza w rozmowie. Powiedz krótko coś zachęcającego do zabawy albo zaproponuj zadanie.)",
@@ -680,8 +684,17 @@ async function boot(): Promise<void> {
           .then((reply) => {
             if (reply.walk_to) n.walkTo(reply.walk_to.x, reply.walk_to.z);
             speakNpc(n.def.id, n.def.name, reply.say);
+            const failures = reply.fallback ? (npcFailures.get(n.def.id) ?? 0) + 1 : 0;
+            npcFailures.set(n.def.id, failures);
+            const baseDelay = chatterDelayMs(failures);
+            npcNextThink.set(n.def.id, baseDelay * (0.75 + npcThinkRng() * 0.5) / 1000);
           })
-          .catch(() => {});
+          .catch(() => {
+            const failures = (npcFailures.get(n.def.id) ?? 0) + 1;
+            npcFailures.set(n.def.id, failures);
+            npcNextThink.set(n.def.id, chatterDelayMs(failures) / 1000);
+          })
+          .finally(() => npcThinkPending.delete(n.def.id));
       }
     }
     trainingDummy.update(delta);

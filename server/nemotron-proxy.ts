@@ -1,7 +1,88 @@
 export const MAX_OUTPUT_TOKENS = 300;
 export const MAX_CONCURRENT_CONVERSATIONS = 2;
 
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
 let activeConversations = 0;
+export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+export type BackoffOptions = {
+  baseMs?: number;
+  maxMs?: number;
+  retryAfterMs?: number | null;
+  jitterRatio?: number;
+  random?: () => number;
+};
+
+export function parseRetryAfterMs(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const date = Date.parse(header);
+  if (Number.isFinite(date)) return Math.max(0, date - Date.now());
+  return null;
+}
+
+export function backoffDelayMs(attempt: number, options?: BackoffOptions): number {
+  const base = options?.baseMs ?? 300;
+  const max = options?.maxMs ?? 5000;
+  const jitterRatio = options?.jitterRatio ?? 0;
+  const random = options?.random ?? Math.random;
+  const exponential = Math.min(max, base * 2 ** Math.max(0, attempt - 1));
+  const retryAfter = options?.retryAfterMs;
+  const delay = retryAfter === null || retryAfter === undefined ? exponential : Math.min(max, Math.max(0, retryAfter));
+  if (jitterRatio <= 0) return Math.round(delay);
+  const jittered = delay + delay * jitterRatio * (random() * 2 - 1);
+  return Math.round(Math.max(0, Math.min(max, jittered)));
+}
+
+export type FetchBackoffOptions = {
+  attempts?: number;
+  baseMs?: number;
+  maxMs?: number;
+  jitterRatio?: number;
+  random?: () => number;
+  sleepFn?: (ms: number) => Promise<void>;
+};
+
+export async function fetchWithBackoff(
+fetcher: FetchLike,
+  url: string | URL,
+  init: RequestInit,
+  options?: FetchBackoffOptions
+): Promise<Response> {
+  const attempts = Math.max(1, options?.attempts ?? 3);
+  const sleep = options?.sleepFn ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  let lastResponse: Response | null = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetcher(url as RequestInfo, init);
+      lastResponse = response;
+      if (attempt >= attempts || !RETRYABLE_STATUS.has(response.status)) return response;
+      await sleep(
+        backoffDelayMs(attempt, {
+          baseMs: options?.baseMs,
+          maxMs: options?.maxMs,
+          retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after")),
+          jitterRatio: options?.jitterRatio ?? 0.2,
+          random: options?.random,
+        })
+      );
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      await sleep(
+        backoffDelayMs(attempt, {
+          baseMs: options?.baseMs,
+          maxMs: options?.maxMs,
+          jitterRatio: options?.jitterRatio ?? 0.2,
+          random: options?.random,
+        })
+      );
+    }
+  }
+  if (lastResponse) return lastResponse;
+  throw new Error("upstream request failed");
+}
 
 export function validateProxyAuth(authHeader: string | null, expectedSecret: string): boolean {
   if (expectedSecret.length === 0) return true;
@@ -15,7 +96,7 @@ export type ProxyOptions = {
   nexgateUrl?: string;
   nexgateKey?: string;
   model?: string;
-  fetchFn?: typeof fetch;
+fetchFn?: FetchLike;
 };
 
 export async function handleNemotronProxyRequest(
@@ -74,7 +155,7 @@ export async function handleNemotronProxyRequest(
       headers["authorization"] = `Bearer ${nexgateKey}`;
     }
 
-    const nexgateRes = await fetcher(nexgateUrl, {
+    const nexgateRes = await fetchWithBackoff(fetcher, nexgateUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),

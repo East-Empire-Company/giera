@@ -66,6 +66,13 @@ Presentation only — worldgen, physics, mining, crafting, NPC logic, LAN protoc
 - Vite serves `public/` case-sensitively — asset filenames must match `asset-manifest.json` exactly.
 - Adding assets: place files at the documented path, then `bun scripts/fetch-assets.ts --package-only` regenerates `src/shared/asset-manifest.json` and `public/assets/NOTICES.md`.
 
+## NPC reasoning
+
+- `server/npc-reason.ts` keeps the per-IP limit at 10 requests/minute. When limited or when the LLM fails, it returns a persona-specific pre-generated line with no tool or `walk_to` action.
+- `server/nemotron-proxy.ts` retries upstream 429/5xx/network failures with exponential backoff and honors `Retry-After`.
+- The client retries transient failures within the existing 12-second response budget, then uses the shared pre-generated lines in `src/shared/npc-fallbacks.ts`.
+- Ambient NPC chatter continues during outages, but each NPC doubles its next chatter interval after fallback (20s base, 5min cap). A successful LLM reply resets that NPC's interval. Keep wandering, tools and `walk_to` behavior independent from this backoff.
+
 ## Deploy
 
 Target: homelab k3s cluster (node k3s-mikrus-1, namespace `giera`, Forgejo registry, Tailscale funnel).

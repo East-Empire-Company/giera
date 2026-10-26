@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleNemotronProxyRequest, validateProxyAuth } from "../../server/nemotron-proxy";
+import { backoffDelayMs, fetchWithBackoff, handleNemotronProxyRequest, validateProxyAuth } from "../../server/nemotron-proxy";
 
 describe("Nemotron Proxy for ElevenLabs Agents", () => {
   it("rejects unauthorized requests with 401", async () => {
@@ -108,5 +108,86 @@ describe("Nemotron Proxy for ElevenLabs Agents", () => {
       else process.env.NEXGATE_URL = prev;
     }
     expect(capturedUrl).toBe("http://env-nexgate/v1/chat/completions");
+  });
+});
+
+describe("upstream backoff", () => {
+  it("grows the delay exponentially and caps it", () => {
+    expect(backoffDelayMs(1, { baseMs: 300, maxMs: 5000 })).toBe(300);
+    expect(backoffDelayMs(2, { baseMs: 300, maxMs: 5000 })).toBe(600);
+    expect(backoffDelayMs(3, { baseMs: 300, maxMs: 5000 })).toBe(1200);
+    expect(backoffDelayMs(10, { baseMs: 300, maxMs: 5000 })).toBe(5000);
+  });
+
+  it("honours Retry-After but never waits longer than the cap", () => {
+    expect(backoffDelayMs(1, { baseMs: 300, maxMs: 5000, retryAfterMs: 2000 })).toBe(2000);
+    expect(backoffDelayMs(1, { baseMs: 300, maxMs: 5000, retryAfterMs: 60_000 })).toBe(5000);
+  });
+
+  it("retries a rate-limited upstream and returns the successful reply", async () => {
+    let attempts = 0;
+    const delays: number[] = [];
+    const res = await fetchWithBackoff(
+      async () => {
+        attempts++;
+        return attempts === 1
+          ? new Response("slow down", { status: 429 })
+          : new Response("{}", { status: 200 });
+      },
+      "http://llm/chat",
+      { method: "POST" },
+      { attempts: 3, baseMs: 300, jitterRatio: 0, sleepFn: async (ms) => { delays.push(ms); } }
+    );
+    expect(res.status).toBe(200);
+    expect(attempts).toBe(2);
+    expect(delays).toEqual([300]);
+  });
+
+  it("waits as long as Retry-After asks before retrying", async () => {
+    const delays: number[] = [];
+    let attempts = 0;
+    await fetchWithBackoff(
+      async () => {
+        attempts++;
+        return attempts === 1
+          ? new Response("slow down", { status: 429, headers: { "retry-after": "2" } })
+          : new Response("{}", { status: 200 });
+      },
+      "http://llm/chat",
+      { method: "POST" },
+      { attempts: 3, baseMs: 300, maxMs: 5000, jitterRatio: 0, sleepFn: async (ms) => { delays.push(ms); } }
+    );
+    expect(delays).toEqual([2000]);
+  });
+
+  it("does not retry client errors", async () => {
+    let attempts = 0;
+    const res = await fetchWithBackoff(
+      async () => {
+        attempts++;
+        return new Response("bad request", { status: 400 });
+      },
+      "http://llm/chat",
+      { method: "POST" },
+      { attempts: 3, baseMs: 10, jitterRatio: 0, sleepFn: async () => {} }
+    );
+    expect(res.status).toBe(400);
+    expect(attempts).toBe(1);
+  });
+
+  it("retries network errors and gives up with the last failing response", async () => {
+    let attempts = 0;
+    const res = await fetchWithBackoff(
+      async () => {
+        attempts++;
+        if (attempts === 1) throw new Error("socket hang up");
+        return new Response("busy", { status: 503 });
+      },
+      "http://llm/chat",
+      { method: "POST" },
+      { attempts: 3, baseMs: 10, jitterRatio: 0, sleepFn: async () => {} }
+    );
+    expect(res.status).toBe(503);
+    expect(attempts).toBe(3);
   });
 });

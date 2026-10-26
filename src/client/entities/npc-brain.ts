@@ -1,13 +1,44 @@
+import { fallbackLine } from "../../shared/npc-fallbacks";
+
 export type NpcBrainReply = {
   say: string;
   tool: string | null;
   args: Record<string, unknown>;
   walk_to: { x: number; z: number } | null;
+  fallback?: boolean;
 };
 
 export type NpcHistoryEntry = { role: "user" | "assistant"; content: string };
 
 const REASON_TIMEOUT_MS = 12_000;
+
+ export type ReasonNpcOptions = {
+   attempts?: number;
+   baseMs?: number;
+   maxMs?: number;
+  jitterRatio?: number;
+  sleepFn?: (ms: number) => Promise<void>;
+  fetchFn?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  timeoutMs?: number;
+};
+
+export function chatterDelayMs(consecutiveFailures: number, baseMs = 20_000, maxMs = 300_000): number {
+  return Math.min(maxMs, baseMs * 2 ** Math.max(0, consecutiveFailures));
+}
+
+function clientBackoffMs(attempt: number, options: ReasonNpcOptions, retryAfter: string | null): number {
+  const base = options.baseMs ?? 300;
+  const max = options.maxMs ?? 2000;
+  const seconds = Number(retryAfter);
+  const retryAfterMs = retryAfter && Number.isFinite(seconds) ? seconds * 1000 : null;
+  const delay = retryAfterMs === null ? Math.min(max, base * 2 ** (attempt - 1)) : Math.min(max, retryAfterMs);
+  const jitterRatio = options.jitterRatio ?? 0.2;
+  return Math.round(Math.max(0, Math.min(max, delay + delay * jitterRatio * (Math.random() * 2 - 1))));
+}
+
+function fallbackNpcReply(npcId: string, message: string): NpcBrainReply {
+  return { say: fallbackLine(npcId, message), tool: null, args: {}, walk_to: null, fallback: true };
+}
 
 export function parseBrainReply(raw: string): NpcBrainReply {
   const text = raw.trim();
@@ -45,24 +76,45 @@ export async function reasonNpc(
   npcId: string,
   message: string,
   history: NpcHistoryEntry[],
-  endpoint = "/npc/reason"
+  endpoint = "/npc/reason",
+  options: ReasonNpcOptions = {}
 ): Promise<NpcBrainReply> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REASON_TIMEOUT_MS);
-  try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ npcId, message, history }),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`NPC reason failed: ${res.status}`);
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = data.choices?.[0]?.message?.content ?? "";
-    return parseBrainReply(content);
-  } finally {
-    clearTimeout(timer);
+  const attempts = Math.max(1, options.attempts ?? 3);
+  const fetcher = options.fetchFn ?? fetch;
+  const sleep = options.sleepFn ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = Date.now() + (options.timeoutMs ?? REASON_TIMEOUT_MS);
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return fallbackNpcReply(npcId, message);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), remaining);
+    try {
+      const res = await fetcher(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ npcId, message, history }),
+        signal: controller.signal,
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { choices?: { message?: { content?: string } }[]; fallback?: boolean };
+        const reply = parseBrainReply(data.choices?.[0]?.message?.content ?? "");
+        if (data.fallback) reply.fallback = true;
+        return reply;
+      }
+      if (attempt >= attempts || (res.status < 500 && res.status !== 429)) return fallbackNpcReply(npcId, message);
+      const delay = clientBackoffMs(attempt, options, res.headers.get("retry-after"));
+      if (Date.now() + delay >= deadline) return fallbackNpcReply(npcId, message);
+      await sleep(delay);
+    } catch {
+      if (attempt >= attempts || Date.now() >= deadline) return fallbackNpcReply(npcId, message);
+      const delay = clientBackoffMs(attempt, options, null);
+      if (Date.now() + delay >= deadline) return fallbackNpcReply(npcId, message);
+      await sleep(delay);
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return fallbackNpcReply(npcId, message);
 }
 
 export function fallbackSay(text: string): string {
