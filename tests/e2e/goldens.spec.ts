@@ -22,7 +22,9 @@ type Giera = {
     yaw: number;
     pitch: number;
     syncAvatar: () => void;
+    avatar?: { texturesReady?: boolean };
   };
+  player2: { avatar?: { texturesReady?: boolean } };
   world: { loadedChunkCount: number };
   qa: { frame: number };
 };
@@ -35,7 +37,7 @@ async function settle(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
-      return g.qa.frame >= 120 && g.world.loadedChunkCount >= 289;
+      return g.qa.frame >= 120 && g.world.loadedChunkCount >= 289 && g.player.avatar?.texturesReady === true && g.player2.avatar?.texturesReady === true;
     },
     { timeout: 60_000 }
   );
