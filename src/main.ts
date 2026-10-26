@@ -7,7 +7,6 @@ import { PlayerController } from "./client/entities/player";
 import { NPCManager } from "./client/entities/npc";
 import { ItemDropManager } from "./client/entities/drops";
 import { TrainingDummy } from "./client/entities/dummy";
-import { applyHeroDetails } from "./client/entities/hero-details";
 import { GameHUD } from "./client/game/hud";
 import { GameInventory } from "./client/game/inventory";
 import { ObjectiveManager } from "./client/game/objectives";
@@ -43,7 +42,6 @@ type GameBridge = {
   audio: AudioManager;
   stats: GameStats;
   tycoon: TycoonManager;
-  detailedAvatars: { ready: boolean; p1: boolean; p2: boolean };
   qa?: { simTime: number; frame: number; events: { ev: string; id?: string; t: number }[] };
 };
 declare global {
@@ -128,25 +126,6 @@ async function boot(): Promise<void> {
   const avatar2 = player2.loadAvatar();
   scene.add(avatar2.object);
 
-  const detailedAvatars = { ready: false, p1: false, p2: false };
-  void Promise.all([
-    player.loadDetailedAvatar().then((avatar) => {
-      if (avatar) {
-        applyHeroDetails(avatar.object, "ziemek");
-        scene.add(avatar.object);
-        detailedAvatars.p1 = true;
-      }
-    }),
-    player2.loadDetailedAvatar().then((avatar) => {
-      if (avatar) {
-        applyHeroDetails(avatar.object, "gniewko");
-        scene.add(avatar.object);
-        detailedAvatars.p2 = true;
-      }
-    }),
-  ]).finally(() => {
-    detailedAvatars.ready = true;
-  });
 
   const dummyY = surfaceHeight(1.5, 3, seed);
   const trainingDummy = new TrainingDummy({ x: 1.5, y: dummyY, z: 3 });
@@ -332,7 +311,6 @@ async function boot(): Promise<void> {
     audio,
     stats,
     tycoon,
-    detailedAvatars,
     qa: qa ? qaState : undefined,
   };
 

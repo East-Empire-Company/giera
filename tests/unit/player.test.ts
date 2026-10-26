@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { PlayerController } from "../../src/client/entities/player";
-import { createStylizedCharacter } from "../../src/client/entities/stylized-avatar";
-import type { Avatar } from "../../src/client/entities/avatar";
 import type { AABB } from "../../src/shared/physics";
 
 describe("PlayerController", () => {
@@ -51,44 +49,38 @@ describe("PlayerController", () => {
     expect(player.velocity.y).toBe(0);
   });
 
-  it("swaps to a replacement avatar, disposing and detaching the old one", () => {
+  it("keeps the rounded concept avatar as Ziemek's active model", () => {
     const player = new PlayerController({ id: "p1", spawn: [3, 40, 5] });
-    const stylized = player.loadAvatar();
-    const scene = new THREE.Scene();
-    scene.add(stylized.object);
 
-    const replacement = createStylizedCharacter("gniewko");
-    player.attachAvatar(replacement);
+    const avatar = player.loadAvatar();
 
-    expect(player.avatar).toBe(replacement);
-    expect(stylized.object.parent).toBeNull();
-    expect(replacement.object.position.equals(player.position)).toBe(true);
+    expect(player.avatar).toBe(avatar);
+    expect(avatar.id).toBe("ziemek");
+    expect(avatar.head.geometry.type).toBe("RoundedBoxGeometry");
+    expect(avatar.hair.children.length).toBeGreaterThan(0);
+    expect(avatar.backpack).toBeDefined();
   });
 
-  it("keeps the stylized avatar when the detailed model cannot load", async () => {
-    const player = new PlayerController({ id: "p1", spawn: [3, 40, 5] });
-    const stylized = player.loadAvatar();
+  it("keeps Gniewko's rounded polo model active", () => {
+    const player = new PlayerController({ id: "p2", spawn: [4.5, 40, 5] });
 
-    await expect(player.loadDetailedAvatar()).resolves.toBeNull();
-    expect(player.avatar).toBe(stylized);
+    const avatar = player.loadAvatar();
+
+    expect(player.avatar).toBe(avatar);
+    expect(avatar.id).toBe("gniewko");
+    expect(avatar.head.geometry.type).toBe("RoundedBoxGeometry");
+    expect(avatar.hair.children.length).toBeGreaterThan(0);
+    expect(avatar.backpack).toBeUndefined();
   });
 
-  it("orients both avatar rigs along the facing direction", () => {
+  it("orients the rounded avatar along the player's facing direction", () => {
     const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
     player.yaw = Math.PI;
     const expected = { x: -Math.sin(player.yaw), z: -Math.cos(player.yaw) };
+    const avatar = player.loadAvatar();
+    const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), avatar.object.rotation.y);
 
-    const stylized = player.loadAvatar();
-    player.syncAvatar();
-    const stylizedForward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), stylized.object.rotation.y);
-    expect(stylizedForward.x).toBeCloseTo(expected.x, 5);
-    expect(stylizedForward.z).toBeCloseTo(expected.z, 5);
-
-    const gltfRig = { frontSign: -1, object: new THREE.Group(), setMotion: () => {}, update: () => {} } as unknown as Avatar;
-    player.avatar = gltfRig;
-    player.syncAvatar();
-    const gltfForward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), gltfRig.object.rotation.y);
-    expect(gltfForward.x).toBeCloseTo(expected.x, 5);
-    expect(gltfForward.z).toBeCloseTo(expected.z, 5);
+    expect(forward.x).toBeCloseTo(expected.x, 5);
+    expect(forward.z).toBeCloseTo(expected.z, 5);
   });
 });

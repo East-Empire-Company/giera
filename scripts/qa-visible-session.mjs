@@ -62,7 +62,6 @@ await page.evaluate(() => {
     return orig(n, o);
   };
 });
-await page.waitForFunction(() => window.__GIERA__?.detailedAvatars?.ready === true, undefined, { timeout: 40000 });
 const ensureHarness = async () => {
   await page.evaluate(() => {
     if (window.__QA_plays) return;

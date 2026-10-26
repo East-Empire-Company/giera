@@ -16,9 +16,18 @@ export class StylizedCharacter {
   readonly leftLegPivot: THREE.Group;
   readonly rightLegPivot: THREE.Group;
 
-  readonly frontSign = 1;
   private motion: AvatarMotion = "idle";
   private animTime = 0;
+
+  private readonly textureLoadState: { pending: number; errors: string[] };
+
+  get texturesReady(): boolean {
+    return this.textureLoadState.pending === 0;
+  }
+
+  get textureErrors(): string[] {
+    return this.textureLoadState.errors;
+  }
 
   freezePose(time: number): void {
     this.animTime = time;
@@ -35,6 +44,7 @@ export class StylizedCharacter {
     rightArmPivot: THREE.Group;
     leftLegPivot: THREE.Group;
     rightLegPivot: THREE.Group;
+    textureLoadState: { pending: number; errors: string[] };
   }) {
     this.id = options.id;
     this.object = options.object;
@@ -46,6 +56,7 @@ export class StylizedCharacter {
     this.rightArmPivot = options.rightArmPivot;
     this.leftLegPivot = options.leftLegPivot;
     this.rightLegPivot = options.rightLegPivot;
+    this.textureLoadState = options.textureLoadState;
   }
 
   setMotion(motion: AvatarMotion): void {
@@ -117,18 +128,28 @@ export function createStylizedCharacter(id: ProtagonistHeroId): StylizedCharacte
     metalness: 0.05,
   });
 
-  // Texture loader
+  const textureLoadState = { pending: 0, errors: [] as string[] };
   let faceTex: THREE.Texture | null = null;
   let clothingTex: THREE.Texture | null = null;
   if (typeof document !== "undefined") {
     const loader = new THREE.TextureLoader();
-    faceTex = loader.load(`/assets/textures/characters/${id}_face.png`);
+    const loadTexture = (path: string): THREE.Texture => {
+      textureLoadState.pending++;
+      return loader.load(
+        path,
+        () => { textureLoadState.pending--; },
+        undefined,
+        () => {
+          textureLoadState.pending--;
+          textureLoadState.errors.push(path);
+        }
+      );
+    };
+    faceTex = loadTexture(`/assets/textures/characters/${id}_face.png`);
     faceTex.colorSpace = THREE.SRGBColorSpace;
-    clothingTex = loader.load(
-      isZiemek
-        ? "/assets/textures/characters/ziemek_hoodie.png"
-        : "/assets/textures/characters/gniewko_polo.png"
-    );
+    clothingTex = loadTexture(isZiemek
+      ? "/assets/textures/characters/ziemek_hoodie.png"
+      : "/assets/textures/characters/gniewko_polo.png");
     clothingTex.colorSpace = THREE.SRGBColorSpace;
   }
 
@@ -332,6 +353,7 @@ export function createStylizedCharacter(id: ProtagonistHeroId): StylizedCharacte
     leftArmPivot: leftArm.pivot,
     rightArmPivot: rightArm.pivot,
     leftLegPivot: leftLeg.pivot,
+    textureLoadState,
     rightLegPivot: rightLeg.pivot,
   });
 }

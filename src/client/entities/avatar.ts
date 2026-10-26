@@ -12,7 +12,6 @@ export class Avatar {
   private readonly actions: Record<string, THREE.AnimationAction> = {};
   private active?: THREE.AnimationAction;
   private motion: AvatarMotion = "idle";
-  readonly frontSign = -1;
 
   private constructor(object: THREE.Group, animations: THREE.AnimationClip[]) {
 
@@ -22,9 +21,6 @@ export class Avatar {
     this.setMotion("idle");
   }
 
-  freezePose(time: number): void {
-    this.mixer.setTime(time);
-  }
 
   static async load(
     id: PlayerAvatarId,

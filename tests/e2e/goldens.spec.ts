@@ -24,7 +24,6 @@ type Giera = {
     syncAvatar: () => void;
   };
   world: { loadedChunkCount: number };
-  detailedAvatars: { ready: boolean; p1: boolean; p2: boolean };
   qa: { frame: number };
 };
 
@@ -36,15 +35,10 @@ async function settle(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
-      return g.qa.frame >= 120 && g.world.loadedChunkCount >= 289 && g.detailedAvatars.ready === true;
+      return g.qa.frame >= 120 && g.world.loadedChunkCount >= 289;
     },
     { timeout: 60_000 }
   );
-  const avatars = await page.evaluate(() => (window as unknown as { __GIERA__: Giera }).__GIERA__.detailedAvatars);
-  expect(
-    avatars.p1 && avatars.p2,
-    `detailed hero models failed to load: ${JSON.stringify(avatars)}`
-  ).toBe(true);
 }
 
 async function capture(page: Page, name: string): Promise<void> {

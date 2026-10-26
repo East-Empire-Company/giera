@@ -1,51 +1,20 @@
 import * as THREE from "three";
 import { sweepAABB, type AABB } from "../../shared/physics";
-import { Avatar, type AvatarMotion } from "./avatar";
+import type { AvatarMotion } from "./avatar";
 import { createStylizedCharacter, StylizedCharacter } from "./stylized-avatar";
 
 export type PlayerId = "p1" | "p2";
 
-export type ClothingColors = {
-  torso: string;
-  arms: string;
-  legs: string;
-};
-
 export type ProtagonistProfile = {
   name: string;
   role: string;
-  avatarId: "playerOne" | "playerTwo";
-  accentColor: string;
-  scale: number;
-  clothing: ClothingColors;
 };
 
 export const PROTAGONISTS: Record<PlayerId, ProtagonistProfile> = {
-  p1: {
-    name: "Ziemek",
-    role: "Starszy brat — pixelowa bluza w creepery",
-    avatarId: "playerOne",
-    accentColor: "#2ca999", // Teal/cyan pixel hoodie
-    scale: 0.68,
-    clothing: {
-      torso: "#22998a",
-      arms: "#28ab9a",
-      legs: "#24272e",
-    },
-  },
-  p2: {
-    name: "Gniewko",
-    role: "Młodszy brat — białe polo i granatowe spodnie",
-    avatarId: "playerTwo",
-    accentColor: "#ffffff", // White polo with dark navy trim
-    scale: 0.63,
-    clothing: {
-      torso: "#f6f8fb",
-      arms: "#f0f3f8",
-      legs: "#1d2d48",
-    },
-  },
+  p1: { name: "Ziemek", role: "Starszy brat — pixelowa bluza w creepery" },
+  p2: { name: "Gniewko", role: "Młodszy brat — białe polo i granatowe spodnie" },
 };
+
 
 const MAX_PITCH = (85 * Math.PI) / 180; // ~1.4835 rad
 const HEAD_PIVOT_Y = 1.55;
@@ -60,7 +29,7 @@ export class PlayerController {
   yaw: number = Math.PI;
   pitch: number = 0;
   onGround: boolean = false;
-  avatar?: StylizedCharacter | Avatar;
+  avatar?: StylizedCharacter;
 
   constructor(options: { id: PlayerId; spawn: [number, number, number]; yaw?: number }) {
     this.id = options.id;
@@ -78,26 +47,6 @@ export class PlayerController {
     return char;
   }
 
-  attachAvatar(next: StylizedCharacter | Avatar): void {
-    this.avatar?.dispose();
-    this.avatar = next;
-    this.syncAvatar();
-  }
-
-  async loadDetailedAvatar(): Promise<Avatar | null> {
-    try {
-      const detailed = await Avatar.load(
-        this.profile.avatarId,
-        this.profile.accentColor,
-        this.profile.clothing,
-        this.profile.scale
-      );
-      this.attachAvatar(detailed);
-      return detailed;
-    } catch {
-      return null;
-    }
-  }
 
   rotateCamera(deltaYaw: number, deltaPitch: number): void {
     this.yaw = (this.yaw - deltaYaw) % (Math.PI * 2);
@@ -135,7 +84,7 @@ export class PlayerController {
   syncAvatar(): void {
     if (!this.avatar) return;
     this.avatar.object.position.copy(this.position);
-    this.avatar.object.rotation.y = this.yaw + (this.avatar.frontSign > 0 ? Math.PI : 0);
+    this.avatar.object.rotation.y = this.yaw + Math.PI;
   }
 
   updateMotion(isMoving: boolean, isSprinting: boolean): void {
