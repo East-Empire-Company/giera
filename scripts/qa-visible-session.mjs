@@ -142,7 +142,7 @@ await page.evaluate(() => {
     const origin = g.camera.getWorldPosition(new V());
     const dir = g.camera.getWorldDirection(new V());
     const p = new V();
-    for (let t = 0; t < 14; t += 0.05) {
+    for (let t = 0; t < 12; t += 0.05) {
       p.copy(dir).multiplyScalar(t).add(origin);
       const id = g.world.getBlock(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
       if (id !== 0 && id !== 11) {
@@ -180,8 +180,8 @@ if (log) {
       const dx = target.x - p.x;
       const dz = target.z - p.z;
       const len = Math.hypot(dx, dz) || 1;
-      const standX = target.x - (dx / len) * 6.5;
-      const standZ = target.z - (dz / len) * 6.5;
+      const standX = target.x - (dx / len) * 4.0;
+      const standZ = target.z - (dz / len) * 4.0;
       let groundY = Math.floor(target.y);
       for (let y = Math.floor(target.y) + 4; y > Math.floor(target.y) - 6; y--) {
         if (g.world.getBlock(Math.floor(standX), y, Math.floor(standZ)) !== 0) {
@@ -197,7 +197,7 @@ if (log) {
     await pause(400);
     // Sweep yaw and pitch until the camera ray lands on an oak log.
     let aimed = false;
-    for (const pitch of [0.15, 0.3, 0.05, 0.45, -0.1, 0.6]) {
+    for (const pitch of [-0.1, -0.25, -0.4, 0.15, 0.3, 0.05, 0.45, 0.6]) {
       for (const yawStep of [0, 0.12, -0.12, 0.24, -0.24, 0.4, -0.4, 0.6, -0.6, 0.9, -0.9]) {
         await page.evaluate(
           ({ step, target, pitchValue }) => {

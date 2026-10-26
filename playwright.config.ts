@@ -8,13 +8,20 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
+  globalTimeout: 300_000,
   reporter: jsonOut ? [["list"], ["json", { outputFile: jsonOut }]] : "list",
   use: {
     baseURL: "http://127.0.0.1:5173",
     trace: "on-first-retry",
     viewport: { width: 1280, height: 720 },
     launchOptions: {
-      args: ["--use-gl=angle", "--use-angle=metal"],
+      args: [
+        "--use-gl=angle",
+        "--use-angle=metal",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+      ],
     },
   },
   projects: [

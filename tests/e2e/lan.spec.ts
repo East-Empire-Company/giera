@@ -13,8 +13,8 @@ type G = { __GIERA__: any };
 
 async function boot(page: Page): Promise<void> {
   await page.goto("/?seed=424242&qa=1");
-  await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, { timeout: 30_000 });
-  await page.waitForFunction(() => (window as unknown as G).__GIERA__?.qa?.frame > 30);
+  await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 30_000 });
+  await page.waitForFunction(() => (window as unknown as G).__GIERA__?.qa?.frame > 30, null, { timeout: 20_000 });
 }
 
 async function connect(page: Page): Promise<void> {
@@ -41,29 +41,26 @@ test("lan: two clients join one room, exchange a block edit, server persists the
   await connect(A);
   await connect(B);
 
-  await A.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        const g = (window as unknown as G).__GIERA__;
-        const from = { x: g.player.position.x, z: g.player.position.z };
-        const start = performance.now();
-        const tick = () => {
-          const t = Math.min(1, (performance.now() - start) / 2000);
-          g.player.position.x = from.x + (9 - from.x) * t;
-          g.player.position.z = from.z + (9 - from.z) * t;
-          g.player.velocity.set(0, 0, 0);
-          g.player.syncAvatar();
-          if (t < 1) requestAnimationFrame(tick);
-          else resolve();
-        };
-        requestAnimationFrame(tick);
-      })
-  );
+  await A.evaluate(() => {
+    const g = (window as unknown as G).__GIERA__;
+    const p = g.player.position;
+    p.x = 9;
+    p.z = 9;
+    for (let y = Math.ceil(p.y) + 2; y > 30; y--) {
+      if (g.world.getBlock(9, y, 9) !== 0) {
+        p.y = y + 1.01;
+        break;
+      }
+    }
+    g.player.velocity.set(0, 0, 0);
+    g.player.syncAvatar();
+  });
   await B.waitForFunction(
     () => {
       const g = (window as unknown as G).__GIERA__;
       return Math.abs(g.player2.position.x - 9) < 1.5 || Math.abs(g.player2.position.z - 9) < 1.5;
     },
+    null,
     { timeout: 20_000 }
   );
 
@@ -98,6 +95,7 @@ test("lan: two clients join one room, exchange a block edit, server persists the
     });
 
   let armed = false;
+  let armedYaw = 0;
   let placeTarget: { x: number; y: number; z: number } | null = null;
   for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
     await A.evaluate(([y]) => {
@@ -135,6 +133,7 @@ test("lan: two clients join one room, exchange a block edit, server persists the
       target.z + 1 > ray.player.z - 0.3 &&
       target.z < ray.player.z + 0.3;
     if (usable && target && !overlaps) {
+      armedYaw = yaw;
       placeTarget = target;
       armed = true;
       break;
@@ -148,6 +147,12 @@ test("lan: two clients join one room, exchange a block edit, server persists the
   if (!armed || !placeTarget) throw new Error("could not arm a reachable block for lan placement");
 
   await A.locator("canvas#game").hover();
+  await A.evaluate(([y]) => {
+    const g = (window as unknown as G).__GIERA__;
+    g.player.yaw = y as number;
+    g.player.pitch = 0;
+    g.player.syncAvatar();
+  }, [armedYaw]);
   await A.mouse.down({ button: "right" });
   await A.mouse.up({ button: "right" });
   await A.waitForTimeout(500);

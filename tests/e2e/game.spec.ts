@@ -6,7 +6,7 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
     page.on("pageerror", (err) => errors.push(err.message));
 
     await page.goto("/?seed=424242");
-    await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, {
+    await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, null, {
       timeout: 25_000,
     });
 

@@ -19,7 +19,7 @@ test("performance: fps, draw calls, boot time and remesh stay within budget", as
   test.setTimeout(180_000);
   const bootStart = Date.now();
   await page.goto("/?seed=424242&qa=1");
-  await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, {
+  await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, null, {
     timeout: 30_000,
   });
   const bootMs = Date.now() - bootStart;

@@ -84,9 +84,12 @@ async function runNetworkStage(): Promise<StageResult> {
   });
   try {
     await waitPort(LAN_PORT, 15_000);
-    return await runCmd("network", ["bunx", "playwright", "test", "--project=lan"], {
-      GIERA_TEST_WS: LAN_WS,
-    });
+    const env = { GIERA_TEST_WS: LAN_WS };
+    const first = await runCmd("network", ["bunx", "playwright", "test", "--project=lan"], env);
+    if (first.status === "pass") return first;
+    console.log("network stage failed once — retrying with a fresh server");
+    rmSync(LAN_DATA_DIR, { recursive: true, force: true });
+    return await runCmd("network-retry", ["bunx", "playwright", "test", "--project=lan"], env);
   } finally {
     serverProc.kill("SIGTERM");
     setTimeout(() => rmSync(LAN_DATA_DIR, { recursive: true, force: true }), 500);

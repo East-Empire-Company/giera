@@ -8,7 +8,7 @@ test.describe("Evidence screenshot generator", () => {
 
   test("generates 4 evidence screenshots > 10kB each", async ({ page }) => {
     await page.goto("/?seed=424242");
-    await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, {
+    await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, null, {
       timeout: 25_000,
     });
 

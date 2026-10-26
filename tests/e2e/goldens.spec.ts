@@ -31,7 +31,7 @@ type Giera = {
 
 async function settle(page: Page): Promise<void> {
   await page.goto("/?seed=424242&qa=1");
-  await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, {
+  await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, null, {
     timeout: 30_000,
   });
   await page.waitForFunction(
@@ -39,6 +39,7 @@ async function settle(page: Page): Promise<void> {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
       return g.qa.frame >= 120 && g.world.loadedChunkCount >= 289 && g.player.avatar?.texturesReady === true && g.player2.avatar?.texturesReady === true;
     },
+    null,
     { timeout: 60_000 }
   );
 }

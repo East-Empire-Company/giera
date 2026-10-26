@@ -63,11 +63,11 @@ const INTERACT_REACH = 12;
 
 async function boot(page: Page): Promise<void> {
   await page.goto(`/?seed=${SPEC.seed}&qa=1`);
-  await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, { timeout: 30_000 });
+  await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 30_000 });
   await page.waitForFunction(() => {
     const g = (window as unknown as G).__GIERA__;
     return (g?.qa?.frame ?? 0) > 60;
-  });
+  }, null, { timeout: 20_000 });
 }
 
 type InventorySnapshot = {
@@ -686,7 +686,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await page.waitForTimeout(200);
     await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
     await page.reload();
-    await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, { timeout: 30_000 });
+    await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 30_000 });
     const inv = await invOf(page);
     expect(inv.activeSlot).toBe(4);
     expect(inv.blocks.planks).toBe(4);
