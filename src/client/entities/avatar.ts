@@ -40,6 +40,7 @@ export class Avatar {
   private readonly actions: Record<string, THREE.AnimationAction> = {};
   private active?: THREE.AnimationAction;
   private motion: AvatarMotion = "idle";
+  private requested: AvatarMotion = "idle";
   private frozen = false;
 
   private constructor(object: THREE.Group, animations: THREE.AnimationClip[]) {
@@ -78,7 +79,16 @@ export class Avatar {
     return new Avatar(model.scene, [...model.animations, ...animGltfs.flatMap((gltf) => gltf.animations)]);
   }
 
+  get currentMotion(): AvatarMotion {
+    return this.motion;
+  }
+
+  get requestedMotion(): AvatarMotion {
+    return this.requested;
+  }
+
   setMotion(motion: AvatarMotion): void {
+    this.requested = motion;
     if (motion === this.motion && this.active?.isRunning()) return;
     this.motion = motion;
     const clipName = resolveClip(ANIM_MAP[motion], Object.keys(this.actions));

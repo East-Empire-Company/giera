@@ -20,13 +20,16 @@ type ArmedTarget = {
 
 type Giera = {
   ready: boolean;
+  scene: { traverse: (fn: (node: any) => void) => void };
   player: {
     position: Vec3;
     velocity: Vec3;
     yaw: number;
     pitch: number;
     onGround: boolean;
+    isActing: boolean;
     syncAvatar: () => void;
+    avatar?: { currentMotion?: string; requestedMotion?: string };
   };
   camera: {
     position: { x: number; y: number; z: number; clone: () => { x: number; y: number; z: number } };
@@ -372,9 +375,26 @@ test.describe("Giera mechanics (qa deterministic)", () => {
       [armed.fixture],
       { timeout: 30_000 }
     );
+    const miningState = await page.evaluate(() => {
+      const g = (window as unknown as G).__GIERA__;
+      let dropWithAtlas = 0;
+      let dropTotal = 0;
+      g.scene.traverse((node: any) => {
+        if (node.isMesh && node.geometry?.type === "BoxGeometry" && node.geometry.parameters?.width === 0.32) {
+          dropTotal++;
+          const src = node.material?.map?.image?.src ?? "";
+          if (src.includes("atlas.png")) dropWithAtlas++;
+        }
+      });
+      return { isActing: g.player.isActing, motion: g.player.avatar?.requestedMotion ?? null, dropTotal, dropWithAtlas };
+    });
     await page.mouse.up();
     const invAfter = await invOf(page);
     expect(invAfter.blocks.stone).toBe((invBefore.blocks.stone ?? 0) + 1);
+    expect(miningState.isActing).toBe(true);
+    expect(miningState.motion).toBe("mine");
+    expect(miningState.dropTotal).toBeGreaterThan(0);
+    expect(miningState.dropWithAtlas).toBe(miningState.dropTotal);
     const events = await page.evaluate(() => (window as unknown as G).__GIERA__.qa.events);
     expect(events.some((e) => e.id === "dig_stone")).toBe(true);
     expect(errors).toEqual([]);

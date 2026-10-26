@@ -56,7 +56,7 @@ await page.waitForFunction(() => window.__GIERA__?.ready === true, undefined, { 
 await page.waitForFunction(
   () => {
     const g = window.__GIERA__;
-    return g?.player?.avatar?.texturesReady === true && g?.player2?.avatar?.texturesReady === true;
+    return g?.detailedAvatars?.ready === true;
   },
   undefined,
   { timeout: 60000 }
