@@ -31,27 +31,44 @@ export function createChunkMeshObject(data: ChunkMesh, coordinates: ChunkPositio
   return mesh;
 }
 
-export function createTileMaterials(atlasTexture: THREE.Texture, waterNormal: THREE.Texture): THREE.Material[] {
+type OreStyle = { color: number; metalness: number; roughness: number };
+const ORE_STYLES: Record<string, OreStyle> = {
+  default_mineral_coal: { color: 0x333333, metalness: 0.1, roughness: 1 },
+  default_mineral_iron: { color: 0xb07a5a, metalness: 0.5, roughness: 0.7 },
+  default_mineral_gold: { color: 0xd4af37, metalness: 0.7, roughness: 0.45 },
+};
+
+export function createTileMaterials(
+  atlasTexture: THREE.Texture,
+  atlasNormal: THREE.Texture,
+  atlasOrm: THREE.Texture,
+  waterNormal: THREE.Texture
+): THREE.Material[] {
   const materials: THREE.Material[] = [];
   const tiles = Object.entries(atlasManifest.tiles).sort(([, left], [, right]) => left.id - right.id);
   for (const [name, tile] of tiles) {
     const glass = name === "glass";
-    const foliage = name === "ginkgo_leaves";
     const water = name === "water";
+    const ore = ORE_STYLES[name];
     const material = new THREE.MeshStandardMaterial({
       map: atlasTexture,
-      normalMap: water ? waterNormal : null,
+      normalMap: water ? waterNormal : atlasNormal,
+      aoMap: water || glass ? null : atlasOrm,
+      roughnessMap: water || glass ? null : atlasOrm,
       vertexColors: true,
-      roughness: water ? 0.35 : glass ? 0.15 : 0.92,
-      metalness: 0,
-      transparent: glass,
-      opacity: glass ? 0.58 : 1,
-      alphaTest: foliage ? 0.4 : 0,
-      depthWrite: !glass,
+      color: ore ? new THREE.Color(ore.color) : new THREE.Color(0xffffff),
+      roughness: water ? 0.08 : glass ? 0.05 : ore ? ore.roughness : 1,
+      metalness: ore ? ore.metalness : 0,
+      transparent: glass || water,
+      opacity: glass ? 0.3 : water ? 0.75 : 1,
+      alphaTest: 0,
+      depthWrite: !glass && !water,
+      envMapIntensity: water ? 1.6 : glass ? 1.2 : 1,
       side: THREE.FrontSide,
     });
     if (tile.uv.length !== 4) throw new RangeError(`Invalid atlas UV rectangle: ${name}`);
     const tileRect = new THREE.Vector4(tile.uv[0], tile.uv[1], tile.uv[2], tile.uv[3]);
+    const usesAtlasNormal = !water;
     material.onBeforeCompile = (shader) => {
       shader.uniforms.gieraTileRect = { value: tileRect };
       shader.vertexShader = shader.vertexShader.replace(
@@ -79,21 +96,24 @@ export function createTileMaterials(atlasTexture: THREE.Texture, waterNormal: TH
         "#include <map_fragment>",
         `#ifdef USE_MAP
           vec2 localUv = fract( vMapUv );
-          vec4 sampledDiffuseColor = texture2D( map, mix( gieraTileRect.xy, gieraTileRect.zw, localUv ) );
+          vec2 gieraTileUv = mix( gieraTileRect.xy, gieraTileRect.zw, localUv );
+          vec4 sampledDiffuseColor = texture2D( map, gieraTileUv );
           #ifdef DECODE_VIDEO_TEXTURE
             sampledDiffuseColor = sRGBTransferEOTF( sampledDiffuseColor );
           #endif
           sampledDiffuseColor.rgb *= gieraWorldTint;
           float gieraFacing = clamp( gieraWorldNormal.y * 0.5 + 0.5, 0.0, 1.0 );
           sampledDiffuseColor.rgb *= mix( 0.93, 1.07, gieraFacing );
-          vec2 edge = abs(localUv - 0.5) * 2.0;
-          float bevel = 1.0 - smoothstep(0.82, 0.99, max(edge.x, edge.y));
-          sampledDiffuseColor.rgb *= (0.86 + 0.14 * bevel);
           diffuseColor *= sampledDiffuseColor;
         #endif`
       );
+      if (usesAtlasNormal) {
+        shader.fragmentShader = shader.fragmentShader.replace("vRoughnessMapUv", "gieraTileUv");
+        shader.fragmentShader = shader.fragmentShader.replace("vAoMapUv", "gieraTileUv");
+        shader.fragmentShader = shader.fragmentShader.replace("vNormalMapUv", "gieraTileUv");
+      }
     };
-    material.customProgramCacheKey = () => `giera-atlas-${tile.id}`;
+    material.customProgramCacheKey = () => `giera-atlas-pbr-${tile.id}-${water ? "water" : usesAtlasNormal ? "atlas" : "flat"}`;
     materials[tile.id] = material;
   }
   return materials;
@@ -166,12 +186,15 @@ export class WorldRenderer {
   private completed = 0;
   private readonly decor = new THREE.Group();
   private decorCenter: { x: number; z: number } | null = null;
+  private decorToken = 0;
 
   constructor(options: {
     scene: THREE.Scene;
     seed: number;
     worldgenVersion?: number;
     atlasTexture: THREE.Texture;
+    atlasNormal: THREE.Texture;
+    atlasOrm: THREE.Texture;
     waterNormal: THREE.Texture;
     workerCount?: number;
     onProgress?: (loaded: number, total: number) => void;
@@ -182,13 +205,18 @@ export class WorldRenderer {
     this.seed = options.seed;
     this.worldgenVersion = options.worldgenVersion ?? WORLDGEN_VERSION;
     this.onProgress = options.onProgress;
-    this.materials = createTileMaterials(options.atlasTexture, options.waterNormal);
+    this.materials = createTileMaterials(options.atlasTexture, options.atlasNormal, options.atlasOrm, options.waterNormal);
     this.waterNormal = options.waterNormal;
     const workerCount = options.workerCount ?? Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 2) - 1));
     this.workers = new ChunkWorkerPool(workerCount);
   }
   get loadedChunkCount(): number {
     return this.chunks.size;
+  }
+
+  getTileMaterial(tileName: string): THREE.Material | undefined {
+    const tile = atlasManifest.tiles[tileName as keyof typeof atlasManifest.tiles];
+    return tile ? this.materials[tile.id] : undefined;
   }
 
   updateWater(time: number): void {
@@ -251,7 +279,7 @@ export class WorldRenderer {
     if (this.decorCenter && this.decorCenter.x === center.x && this.decorCenter.z === center.z) return;
     this.decorCenter = center;
 
-    this.decor.clear();
+    const token = ++this.decorToken;
     const items = scatterGroundDecor(this.seed, Math.max(24, radius * CHUNK_SIZE * 0.75), center.x, center.z);
     const surfaceAt = (x: number, z: number): number => {
       for (let y = 70; y > 30; y--) {
@@ -260,13 +288,16 @@ export class WorldRenderer {
       }
       return Number.NaN;
     };
-    const decor = placeGroundDecor(
+    void placeGroundDecor(
       items,
       this.seed,
       (x, y, z) => this.getBlock(x, y, z) === BLOCK_ID.grass,
       surfaceAt
-    );
-    this.decor.add(decor);
+    ).then((decor) => {
+      if (token !== this.decorToken) return;
+      this.decor.clear();
+      this.decor.add(decor);
+    });
   }
 
   getBlock(x: number, y: number, z: number): number {

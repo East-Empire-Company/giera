@@ -10,15 +10,17 @@
     "oak_log_side": "assets/textures/tiles/oak_log_side.png",
     "ginkgo_leaves": "assets/textures/tiles/ginkgo_leaves.png",
     "oak_planks": "assets/textures/tiles/oak_planks.png",
-    "glass": "assets/textures/tiles/glass.png",
     "water": "assets/textures/tiles/water.png",
+    "glass": "assets/textures/tiles/glass.png",
     "default_mineral_coal": "assets/textures/tiles/default_mineral_coal.png",
     "default_mineral_iron": "assets/textures/tiles/default_mineral_iron.png",
     "default_mineral_gold": "assets/textures/tiles/default_mineral_gold.png"
   },
   "models": {
-    "playerOne": "assets/models/character-a.meshopt.glb",
-    "playerTwo": "assets/models/character-b.meshopt.glb"
+    "playerOne": "assets/models/kaykit/knight.glb",
+    "playerTwo": "assets/models/kaykit/rogue.glb",
+    "mina": "assets/models/kaykit/mage.glb",
+    "staszek": "assets/models/kaykit/ranger.glb"
   },
   "sky": {
     "clouds": "assets/sky/clouds.png",

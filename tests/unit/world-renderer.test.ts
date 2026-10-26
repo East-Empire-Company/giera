@@ -24,7 +24,7 @@ describe("worldRenderer setBlock", () => {
     const scene = new THREE.Scene();
     const atlas = new THREE.Texture();
     const normal = new THREE.Texture();
-    const renderer = new WorldRenderer({ scene, seed: 1234, atlasTexture: atlas, waterNormal: normal, workerCount: 1 });
+    const renderer = new WorldRenderer({ scene, seed: 1234, atlasTexture: atlas, atlasNormal: new THREE.Texture(), atlasOrm: new THREE.Texture(), waterNormal: normal, workerCount: 1 });
     renderer.setBlock(0, 0, 0, 9); // planks
     expect(renderer.getBlock(0, 0, 0)).toBe(9);
     renderer.dispose();

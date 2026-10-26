@@ -1,15 +1,52 @@
 import * as THREE from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { makeRng } from "../../shared/rng";
 
 export type ScatterKind = "tuft" | "flower" | "rock" | "mushroom";
 
 type ScatterItem = { x: number; y: number; z: number; kind: ScatterKind; scale: number; rotation: number };
 
-const FLOWER_COLORS = [0xff6b8a, 0xffd166, 0xf4f1de, 0xc77dff, 0x7bdff2];
 const ROCK_COLORS = [0x8d8d8d, 0x9b9b8f, 0x7f8a8d];
-const MUSHROOM_COLORS = [0xd84a3a, 0xe0b040, 0xc06b5a];
-const TUFT_COLORS = [0x6fae4b, 0x83bc52, 0x639e4c];
+
+type PropPart = { geometry: THREE.BufferGeometry; material: THREE.Material; baseHeight: number };
+
+const propCache = new Map<string, Promise<PropPart[]>>();
+
+function loadProp(file: string): Promise<PropPart[]> {
+  let cached = propCache.get(file);
+  if (!cached) {
+    cached = (async () => {
+      const gltf = await new GLTFLoader().loadAsync(`/assets/models/props/${file}`);
+      gltf.scene.updateMatrixWorld(true);
+      const parts: PropPart[] = [];
+      const box = new THREE.Box3();
+      gltf.scene.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
+        geometry.computeBoundingBox();
+        box.union(geometry.boundingBox!);
+        const source = Array.isArray(object.material) ? object.material[0] : object.material;
+        parts.push({ geometry, material: source.clone(), baseHeight: 1 });
+      });
+      const height = Math.max(0.001, box.max.y - box.min.y);
+      const centerX = (box.min.x + box.max.x) / 2;
+      const centerZ = (box.min.z + box.max.z) / 2;
+      for (const part of parts) {
+        part.geometry.translate(-centerX, -box.min.y, -centerZ);
+        part.baseHeight = height;
+      }
+      return parts;
+    })();
+    propCache.set(file, cached);
+  }
+  return cached;
+}
+
+const PROP_FILES: Record<"tuft" | "flower" | "mushroom", { file: string; targetHeight: number }> = {
+  tuft: { file: "Grass_Small.gltf", targetHeight: 0.45 },
+  flower: { file: "Flower_1.gltf", targetHeight: 0.38 },
+  mushroom: { file: "Bush_Small_Flowers.gltf", targetHeight: 0.55 },
+};
 
 export function scatterGroundDecor(seed: number, radius: number, centerX: number, centerZ: number): ScatterItem[] {
   const rng = makeRng(seed ^ 0x5bd1e995);
@@ -31,17 +68,46 @@ export function scatterGroundDecor(seed: number, radius: number, centerX: number
   return items;
 }
 
-function tuftGeometry(): THREE.BufferGeometry {
-  const first = new THREE.PlaneGeometry(0.18, 0.38);
-  first.translate(0, 0.19, 0);
-  const second = first.clone();
-  second.rotateY(Math.PI / 2);
-  const merged = mergeGeometries([first, second], false)!;
-  first.dispose();
-  second.dispose();
-  return merged;
+export function variationColor(seed: number, item: ScatterItem): THREE.Color {
+  const hash = (Math.imul(item.x + 1024, 73856093) ^ Math.imul(item.z + 1024, 19349663) ^ seed) >>> 0;
+  const brightness = 0.86 + ((hash % 1000) / 1000) * 0.28;
+  return new THREE.Color(brightness, brightness, brightness);
 }
 
+export function paletteColor(item: ScatterItem, palette: number[], seed: number): number {
+  const hash = (Math.imul(item.x + 1024, 73856093) ^ Math.imul(item.z + 1024, 19349663) ^ seed) >>> 0;
+  return palette[hash % palette.length];
+}
+
+async function makePropInstances(
+  placed: ScatterItem[],
+  kind: "tuft" | "flower" | "mushroom",
+  seed: number
+): Promise<THREE.InstancedMesh[]> {
+  const selected = placed.filter((item) => item.kind === kind);
+  if (selected.length === 0) return [];
+  const parts = await loadProp(PROP_FILES[kind].file);
+  const dummy = new THREE.Object3D();
+  return parts.map((part) => {
+    const mesh = new THREE.InstancedMesh(part.geometry, part.material, selected.length);
+    const uniformScale = PROP_FILES[kind].targetHeight / part.baseHeight;
+    selected.forEach((item, i) => {
+      dummy.position.set(item.x + 0.5, item.y, item.z + 0.5);
+      dummy.rotation.y = item.rotation;
+      const s = uniformScale * item.scale;
+      dummy.scale.set(s, s, s);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      mesh.setColorAt(i, variationColor(seed, item));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = true;
+    return mesh;
+  });
+}
 
 function makeInstances(
   items: ScatterItem[],
@@ -72,17 +138,12 @@ function makeInstances(
   return mesh;
 }
 
-function paletteColor(item: ScatterItem, palette: number[], seed: number): number {
-  const hash = (Math.imul(item.x + 1024, 73856093) ^ Math.imul(item.z + 1024, 19349663) ^ seed) >>> 0;
-  return palette[hash % palette.length];
-}
-
-export function placeGroundDecor(
+export async function placeGroundDecor(
   items: ScatterItem[],
   seed: number,
   isGrass: (x: number, y: number, z: number) => boolean,
   surfaceAt: (x: number, z: number) => number
-): THREE.Group {
+): Promise<THREE.Group> {
   const group = new THREE.Group();
   group.name = "ground-decor";
   const placed = items.flatMap((item) => {
@@ -90,63 +151,25 @@ export function placeGroundDecor(
     return Number.isFinite(y) && isGrass(item.x, y, item.z) ? [{ ...item, y: y + 1 }] : [];
   });
 
-  const tuft = makeInstances(
-    placed,
-    "tuft",
-    tuftGeometry(),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, side: THREE.DoubleSide }),
-    (item) => paletteColor(item, TUFT_COLORS, seed)
-  );
-  const flowerGeometry = new THREE.DodecahedronGeometry(0.11, 0);
-  const flowerHead = makeInstances(
-    placed,
-    "flower",
-    flowerGeometry,
-    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.65, flatShading: true }),
-    (item) => paletteColor(item, FLOWER_COLORS, seed),
-    0.38,
-    0.7
-  );
-  const flowerStem = makeInstances(
-    placed,
-    "flower",
-    new THREE.CylinderGeometry(0.018, 0.024, 0.34, 5),
-    new THREE.MeshStandardMaterial({ color: 0x5a9a42, roughness: 0.9 }),
-    () => 0xffffff,
-    0.17,
-    1
-  );
+  const [tuftMeshes, flowerMeshes, bushMeshes] = await Promise.all([
+    makePropInstances(placed, "tuft", seed),
+    makePropInstances(placed, "flower", seed),
+    makePropInstances(placed, "mushroom", seed),
+  ]);
+
+  const rockGeometry = new THREE.DodecahedronGeometry(0.2, 0);
   const rock = makeInstances(
     placed,
     "rock",
-    new THREE.DodecahedronGeometry(0.2, 0),
+    rockGeometry,
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true }),
     (item) => paletteColor(item, ROCK_COLORS, seed),
     0.12,
     0.7
   );
-  const mushroomCap = makeInstances(
-    placed,
-    "mushroom",
-    new THREE.SphereGeometry(0.14, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, flatShading: true }),
-    (item) => paletteColor(item, MUSHROOM_COLORS, seed),
-    0.25,
-    1
-  );
-  const mushroomStem = makeInstances(
-    placed,
-    "mushroom",
-    new THREE.CylinderGeometry(0.04, 0.055, 0.2, 6),
-    new THREE.MeshStandardMaterial({ color: 0xf1e3c8, roughness: 0.85 }),
-    () => 0xffffff,
-    0.1,
-    1
-  );
 
-  for (const mesh of [tuft, flowerStem, flowerHead, rock, mushroomStem, mushroomCap]) {
+  for (const mesh of [...tuftMeshes, ...flowerMeshes, ...bushMeshes, rock]) {
     if (mesh) group.add(mesh);
   }
-  flowerGeometry.dispose();
   return group;
 }

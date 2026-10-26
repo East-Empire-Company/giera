@@ -49,38 +49,21 @@ describe("PlayerController", () => {
     expect(player.velocity.y).toBe(0);
   });
 
-  it("keeps the rounded concept avatar as Ziemek's active model", () => {
-    const player = new PlayerController({ id: "p1", spawn: [3, 40, 5] });
-
-    const avatar = player.loadAvatar();
-
-    expect(player.avatar).toBe(avatar);
-    expect(avatar.id).toBe("ziemek");
-    expect(avatar.head.geometry.type).toBe("RoundedBoxGeometry");
-    expect(avatar.hair.children.length).toBeGreaterThan(0);
-    expect(avatar.backpack).toBeDefined();
-  });
-
-  it("keeps Gniewko's rounded polo model active", () => {
-    const player = new PlayerController({ id: "p2", spawn: [4.5, 40, 5] });
-
-    const avatar = player.loadAvatar();
-
-    expect(player.avatar).toBe(avatar);
-    expect(avatar.id).toBe("gniewko");
-    expect(avatar.head.geometry.type).toBe("RoundedBoxGeometry");
-    expect(avatar.hair.children.length).toBeGreaterThan(0);
-    expect(avatar.backpack).toBeUndefined();
-  });
-
-  it("orients the rounded avatar along the player's facing direction", () => {
+  it("syncs avatar object to player position and facing", () => {
     const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
     player.yaw = Math.PI;
-    const expected = { x: -Math.sin(player.yaw), z: -Math.cos(player.yaw) };
-    const avatar = player.loadAvatar();
-    const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), avatar.object.rotation.y);
+    const stub = { object: new THREE.Group() } as unknown as NonNullable<typeof player.avatar>;
+    player.avatar = stub;
+    player.position.set(7, 41, -3);
+    player.syncAvatar();
+    expect(player.avatar!.object.position.toArray()).toEqual([7, 41, -3]);
+    expect(player.avatar!.object.rotation.y % (Math.PI * 2)).toBeCloseTo(0, 5);
+  });
 
-    expect(forward.x).toBeCloseTo(expected.x, 5);
-    expect(forward.z).toBeCloseTo(expected.z, 5);
+  it("starts with no acting flag and concept clothing colors", () => {
+    const player = new PlayerController({ id: "p1", spawn: [3, 40, 5] });
+    expect(player.isActing).toBe(false);
+    expect(player.profile.clothing.torso).toMatch(/^#/);
+    expect(player.profile.name).toBe("Ziemek");
   });
 });

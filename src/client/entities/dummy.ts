@@ -7,16 +7,17 @@ export class TrainingDummy {
   wobbleAngle = 0;
   private wobbleVelocity = 0;
 
-  constructor(spawn: { x: number; y: number; z: number }) {
+  constructor(spawn: { x: number; y: number; z: number }, materials?: { planks?: THREE.Material; bark?: THREE.Material }) {
     this.position = new THREE.Vector3(spawn.x, spawn.y, spawn.z);
     this.object = new THREE.Group();
     this.object.position.copy(this.position);
 
     // Stand base
     const baseGeo = new THREE.CylinderGeometry(0.35, 0.45, 0.2, 12);
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+    const woodMat = materials?.planks ?? new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
     const base = new THREE.Mesh(baseGeo, woodMat);
     base.position.y = 0.1;
+    base.castShadow = true;
     this.object.add(base);
 
     // Spring pivot at base
@@ -26,15 +27,16 @@ export class TrainingDummy {
 
     // Pole
     const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.4, 8);
-    const pole = new THREE.Mesh(poleGeo, woodMat);
+    const pole = new THREE.Mesh(poleGeo, materials?.bark ?? woodMat);
     pole.position.y = 0.7;
+    pole.castShadow = true;
     this.pivot.add(pole);
 
     // Torso (Straw / Burlap sack)
     const torsoGeo = new THREE.CylinderGeometry(0.25, 0.22, 0.8, 12);
-    const strawMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.95 });
-    const torso = new THREE.Mesh(torsoGeo, strawMat);
+    const torso = new THREE.Mesh(torsoGeo, woodMat);
     torso.position.y = 0.9;
+    torso.castShadow = true;
     this.pivot.add(torso);
 
     // Target smile / bullseye on chest
@@ -47,8 +49,9 @@ export class TrainingDummy {
 
     // Head
     const headGeo = new THREE.SphereGeometry(0.2, 12, 12);
-    const head = new THREE.Mesh(headGeo, strawMat);
+    const head = new THREE.Mesh(headGeo, woodMat);
     head.position.y = 1.45;
+    head.castShadow = true;
     this.pivot.add(head);
   }
 

@@ -55,6 +55,17 @@ Hardware-only checks (Xbox pads, real mic STT, touch overlay, Xbox Edge fps) liv
 
 `bun run qa:session` opens a real browser window (headed Chromium) and plays through the loop a child would: walk, jump, mine, gather wood, place blocks, craft, cycle music, split screen, talk to an NPC, hit the training dummy, collect tycoon stars, tier up, bounce on the trampoline, open the LAN dialog. It boots its own dev server when 5173 is free, writes screenshots and `visible-session-results.json` to `.ai/evidence/qa/`, and asserts no page errors. Use it when the question is "does it actually feel right", not "does the spec still hold" — the latter is the pipeline's job.
 
+## Render layer
+
+Presentation only — worldgen, physics, mining, crafting, NPC logic, LAN protocol and saves stay voxel-driven.
+
+- Block faces read three atlases built by `bun run assets:atlas` (`scripts/build-atlas.ts`): `atlas.png` (albedo, sRGB), `atlas-normal.png` (NormalGL), `atlas-orm.png` (R=AO, G=roughness). Sources are AmbientCG CC0 1K-JPG maps that `bun run assets:fetch` writes to `public/assets/textures/pbr/<id>/` (git-ignored, re-downloadable); `src/shared/atlas-manifest.json` holds the UV rects.
+- Heroes/NPCs are KayKit CC0 GLBs in `public/assets/models/kaykit/` (Rig_Medium clip names live in `ANIM_MAP` in `src/client/entities/avatar.ts`). Decor props are Quaternius CC0 glTF in `public/assets/models/props/`.
+- Environment light comes from a Poly Haven CC0 HDR (`HDRLoader` → `PMREMGenerator` → `scene.environment`); `SkyCycle` only modulates `scene.environmentIntensity` by daylight.
+- Post stack: `src/client/render/postfx.ts` = RenderPass → GTAO → grade → SMAA → OutputPass. Split-screen renders two half-width composers and composites them.
+- Vite serves `public/` case-sensitively — asset filenames must match `asset-manifest.json` exactly.
+- Adding assets: place files at the documented path, then `bun scripts/fetch-assets.ts --package-only` regenerates `src/shared/asset-manifest.json` and `public/assets/NOTICES.md`.
+
 ## Deploy
 
 Target: homelab k3s cluster (node k3s-mikrus-1, namespace `giera`, Forgejo registry, Tailscale funnel).

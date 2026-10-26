@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -12,8 +13,21 @@ const directArchives = [
 ];
 const cacheRoot = resolve(".cache/assets");
 const publicRoot = resolve("public/assets");
-type AssetSourceId = "kenney-voxel-pack" | "kenney-blocky-characters" | "kenney-ui-pack" | "kenney-particle-pack" | "aroach-block-textures" | "aroach-foliage-textures" | "joeenderman-textures-1" | "joeenderman-textures-2" | "ambientcg-ice-normal";
-type AssetPick = { source: AssetSourceId; member: string; path: string };
+type AssetSourceId =
+  | "kenney-voxel-pack"
+  | "kenney-blocky-characters"
+  | "kenney-ui-pack"
+  | "kenney-particle-pack"
+  | "aroach-block-textures"
+  | "aroach-foliage-textures"
+  | "joeenderman-textures-1"
+  | "joeenderman-textures-2"
+  | "ambientcg-ice-normal"
+  | "ambientcg-pbr"
+  | "polyhaven-hdri"
+  | "kaykit-adventurers"
+  | "quaternius-nature";
+type AssetPick = { source: AssetSourceId; member: string; path: string; preplaced?: boolean };
 
 const sourceInfo: Record<AssetSourceId, { title: string; author: string; license: string; url: string }> = {
   "kenney-voxel-pack": { title: "Voxel Pack", author: "Kenney", license: "CC0", url: "https://kenney.nl/assets/voxel-pack" },
@@ -25,6 +39,10 @@ const sourceInfo: Record<AssetSourceId, { title: string; author: string; license
   "joeenderman-textures-1": { title: "Assorted Minecraft style textures", author: "JoeEnderman", license: "CC0", url: "https://opengameart.org/content/assorted-minecraft-style-textures" },
   "joeenderman-textures-2": { title: "Assorted Minecraft style textures", author: "JoeEnderman", license: "CC0", url: "https://opengameart.org/content/assorted-minecraft-style-textures" },
   "ambientcg-ice-normal": { title: "Ice 001 NormalGL", author: "ambientCG", license: "CC0 / Public Domain", url: "https://ambientcg.com/view?id=Ice001" },
+  "ambientcg-pbr": { title: "ambientCG PBR materials (Grass001, Ground020, Rock064, Rock058, Ground080, Bark001, ScatteredLeaves009, Planks010)", author: "ambientCG", license: "CC0 / Public Domain", url: "https://ambientcg.com" },
+  "polyhaven-hdri": { title: "Kloofendal 48d Partly Cloudy 2K HDR", author: "Poly Haven", license: "CC0", url: "https://polyhaven.com/a/kloofendal_48d_partly_cloudy" },
+  "kaykit-adventurers": { title: "KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)", author: "Kay Lousberg", license: "CC0 1.0", url: "https://kaylousberg.itch.io/kaykit-adventurers" },
+  "quaternius-nature": { title: "Ultimate Stylized Nature (Grass_Small, Bush_Small_Flowers, Flower_1)", author: "Quaternius", license: "CC0", url: "https://quaternius.com/packs/ultimatestylizednature.html" },
 };
 
 const assetPicks: Record<string, Record<string, AssetPick>> = {
@@ -41,13 +59,16 @@ const assetPicks: Record<string, Record<string, AssetPick>> = {
     ginkgo_leaves: { source: "kenney-voxel-pack", member: "PNG/Tiles/leaves_transparent.png", path: "assets/textures/tiles/ginkgo_leaves.png" },
     oak_planks: { source: "kenney-voxel-pack", member: "PNG/Tiles/wood.png", path: "assets/textures/tiles/oak_planks.png" },
     water: { source: "kenney-voxel-pack", member: "PNG/Tiles/water.png", path: "assets/textures/tiles/water.png" },
+    glass: { source: "kenney-voxel-pack", member: "PNG/Tiles/glass.png", path: "assets/textures/tiles/glass.png" },
     default_mineral_coal: { source: "joeenderman-textures-1", member: "default_mineral_coal.png", path: "assets/textures/tiles/default_mineral_coal.png" },
     default_mineral_iron: { source: "joeenderman-textures-1", member: "default_mineral_iron.png", path: "assets/textures/tiles/default_mineral_iron.png" },
     default_mineral_gold: { source: "joeenderman-textures-1", member: "default_mineral_gold.png", path: "assets/textures/tiles/default_mineral_gold.png" },
   },
   models: {
-    playerOne: { source: "kenney-blocky-characters", member: "Models/GLB format/character-a.glb", path: "assets/models/character-a.meshopt.glb" },
-    playerTwo: { source: "kenney-blocky-characters", member: "Models/GLB format/character-b.glb", path: "assets/models/character-b.meshopt.glb" },
+    playerOne: { source: "kaykit-adventurers", member: "Characters/gltf/Knight.glb", path: "assets/models/kaykit/knight.glb", preplaced: true },
+    playerTwo: { source: "kaykit-adventurers", member: "Characters/gltf/Rogue.glb", path: "assets/models/kaykit/rogue.glb", preplaced: true },
+    mina: { source: "kaykit-adventurers", member: "Characters/gltf/Mage.glb", path: "assets/models/kaykit/mage.glb", preplaced: true },
+    staszek: { source: "kaykit-adventurers", member: "Characters/gltf/Ranger.glb", path: "assets/models/kaykit/ranger.glb", preplaced: true },
   },
   sky: {
     clouds: { source: "kenney-voxel-pack", member: "PNG/Other/clouds.png", path: "assets/sky/clouds.png" },
@@ -175,13 +196,17 @@ async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
     manifest[group] = {};
     for (const [key, pick] of Object.entries(picks)) {
       const info = sourceInfo[pick.source];
-      const sourcePath = join(cacheRoot, "unpacked", pick.source, pick.member);
       const outputPath = join(publicRoot, pick.path.slice("assets/".length));
       await mkdir(dirname(outputPath), { recursive: true });
-      if (group === "models") {
-        execFileSync(resolve("node_modules/.bin/gltf-transform"), ["meshopt", sourcePath, outputPath, "--level", "medium"], { stdio: "inherit" });
+      if (pick.preplaced) {
+        if (!existsSync(outputPath)) throw new Error(`Preplaced asset missing (manual download required): ${outputPath} — source: ${info.url}`);
       } else {
-        await copyFile(sourcePath, outputPath);
+        const sourcePath = join(cacheRoot, "unpacked", pick.source, pick.member);
+        if (group === "models") {
+          execFileSync(resolve("node_modules/.bin/gltf-transform"), ["meshopt", sourcePath, outputPath, "--level", "medium"], { stdio: "inherit" });
+        } else {
+          await copyFile(sourcePath, outputPath);
+        }
       }
       manifest[group][key] = pick.path;
       notices.push(`| \`${pick.path}\` | [${info.title}](${info.url}) / \`${pick.member}\` | ${info.author} | ${info.license} |`);
@@ -192,9 +217,39 @@ async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
   notices.push(
     "| `assets/textures/crackover.png` | [64x Textures an Overlays](https://opengameart.org/node/31077) / `crackover.png` | FacadeGaikan | CC0 |",
     "| `assets/fonts/*` | [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) | Pixelify Sans Project Authors | SIL OFL 1.1 |",
+    "| `assets/models/kaykit/anims/Rig_Medium_*.glb` | [KayKit - Character Pack : Adventurers 2.0](https://kaylousberg.itch.io/kaykit-adventurers) / `Animations/gltf/Rig_Medium/*.glb` | Kay Lousberg | CC0 1.0 |",
+    "| `assets/models/props/*` | [Ultimate Stylized Nature](https://quaternius.com/packs/ultimatestylizednature.html) / `glTF/{Grass_Small,Bush_Small_Flowers,Flower_1}.*` | Quaternius | CC0 |",
+    "| `assets/sky/kloofendal_48d_partly_cloudy_2k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `2k HDR` | Poly Haven | CC0 |",
+    "| `assets/textures/pbr/*` | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |",
   );
   await writeFile(resolve("src/shared/asset-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(join(publicRoot, "NOTICES.md"), `${notices.join("\n")}\n`);
+}
+
+const pbrMaterialIds = ["Grass001", "Ground020", "Rock064", "Rock058", "Ground080", "Bark001", "ScatteredLeaves009", "Planks010"] as const;
+
+async function fetchAmbientCgPbr(): Promise<void> {
+  for (const id of pbrMaterialIds) {
+    const target = join(publicRoot, "textures/pbr", id);
+    if (existsSync(join(target, `${id}_1K-JPG_Color.jpg`))) continue;
+    const zip = join(cacheRoot, `${id}_1K-JPG.zip`);
+    if (!existsSync(zip)) await download(`https://ambientcg.com/get?file=${id}_1K-JPG.zip`, zip);
+    const extracted = join(cacheRoot, `${id}_1K-JPG`);
+    if (!existsSync(join(extracted, `${id}_1K-JPG_Color.jpg`))) {
+      await mkdir(extracted, { recursive: true });
+      execFileSync("unzip", ["-oq", zip, "-d", extracted]);
+    }
+    await mkdir(target, { recursive: true });
+    for (const map of ["Color", "NormalGL", "Roughness", "AmbientOcclusion"]) {
+      await copyFile(join(extracted, `${id}_1K-JPG_${map}.jpg`), join(target, `${id}_1K-JPG_${map}.jpg`));
+    }
+  }
+}
+
+async function fetchHdri(): Promise<void> {
+  const target = join(publicRoot, "sky/kloofendal_48d_partly_cloudy_2k.hdr");
+  if (existsSync(target)) return;
+  await download("https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloofendal_48d_partly_cloudy_2k.hdr", target);
 }
 
 async function main(): Promise<void> {
@@ -207,6 +262,8 @@ async function main(): Promise<void> {
   for (const slug of kenneySlugs) await fetchKenneyPack(slug);
   for (const source of directArchives) await fetchDirectArchive(source);
   await fetchCrackOverlay();
+  await fetchAmbientCgPbr();
+  await fetchHdri();
   const fonts = await fetchPixelifySans();
   await packageSelectedAssets(fonts);
   console.log("Downloaded and packaged verified source assets; see public/assets/NOTICES.md.");

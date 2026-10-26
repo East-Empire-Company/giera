@@ -1,6 +1,5 @@
 import * as THREE from "three";
-import { Avatar } from "./avatar";
-import { applyNpcDetails } from "./hero-details";
+import { Avatar, type PlayerAvatarId } from "./avatar";
 import { makeRng } from "../../shared/rng";
 
 function hashSeed(text: string): number {
@@ -18,7 +17,7 @@ export type NPCDef = {
   role: string;
   position: [number, number, number];
   accentColor: string;
-  avatarId: "playerOne" | "playerTwo";
+  avatarId: PlayerAvatarId;
   scale?: number;
   quickPrompts: string[];
 };
@@ -30,7 +29,7 @@ export const NPCS: NPCDef[] = [
     role: "Przewodniczka po świecie",
     position: [4, 50, 4],
     accentColor: "#f3a683",
-    avatarId: "playerTwo",
+    avatarId: "mina",
     quickPrompts: ["Co mam zrobić?", "Daj mi blok", "Gdzie mam iść?", "Jak się nazywasz?"],
   },
   {
@@ -39,7 +38,7 @@ export const NPCS: NPCDef[] = [
     role: "Mistrz rzemiosła",
     position: [-4, 50, 4],
     accentColor: "#786fa6",
-    avatarId: "playerOne",
+    avatarId: "staszek",
     quickPrompts: ["Jak zrobić kilof?", "Daj mi deski", "Gdzie jest żelazo?", "Co potrafisz?"],
   },
   {
@@ -174,11 +173,10 @@ export class NPCInstance {
       return parrot;
     }
 
-    const scale = this.def.scale ?? 0.65;
+    const scale = this.def.scale ?? 0.8;
     const avatar = await Avatar.load(this.def.avatarId, this.def.accentColor);
     avatar.object.scale.setScalar(scale);
     avatar.object.position.copy(this.position);
-    applyNpcDetails(avatar.object, this.def.id === "mina" ? "mina" : "staszek");
     const toCenterX = -this.position.x;
     const toCenterZ = -this.position.z;
     avatar.object.rotation.y = Math.atan2(-toCenterX, -toCenterZ);

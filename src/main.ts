@@ -17,6 +17,7 @@ import { TouchController } from "./client/input/touch";
 import { loadGameState, saveGameState } from "./client/persist/db";
 import { createRenderer, loadRenderAssets, SkyCycle } from "./client/render/renderer";
 import { getSplitViewports, SplitScreenManager } from "./client/render/split-screen";
+import { PostFX } from "./client/render/postfx";
 import { WorldRenderer } from "./client/render/worldRenderer";
 import { resolveWorldSeed } from "./client/startup/world-seed";
 import { WORLDGEN_VERSION } from "./shared/worldgen";
@@ -29,6 +30,7 @@ import { surfaceHeight } from "./shared/worldgen";
 type GameStats = { fps: number; drawCalls: number; chunkCount: number };
 type GameBridge = {
   ready: boolean;
+  detailedAvatars: { ready: boolean };
   seed: number;
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -45,6 +47,7 @@ type GameBridge = {
   audio: AudioManager;
   stats: GameStats;
   tycoon: TycoonManager;
+  postfx: PostFX;
   qa?: { simTime: number; frame: number; events: { ev: string; id?: string; t: number }[] };
 };
 declare global {
@@ -101,7 +104,8 @@ async function boot(): Promise<void> {
   const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 256);
   const camera2 = new THREE.PerspectiveCamera(68, (window.innerWidth / 2) / window.innerHeight, 0.1, 256);
   const stats: GameStats = { fps: 0, drawCalls: 0, chunkCount: 0 };
-  const assets = await loadRenderAssets();
+  const assets = await loadRenderAssets(renderer);
+  scene.environment = assets.environment;
   let lanClient: LanClient | null = null;
   const crackTexture = new THREE.TextureLoader().load("/assets/textures/crackover.png");
   crackTexture.magFilter = THREE.NearestFilter;
@@ -122,17 +126,15 @@ async function boot(): Promise<void> {
   // Sunny clearing spawn away from tree trunks
   const spawnY = surfaceHeight(3, 5, seed) + 1;
   const player = new PlayerController({ id: "p1", spawn: [3, spawnY, 5] });
-  const avatar = player.loadAvatar();
+  const avatar = await player.loadAvatar();
   scene.add(avatar.object);
 
   const player2 = new PlayerController({ id: "p2", spawn: [4.5, spawnY, 5] });
-  const avatar2 = player2.loadAvatar();
+  const avatar2 = await player2.loadAvatar();
   scene.add(avatar2.object);
 
 
   const dummyY = surfaceHeight(1.5, 3, seed);
-  const trainingDummy = new TrainingDummy({ x: 1.5, y: dummyY, z: 3 });
-  scene.add(trainingDummy.object);
 
   const tycoonY = surfaceHeight(-3, 7, seed);
   const tycoon = new TycoonManager({ x: -3, y: tycoonY, z: 7 }, scene);
@@ -210,6 +212,8 @@ async function boot(): Promise<void> {
     seed,
     worldgenVersion,
     atlasTexture: assets.atlas,
+    atlasNormal: assets.atlasNormal,
+    atlasOrm: assets.atlasOrm,
     waterNormal: assets.waterNormal,
     onProgress: (loaded, total) => {
       progress.style.width = `${Math.min(100, (loaded / total) * 100)}%`;
@@ -217,7 +221,14 @@ async function boot(): Promise<void> {
     },
   });
 
+  const trainingDummy = new TrainingDummy(
+    { x: 1.5, y: dummyY, z: 3 },
+    { planks: world.getTileMaterial("oak_planks"), bark: world.getTileMaterial("oak_log_side") }
+  );
+  scene.add(trainingDummy.object);
+
   const sky = new SkyCycle(scene, assets);
+  const postfx = new PostFX(renderer, scene, camera, window.innerWidth, window.innerHeight);
   const audio = new AudioManager();
   const qaState = { simTime: 0, frame: 0, events: [] as { ev: string; id?: string; t: number }[] };
   if (qa) {
@@ -337,6 +348,7 @@ async function boot(): Promise<void> {
 
   window.__GIERA__ = {
     ready: false,
+    detailedAvatars: { ready: true },
     seed,
     renderer,
     scene,
@@ -353,6 +365,7 @@ async function boot(): Promise<void> {
     audio,
     stats,
     tycoon,
+    postfx,
     qa: qa ? qaState : undefined,
   };
 
@@ -711,6 +724,7 @@ async function boot(): Promise<void> {
       }
     }
     const activeMining = (isMining || tInput.mine || (p1Pad?.mine ?? false)) && !hud.isInventoryOpen();
+    player.isActing = activeMining;
     if (activeMining) {
       const dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
@@ -746,7 +760,7 @@ async function boot(): Promise<void> {
             crackMaterial.opacity = 0;
             const blockName = def ? Object.keys(BLOCK_ID).find((k) => (BLOCK_ID as Record<string, number>)[k] === bId) ?? "stone" : "stone";
             inventory.addMinedBlock(blockName, 1);
-            itemDrops.spawn(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5, bId);
+            itemDrops.spawn(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5, bId, world.getTileMaterial(def?.tiles.side ?? "stone"));
             if (bId === BLOCK_ID.oak_log) {
               audio.play("dig_wood");
               if (objectives.recordAction("gather_wood", 1)) {
@@ -776,31 +790,19 @@ async function boot(): Promise<void> {
       }
     }
 
+    postfx.noteFrame(delta);
     const width = window.innerWidth;
     const height = window.innerHeight;
     const viewports = getSplitViewports(width, height, splitScreen.isSplitScreen);
-    renderer.clear();
-
-    // P1 Viewport
-    const vp1 = viewports[0];
-    renderer.setViewport(vp1.x, vp1.y, vp1.width, vp1.height);
-    renderer.setScissor(vp1.x, vp1.y, vp1.width, vp1.height);
-    renderer.setScissorTest(true);
-    camera.aspect = vp1.aspect;
+    camera.aspect = viewports[0].aspect;
     camera.updateProjectionMatrix();
-    renderer.render(scene, camera);
-
-    // P2 Viewport
     if (splitScreen.isSplitScreen && viewports.length > 1) {
-      const vp2 = viewports[1];
-      renderer.setViewport(vp2.x, vp2.y, vp2.width, vp2.height);
-      renderer.setScissor(vp2.x, vp2.y, vp2.width, vp2.height);
-      renderer.setScissorTest(true);
-      camera2.aspect = vp2.aspect;
+      camera2.aspect = viewports[1].aspect;
       camera2.updateProjectionMatrix();
-      renderer.render(scene, camera2);
+      postfx.renderSplit(camera, camera2);
+    } else {
+      postfx.renderSolo();
     }
-    renderer.setScissorTest(false);
     if (now - fpsStart >= 1000) {
       stats.fps = Math.round((fpsFrames * 1000) / (now - fpsStart));
       stats.drawCalls = renderer.info.render.calls;
@@ -814,6 +816,7 @@ async function boot(): Promise<void> {
     const width = window.innerWidth;
     const height = window.innerHeight;
     renderer.setSize(width, height, false);
+    postfx.setSize(width, height);
     const viewports = getSplitViewports(width, height, splitScreen.isSplitScreen);
     camera.aspect = viewports[0].aspect;
     camera.updateProjectionMatrix();

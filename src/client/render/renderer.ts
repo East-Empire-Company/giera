@@ -4,12 +4,15 @@ import {
   DirectionalLight,
   FogExp2,
   HemisphereLight,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Mesh,
   MeshBasicMaterial,
   NearestFilter,
   NoColorSpace,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PlaneGeometry,
+  PMREMGenerator,
   RepeatWrapping,
   SRGBColorSpace,
   TextureLoader,
@@ -18,10 +21,19 @@ import {
   type Texture,
   type Scene,
 } from "three";
+import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import { daylightAt } from "./day-cycle";
 
-export type RenderAssets = { atlas: Texture; waterNormal: Texture; clouds: Texture; sideClouds: Texture };
+export type RenderAssets = {
+  atlas: Texture;
+  atlasNormal: Texture;
+  atlasOrm: Texture;
+  waterNormal: Texture;
+  clouds: Texture;
+  sideClouds: Texture;
+  environment: Texture;
+};
 
 function nearestTexture(texture: Texture, colorSpace: typeof SRGBColorSpace | typeof NoColorSpace): Texture {
   texture.colorSpace = colorSpace;
@@ -33,15 +45,32 @@ function nearestTexture(texture: Texture, colorSpace: typeof SRGBColorSpace | ty
   return texture;
 }
 
-export async function loadRenderAssets(): Promise<RenderAssets> {
+function linearTexture(texture: Texture, colorSpace: typeof SRGBColorSpace | typeof NoColorSpace, renderer: WebGLRenderer): Texture {
+  texture.colorSpace = colorSpace;
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+export async function loadRenderAssets(renderer: WebGLRenderer): Promise<RenderAssets> {
   const loader = new TextureLoader();
-  const [atlas, waterNormal, clouds, sideClouds] = await Promise.all([
+  const [atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, hdr] = await Promise.all([
     loader.loadAsync("/assets/textures/atlas.png"),
+    loader.loadAsync("/assets/textures/atlas-normal.png"),
+    loader.loadAsync("/assets/textures/atlas-orm.png"),
     loader.loadAsync("/assets/textures/water-normal.jpg"),
     loader.loadAsync("/assets/sky/clouds.png"),
     loader.loadAsync("/assets/sky/skybox_sideClouds.png"),
+    new HDRLoader().loadAsync("/assets/sky/kloofendal_48d_partly_cloudy_2k.hdr"),
   ]);
-  nearestTexture(atlas, SRGBColorSpace);
+  linearTexture(atlas, SRGBColorSpace, renderer);
+  linearTexture(atlasNormal, NoColorSpace, renderer);
+  linearTexture(atlasOrm, NoColorSpace, renderer);
   nearestTexture(waterNormal, NoColorSpace);
   waterNormal.wrapS = RepeatWrapping;
   waterNormal.wrapT = RepeatWrapping;
@@ -50,7 +79,11 @@ export async function loadRenderAssets(): Promise<RenderAssets> {
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;
   }
-  return { atlas, waterNormal, clouds, sideClouds };
+  const pmrem = new PMREMGenerator(renderer);
+  const environment = pmrem.fromEquirectangular(hdr).texture;
+  pmrem.dispose();
+  hdr.dispose();
+  return { atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, environment };
 }
 
 export function createRenderer(canvas: HTMLCanvasElement): WebGLRenderer {
@@ -59,9 +92,9 @@ export function createRenderer(canvas: HTMLCanvasElement): WebGLRenderer {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.78;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFSoftShadowMap;
+  renderer.shadowMap.type = PCFShadowMap;
   return renderer;
 }
 
@@ -133,7 +166,8 @@ export class SkyCycle {
     this.sun.position.copy(center).addScaledVector(this.sunPosition, 100);
     this.sun.target.position.copy(center);
     this.sun.intensity = 2.2 * state.daylight;
-    this.hemisphere.intensity = 0.22 + 0.33 * state.daylight;
+    this.hemisphere.intensity = 0.15 + 0.35 * state.daylight;
+    this.scene.environmentIntensity = 0.15 + 0.85 * state.daylight;
     this.fog.color.copy(this.currentColor);
     this.cloudLayers[0].mesh.position.x = center.x + Math.sin(timeSeconds * 0.006) * 14;
     this.cloudLayers[0].mesh.position.z = center.z + Math.cos(timeSeconds * 0.004) * 9;

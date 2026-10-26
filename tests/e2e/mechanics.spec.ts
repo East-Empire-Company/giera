@@ -226,40 +226,60 @@ function collectErrors(page: Page): string[] {
 }
 
 test.describe("Giera mechanics (qa deterministic)", () => {
-  test("heroes render their rounded concept outfits rather than cube stand-ins", async ({ page }) => {
+  test("heroes render rigged KayKit models tinted with concept clothing colors", async ({ page }) => {
     test.setTimeout(60_000);
     const errors = collectErrors(page);
     await boot(page);
     await page.waitForFunction(() => {
       const g = (window as unknown as { __GIERA__: any }).__GIERA__;
-      const loaded = (material: any) => !!material?.map?.image && material.map.image.complete !== false;
-      return (
-        g.player.avatar?.id === "ziemek" &&
-        g.player2.avatar?.id === "gniewko" &&
-        loaded(g.player.avatar.head.material[4]) &&
-        loaded(g.player.avatar.torso.material[4]) &&
-        loaded(g.player2.avatar.head.material[4]) &&
-        loaded(g.player2.avatar.torso.material[4])
-      );
-    });
+      const skinned = (avatar: any) => {
+        let found = false;
+        avatar?.object?.traverse((child: any) => {
+          if (child.isSkinnedMesh === true) found = true;
+        });
+        return found;
+      };
+      return skinned(g.player.avatar) && skinned(g.player2.avatar);
+    }, null, { timeout: 30_000 });
     const visuals = await page.evaluate(() => {
       const g = (window as unknown as { __GIERA__: any }).__GIERA__;
-      const details = (avatar: any) => ({
-        roundedHead: avatar?.head?.geometry?.type === "RoundedBoxGeometry",
-        hair: avatar?.hair?.children?.length > 0,
-        faceTexture: Array.isArray(avatar?.head?.material) && !!avatar.head.material[4]?.map,
-        torsoTexture: Array.isArray(avatar?.torso?.material) && !!avatar.torso.material[4]?.map,
-        backpack: avatar?.backpack?.children?.length > 0,
-        texturesReady: avatar?.texturesReady === true,
-        textureErrors: avatar?.textureErrors ?? null,
-      });
-      return { p1: details(g.player.avatar), p2: details(g.player2.avatar) };
+      const partColors = (avatar: any, pattern: RegExp) => {
+        const colors: number[][] = [];
+        avatar.object.traverse((node: any) => {
+          if (node.isSkinnedMesh && pattern.test(node.name)) {
+            colors.push([
+              node.material.color.r,
+              node.material.color.g,
+              node.material.color.b,
+            ]);
+          }
+        });
+        return colors;
+      };
+      return {
+        p1Body: partColors(g.player.avatar, /Body/i),
+        p1Legs: partColors(g.player.avatar, /Leg/i),
+        p2Body: partColors(g.player2.avatar, /Body/i),
+        p2Legs: partColors(g.player2.avatar, /Leg/i),
+      };
     });
-    expect(visuals.p1.roundedHead && visuals.p1.hair && visuals.p1.faceTexture && visuals.p1.torsoTexture && visuals.p1.backpack).toBe(true);
-    expect(visuals.p2.roundedHead && visuals.p2.hair && visuals.p2.faceTexture && visuals.p2.torsoTexture).toBe(true);
-    expect(visuals.p1.texturesReady && visuals.p2.texturesReady).toBe(true);
-    expect(visuals.p1.textureErrors ?? []).toEqual([]);
-    expect(visuals.p2.textureErrors ?? []).toEqual([]);
+    expect(visuals.p1Body.length).toBeGreaterThan(0);
+    expect(visuals.p1Legs.length).toBeGreaterThan(0);
+    expect(visuals.p2Body.length).toBeGreaterThan(0);
+    expect(visuals.p2Legs.length).toBeGreaterThan(0);
+    for (const [r, g, b] of visuals.p1Body) {
+      expect(g).toBeGreaterThan(r + 0.15);
+      expect(b).toBeGreaterThan(r);
+    }
+    for (const [r, g, b] of visuals.p1Legs) {
+      expect(Math.max(r, g, b)).toBeLessThan(0.4);
+    }
+    for (const [r, g, b] of visuals.p2Body) {
+      expect(Math.min(r, g, b)).toBeGreaterThan(0.85);
+    }
+    for (const [r, , b] of visuals.p2Legs) {
+      expect(b).toBeGreaterThan(r);
+    }
     expect(errors).toEqual([]);
   });
   test("boot: qa fixed-delta loop advances sim and frame counters", async ({ page }) => {

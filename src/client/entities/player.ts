@@ -1,18 +1,26 @@
 import * as THREE from "three";
 import { sweepAABB, type AABB } from "../../shared/physics";
-import type { AvatarMotion } from "./avatar";
-import { createStylizedCharacter, StylizedCharacter } from "./stylized-avatar";
+import { Avatar, type AvatarClothing, type AvatarMotion } from "./avatar";
 
 export type PlayerId = "p1" | "p2";
 
 export type ProtagonistProfile = {
   name: string;
   role: string;
+  clothing: AvatarClothing;
 };
 
 export const PROTAGONISTS: Record<PlayerId, ProtagonistProfile> = {
-  p1: { name: "Ziemek", role: "Starszy brat — pixelowa bluza w creepery" },
-  p2: { name: "Gniewko", role: "Młodszy brat — białe polo i granatowe spodnie" },
+  p1: {
+    name: "Ziemek",
+    role: "Starszy brat — pixelowa bluza w creepery",
+    clothing: { torso: "#22998a", arms: "#22998a", legs: "#24272e" },
+  },
+  p2: {
+    name: "Gniewko",
+    role: "Młodszy brat — białe polo i granatowe spodnie",
+    clothing: { torso: "#f6f8fb", arms: "#f6f8fb", legs: "#1d2d48" },
+  },
 };
 
 
@@ -29,7 +37,8 @@ export class PlayerController {
   yaw: number = Math.PI;
   pitch: number = 0;
   onGround: boolean = false;
-  avatar?: StylizedCharacter;
+  isActing: boolean = false;
+  avatar?: Avatar;
 
   constructor(options: { id: PlayerId; spawn: [number, number, number]; yaw?: number }) {
     this.id = options.id;
@@ -40,11 +49,11 @@ export class PlayerController {
     this.yaw = options.yaw ?? Math.PI;
   }
 
-  loadAvatar(): StylizedCharacter {
-    const char = createStylizedCharacter(this.id === "p1" ? "ziemek" : "gniewko");
-    this.avatar = char;
+  async loadAvatar(): Promise<Avatar> {
+    const avatar = await Avatar.load(this.id === "p1" ? "playerOne" : "playerTwo", "#ffffff", this.profile.clothing, 0.85);
+    this.avatar = avatar;
     this.syncAvatar();
-    return char;
+    return avatar;
   }
 
 
@@ -89,7 +98,15 @@ export class PlayerController {
 
   updateMotion(isMoving: boolean, isSprinting: boolean): void {
     if (!this.avatar) return;
-    const motion: AvatarMotion = !isMoving ? "idle" : isSprinting ? "sprint" : "walk";
+    const motion: AvatarMotion = this.isActing
+      ? "mine"
+      : !this.onGround
+      ? "jump"
+      : !isMoving
+      ? "idle"
+      : isSprinting
+      ? "sprint"
+      : "walk";
     this.avatar.setMotion(motion);
   }
 
