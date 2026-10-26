@@ -6,7 +6,7 @@ import { LanClient } from "./client/net/client";
 import { PlayerController } from "./client/entities/player";
 import { NPCManager } from "./client/entities/npc";
 import { fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
-import { executeNpcClientTool } from "../server/npc-bridge";
+import { executeNpcClientTool, NPC_ALLOWED_TOOLS } from "../server/npc-bridge";
 import { ItemDropManager } from "./client/entities/drops";
 import { TrainingDummy } from "./client/entities/dummy";
 import { GameHUD } from "./client/game/hud";
@@ -19,6 +19,7 @@ import { createRenderer, loadRenderAssets, SkyCycle } from "./client/render/rend
 import { getSplitViewports, SplitScreenManager } from "./client/render/split-screen";
 import { WorldRenderer } from "./client/render/worldRenderer";
 import { resolveWorldSeed } from "./client/startup/world-seed";
+import { WORLDGEN_VERSION } from "./shared/worldgen";
 import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "./shared/blocks";
 import { chunkKey } from "./shared/chunk";
 import { raycastVoxels } from "./shared/raycast";
@@ -91,9 +92,9 @@ function showBootError(error: unknown): void {
 
 async function boot(): Promise<void> {
   const saved = await loadGameState();
-  const seed = new URLSearchParams(window.location.search).has("seed")
-    ? chooseSeed()
-    : saved?.seed ?? chooseSeed();
+  const urlHasSeed = new URLSearchParams(window.location.search).has("seed");
+  const seed = urlHasSeed ? chooseSeed() : saved?.seed ?? chooseSeed();
+  const worldgenVersion = urlHasSeed ? WORLDGEN_VERSION : saved?.worldgenVersion ?? 1;
   updateSeedUrl(seed);
   const renderer = createRenderer(canvas);
   const scene = new THREE.Scene();
@@ -207,6 +208,7 @@ async function boot(): Promise<void> {
   const world = new WorldRenderer({
     scene,
     seed,
+    worldgenVersion,
     atlasTexture: assets.atlas,
     waterNormal: assets.waterNormal,
     onProgress: (loaded, total) => {
@@ -309,6 +311,8 @@ async function boot(): Promise<void> {
     args: Record<string, unknown>
   ): string | null => {
     if (!tool) return null;
+    if (!(NPC_ALLOWED_TOOLS[npcId] ?? []).includes(tool)) return null;
+    if (tool === "give_quest" && objectives.currentStep.id === String(args.step_id ?? "")) return null;
     const result = executeNpcClientTool(tool, args, inventory, (stepId) => {
       const idx = OBJECTIVE_STEPS.findIndex((s) => s.id === stepId);
       if (idx >= 0) objectives.setStep(idx);
@@ -382,6 +386,7 @@ async function boot(): Promise<void> {
             if (qa) return fallbackSay(text);
             try {
               const reply = await reasonNpc(nearest.def.id, text, npcHistory.get(nearest.def.id) ?? []);
+              if (reply.walk_to) nearest.walkTo(reply.walk_to.x, reply.walk_to.z);
               const toolNote = applyNpcTool(nearest.def.id, reply.tool, reply.args);
               rememberNpcExchange(nearest.def.id, text, reply.say);
               speakNpc(
@@ -450,6 +455,7 @@ async function boot(): Promise<void> {
   const triggerSave = (): void => {
     void saveGameState({
       seed,
+      worldgenVersion,
       inventory: inventory.toJSON(),
       objectives: {
         stepIndex: 0,
@@ -659,8 +665,8 @@ async function boot(): Promise<void> {
           npcHistory.get(n.def.id) ?? []
         )
           .then((reply) => {
-            const toolNote = applyNpcTool(n.def.id, reply.tool, reply.args);
-            speakNpc(n.def.id, n.def.name, toolNote ? `${reply.say} ${toolNote}` : reply.say);
+            if (reply.walk_to) n.walkTo(reply.walk_to.x, reply.walk_to.z);
+            speakNpc(n.def.id, n.def.name, reply.say);
           })
           .catch(() => {});
       }

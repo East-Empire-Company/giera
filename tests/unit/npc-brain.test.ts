@@ -40,6 +40,17 @@ describe("parseBrainReply", () => {
     const reply = parseBrainReply('{"say": "hej", "tool": "give_block", "args": [1,2]}');
     expect(reply.args).toEqual({});
   });
+
+  it("parses walk_to coordinates", () => {
+    const reply = parseBrainReply('{"say": "Idę do drzew!", "tool": null, "walk_to": {"x": 0, "z": -10}}');
+    expect(reply.walk_to).toEqual({ x: 0, z: -10 });
+  });
+
+  it("ignores malformed walk_to", () => {
+    expect(parseBrainReply('{"say": "hej", "tool": null, "walk_to": {"x": "north", "z": 1}}').walk_to).toBeNull();
+    expect(parseBrainReply('{"say": "hej", "tool": null, "walk_to": [1,2]}').walk_to).toBeNull();
+    expect(parseBrainReply('{"say": "hej", "tool": null}').walk_to).toBeNull();
+  });
 });
 
 describe("fallbackSay", () => {

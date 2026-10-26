@@ -74,4 +74,22 @@ describe("NPC wander", () => {
     expect(calls).toBeGreaterThan(0);
     expect(mina.position.y).toBeCloseTo(40 + mina.position.x * 0.1 + 1, 5);
   });
+
+  it("walks toward a commanded target", () => {
+    const mina = new NPCInstance(NPCS[0], makeRng(424242));
+    const targetDist = (npc: NPCInstance) => Math.hypot(npc.position.x - 0, npc.position.z - -10);
+    const start = targetDist(mina);
+    mina.walkTo(0, -10);
+    for (let i = 0; i < 300; i++) mina.update(1 / 60, flatTerrain);
+    expect(targetDist(mina)).toBeLessThan(start);
+  });
+
+  it("clamps commanded targets to 12 blocks from home", () => {
+    const mina = new NPCInstance(NPCS[0], makeRng(424242));
+    mina.walkTo(1000, 1000);
+    for (let i = 0; i < 60 * 30; i++) mina.update(1 / 60, flatTerrain);
+    const dx = mina.position.x - mina.home.x;
+    const dz = mina.position.z - mina.home.z;
+    expect(Math.hypot(dx, dz)).toBeLessThanOrEqual(12.01);
+  });
 });

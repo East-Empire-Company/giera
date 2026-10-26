@@ -2,6 +2,7 @@ export type NpcBrainReply = {
   say: string;
   tool: string | null;
   args: Record<string, unknown>;
+  walk_to: { x: number; z: number } | null;
 };
 
 export type NpcHistoryEntry = { role: "user" | "assistant"; content: string };
@@ -24,13 +25,20 @@ export function parseBrainReply(raw: string): NpcBrainReply {
           parsed.args && typeof parsed.args === "object" && !Array.isArray(parsed.args)
             ? (parsed.args as Record<string, unknown>)
             : {};
-        return { say, tool, args };
+        let walk_to: { x: number; z: number } | null = null;
+        if (parsed.walk_to && typeof parsed.walk_to === "object" && !Array.isArray(parsed.walk_to)) {
+          const w = parsed.walk_to as Record<string, unknown>;
+          if (Number.isFinite(w.x) && Number.isFinite(w.z)) {
+            walk_to = { x: Number(w.x), z: Number(w.z) };
+          }
+        }
+        return { say, tool, args, walk_to };
       }
     } catch {
       // malformed JSON: fall through to raw text
     }
   }
-  return { say: text.slice(0, 160) || "...", tool: null, args: {} };
+  return { say: text.slice(0, 160) || "...", tool: null, args: {}, walk_to: null };
 }
 
 export async function reasonNpc(

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { CHUNK_SIZE, CHUNK_VOLUME, chunkKey, getBlockIndex, type ChunkPosition } from "../../shared/chunk";
 import { meshChunk, type ChunkMesh } from "../../shared/mesher";
-import { generateBlock, surfaceHeight } from "../../shared/worldgen";
+import { generateBlock, surfaceHeight, WORLDGEN_VERSION } from "../../shared/worldgen";
 import type { ChunkBuildRequest, ChunkBuildResponse } from "../../shared/chunk-worker-protocol";
 import atlasManifest from "../../shared/atlas-manifest.json";
 import { placeGroundDecor, scatterGroundDecor } from "./ground-decor";
@@ -160,6 +160,7 @@ export class WorldRenderer {
   private readonly materials: THREE.Material[];
   private readonly waterNormal: THREE.Texture;
   private readonly seed: number;
+  private readonly worldgenVersion: number;
   private readonly scene: THREE.Scene;
   private readonly onProgress?: (loaded: number, total: number) => void;
   private completed = 0;
@@ -169,6 +170,7 @@ export class WorldRenderer {
   constructor(options: {
     scene: THREE.Scene;
     seed: number;
+    worldgenVersion?: number;
     atlasTexture: THREE.Texture;
     waterNormal: THREE.Texture;
     workerCount?: number;
@@ -178,6 +180,7 @@ export class WorldRenderer {
     this.decor.name = "ground-decor";
     this.scene.add(this.decor);
     this.seed = options.seed;
+    this.worldgenVersion = options.worldgenVersion ?? WORLDGEN_VERSION;
     this.onProgress = options.onProgress;
     this.materials = createTileMaterials(options.atlasTexture, options.waterNormal);
     this.waterNormal = options.waterNormal;
@@ -220,7 +223,7 @@ export class WorldRenderer {
     await Promise.all(required.map(async (position) => {
       const key = chunkKey(position.cx, position.cy, position.cz);
       try {
-        const result = await this.workers.generate({ ...position, seed: this.seed });
+        const result = await this.workers.generate({ ...position, seed: this.seed, worldgenVersion: this.worldgenVersion });
         if ("error" in result) throw new Error(result.error);
         const chunk: ChunkView = { data: result.data };
         if (result.mesh.indices.length > 0) {
@@ -271,7 +274,7 @@ export class WorldRenderer {
     const cy = Math.floor(y / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
-    if (!chunk) return generateBlock(x, y, z, this.seed);
+    if (!chunk) return generateBlock(x, y, z, this.seed, this.worldgenVersion);
     const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const localY = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
@@ -289,7 +292,7 @@ export class WorldRenderer {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         for (let ly = 0; ly < CHUNK_SIZE; ly++) {
           for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-            data[getBlockIndex(lx, ly, lz)] = generateBlock(cx * CHUNK_SIZE + lx, cy * CHUNK_SIZE + ly, cz * CHUNK_SIZE + lz, this.seed);
+            data[getBlockIndex(lx, ly, lz)] = generateBlock(cx * CHUNK_SIZE + lx, cy * CHUNK_SIZE + ly, cz * CHUNK_SIZE + lz, this.seed, this.worldgenVersion);
           }
         }
       }

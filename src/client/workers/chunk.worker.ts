@@ -6,13 +6,13 @@ import atlasManifest from "../../shared/atlas-manifest.json";
 self.onmessage = (event: MessageEvent<ChunkBuildRequest>) => {
   const request = event.data;
   try {
-    const data = generateChunk(request.cx, request.cy, request.cz, request.seed);
+    const data = generateChunk(request.cx, request.cy, request.cz, request.seed, request.worldgenVersion);
     const mesh = meshChunk({
       data,
       cx: request.cx,
       cy: request.cy,
       cz: request.cz,
-      getBlock: (x, y, z) => generateBlock(x, y, z, request.seed),
+      getBlock: (x, y, z) => generateBlock(x, y, z, request.seed, request.worldgenVersion),
       atlas: atlasManifest.tiles,
     });
     const response: ChunkBuildResponse = { ...request, data, mesh };

@@ -2,6 +2,7 @@ import type { SerializedInventory } from "../game/inventory";
 
 export type SavedGameState = {
   seed: number;
+  worldgenVersion?: number;
   inventory: SerializedInventory;
   objectives: {
     stepIndex: number;

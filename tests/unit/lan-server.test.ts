@@ -3,14 +3,14 @@ import { RoomState } from "../../server/room";
 
 describe("RoomState", () => {
   it("initializes room with seed and empty edits", () => {
-    const room = new RoomState("K7QX", 9999);
+    const room = new RoomState("K7QX", 9999, 2);
     expect(room.code).toBe("K7QX");
     expect(room.seed).toBe(9999);
     expect(room.getPlayerCount()).toBe(0);
   });
 
   it("adds and removes players cleanly", () => {
-    const room = new RoomState("K7QX", 9999);
+    const room = new RoomState("K7QX", 9999, 2);
     const p1 = room.addPlayer("socket-1", "Ziemek");
     expect(room.getPlayerCount()).toBe(1);
     expect(p1.name).toBe("Ziemek");
@@ -24,7 +24,7 @@ describe("RoomState", () => {
   });
 
   it("stores and applies block edits", () => {
-    const room = new RoomState("K7QX", 9999);
+    const room = new RoomState("K7QX", 9999, 2);
     room.setBlock(10, 45, 12, 9); // planks
     expect(room.getBlock(10, 45, 12)).toBe(9);
 
@@ -33,7 +33,7 @@ describe("RoomState", () => {
   });
 
   it("serializes to world JSON snapshot", () => {
-    const room = new RoomState("K7QX", 9999);
+    const room = new RoomState("K7QX", 9999, 2);
     room.setBlock(5, 50, 5, 3);
     const json = room.toJSON();
     expect(json.seed).toBe(9999);
@@ -41,8 +41,15 @@ describe("RoomState", () => {
   });
 
   it("generates and encodes chunk RLE on demand", () => {
-    const room = new RoomState("K7QX", 9999);
+    const room = new RoomState("K7QX", 9999, 2);
     const rle = room.getChunkRLE(0, 2, 0);
     expect(rle.length).toBeGreaterThan(0);
+  });
+
+  it("round-trips worldgen version and defaults legacy snapshots to v1", () => {
+    const room = new RoomState("K7QX", 9999, 2);
+    expect(room.toJSON().worldgenVersion).toBe(2);
+    const legacy = RoomState.fromJSON("K7QX", { seed: 9999, edits: {}, savedAt: "2026-01-01T00:00:00.000Z" });
+    expect(legacy.worldgenVersion).toBe(1);
   });
 });

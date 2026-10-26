@@ -70,16 +70,26 @@ const CROWN_ROUND = [2, 2, 1];
 const CROWN_TALL = [1, 1, 1, 1];
 const CROWN_WIDE = [2, 2, 2];
 
-function treeBlock(x: number, y: number, z: number, seed: number): number {
+export const WORLDGEN_VERSION = 2;
+
+function treeBlock(x: number, y: number, z: number, seed: number, version: number): number {
   for (let centerZ = z - 2; centerZ <= z + 2; centerZ++) {
     for (let centerX = x - 2; centerX <= x + 2; centerX++) {
       if (hash2(centerX, centerZ, seed ^ 0x4f1bbcdc) < 0.965) continue;
       const base = surfaceHeight(centerX, centerZ, seed);
       if (base <= WATER_LEVEL + 1) continue;
-      const shape = hash2(centerX, centerZ, seed ^ 0x2545f491);
-      const height = treeHeight(centerX, centerZ, seed) + (shape < 0.22 ? 2 : shape > 0.82 ? -1 : 0);
       const dx = Math.abs(x - centerX);
       const dz = Math.abs(z - centerZ);
+      if (version < 2) {
+        const height = treeHeight(centerX, centerZ, seed);
+        if (dx === 0 && dz === 0 && y > base && y <= base + height) return BLOCK_ID.oak_log;
+        const crown = y - (base + height - 2);
+        const radius = crown <= 1 ? 2 : crown === 2 ? 1 : 0;
+        if (crown >= 0 && crown <= 2 && Math.max(dx, dz) <= radius && !(crown === 0 && dx === 0 && dz === 0)) return BLOCK_ID.oak_leaves;
+        continue;
+      }
+      const shape = hash2(centerX, centerZ, seed ^ 0x2545f491);
+      const height = treeHeight(centerX, centerZ, seed) + (shape < 0.22 ? 2 : shape > 0.82 ? -1 : 0);
       if (dx === 0 && dz === 0 && y > base && y <= base + height) return BLOCK_ID.oak_log;
       const crown = y - (base + height - 2);
       const profile = shape < 0.22 ? CROWN_TALL : shape > 0.82 ? CROWN_WIDE : CROWN_ROUND;
@@ -90,7 +100,7 @@ function treeBlock(x: number, y: number, z: number, seed: number): number {
   return BLOCK_ID.air;
 }
 
-export function generateBlock(x: number, y: number, z: number, seed: number): number {
+export function generateBlock(x: number, y: number, z: number, seed: number, version: number = WORLDGEN_VERSION): number {
   if (y < 0 || y >= WORLD_HEIGHT) return BLOCK_ID.air;
   if (y === 0) return BLOCK_ID.bedrock;
   const height = surfaceHeight(x, z, seed);
@@ -108,13 +118,13 @@ export function generateBlock(x: number, y: number, z: number, seed: number): nu
     block = BLOCK_ID.water;
   }
   if (y >= height + 1 && y <= height + 9) {
-    const placed = treeBlock(x, y, z, seed);
+    const placed = treeBlock(x, y, z, seed, version);
     if (placed !== BLOCK_ID.air) block = placed;
   }
   return block;
 }
 
-export function generateChunk(cx: number, cy: number, cz: number, seed: number): Uint8Array {
+export function generateChunk(cx: number, cy: number, cz: number, seed: number, version: number = WORLDGEN_VERSION): Uint8Array {
   if (!Number.isInteger(cx) || !Number.isInteger(cy) || !Number.isInteger(cz) || !Number.isInteger(seed)) throw new RangeError("Chunk coordinates and seed must be integers");
   const data = new Uint8Array(CHUNK_VOLUME);
   const originX = cx * CHUNK_SIZE;
@@ -123,7 +133,7 @@ export function generateChunk(cx: number, cy: number, cz: number, seed: number):
   for (let y = 0; y < CHUNK_SIZE; y++) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
-        data[getBlockIndex(x, y, z)] = generateBlock(originX + x, originY + y, originZ + z, seed);
+        data[getBlockIndex(x, y, z)] = generateBlock(originX + x, originY + y, originZ + z, seed, version);
       }
     }
   }

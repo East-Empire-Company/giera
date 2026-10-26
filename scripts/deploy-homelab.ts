@@ -128,6 +128,17 @@ const sha = (() => {
   return res.status === 0 ? res.stdout.trim() : "dev";
 })();
 
+const dirty = spawnSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf-8" });
+if (dirty.status !== 0 || dirty.stdout.trim().length > 0) {
+  console.error(
+    "\nDEPLOY REFUSED — working tree has uncommitted changes.\n" +
+      "The image is tagged with the HEAD sha; a dirty tree would push different\n" +
+      "content under an already-cached tag and k3s nodes would keep serving the\n" +
+      "stale image (IfNotPresent). Commit or stash first, then deploy.\n"
+  );
+  process.exit(1);
+}
+
 let failed = false;
 const must = (ok: boolean): boolean => {
   if (!ok) failed = true;

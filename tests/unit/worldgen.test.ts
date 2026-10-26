@@ -41,4 +41,22 @@ describe("world generation", () => {
     }
     expect(shapes.size).toBeGreaterThanOrEqual(2);
   });
+
+  it("keeps the legacy v1 tree layout distinct from v2 for the same seed", () => {
+    let differs = false;
+    for (let z = 0; z < 96 && !differs; z++) {
+      for (let x = 0; x < 96 && !differs; x++) {
+        const surface = surfaceHeight(x, z, 424242);
+        for (let y = surface + 1; y <= surface + 9 && !differs; y++) {
+          if (generateBlock(x, y, z, 424242, 1) !== generateBlock(x, y, z, 424242, 2)) differs = true;
+        }
+      }
+    }
+    expect(differs).toBe(true);
+  });
+
+  it("is deterministic per version", () => {
+    expect(generateChunk(0, 1, 0, 17, 1)).toEqual(generateChunk(0, 1, 0, 17, 1));
+    expect(generateChunk(0, 1, 0, 17, 2)).toEqual(generateChunk(0, 1, 0, 17, 2));
+  });
 });

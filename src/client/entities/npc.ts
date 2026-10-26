@@ -200,6 +200,18 @@ export class NPCInstance {
     this.updateWander(delta, terrainYAt);
   }
 
+  walkTo(x: number, z: number): void {
+    const dx = x - this.home.x;
+    const dz = z - this.home.z;
+    const dist = Math.hypot(dx, dz);
+    const maxDist = 12;
+    const clampedX = dist > maxDist ? this.home.x + (dx / dist) * maxDist : x;
+    const clampedZ = dist > maxDist ? this.home.z + (dz / dist) * maxDist : z;
+    this.wanderTarget.set(clampedX, this.position.y, clampedZ);
+    this.wanderState = "walk";
+    this.wanderWait = 4 + this.rng() * 8;
+  }
+
   private updateWander(delta: number, terrainYAt?: (x: number, z: number) => number): void {
     if (this.wanderState === "idle") {
       this.wanderWait -= delta;

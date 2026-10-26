@@ -8,6 +8,8 @@ import {
   type ServerMessage,
 } from "../src/shared/lan-protocol";
 import { RoomState, type WorldSnapshot } from "./room";
+import { WORLDGEN_VERSION } from "../src/shared/worldgen";
+import { NPC_ALLOWED_TOOLS as NPC_TOOLS } from "./npc-bridge";
 import { handleNemotronProxyRequest, MAX_OUTPUT_TOKENS } from "./nemotron-proxy";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -31,7 +33,7 @@ function getOrCreateRoom(code: string): RoomState {
       }
     }
     if (!room) {
-      room = new RoomState(normalized, Math.floor(Math.random() * 1_000_000) + 1);
+      room = new RoomState(normalized, Math.floor(Math.random() * 1_000_000) + 1, WORLDGEN_VERSION);
     }
     rooms.set(normalized, room);
   }
@@ -71,11 +73,31 @@ type WsData = {
   hadInput: boolean;
 };
 
-const NPC_TOOLS: Record<string, string[]> = {
-  mina: ["give_block", "give_quest", "share_map_hint"],
-  staszek: ["give_block", "share_map_hint"],
-  papuga: ["give_block"],
-};
+for (const npcId of Object.keys(NPC_TOOLS)) {
+  if (!existsSync(resolve("agents", npcId, "prompt.md"))) {
+    console.warn(`[npc] missing persona agents/${npcId}/prompt.md — generic fallback in use`);
+  }
+}
+
+const NPC_RATE_LIMIT = 10;
+const NPC_RATE_WINDOW_MS = 60_000;
+const npcRateBuckets = new Map<string, { count: number; windowStart: number }>();
+
+function npcRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const bucket = npcRateBuckets.get(ip);
+  if (!bucket || now - bucket.windowStart >= NPC_RATE_WINDOW_MS) {
+    if (npcRateBuckets.size > 10_000) {
+      for (const [key, b] of npcRateBuckets) {
+        if (now - b.windowStart >= NPC_RATE_WINDOW_MS) npcRateBuckets.delete(key);
+      }
+    }
+    npcRateBuckets.set(ip, { count: 1, windowStart: now });
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > NPC_RATE_LIMIT;
+}
 
 function buildNpcSystemPrompt(npcId: string): string {
   const personaPath = resolve("agents", npcId, "prompt.md");
@@ -88,11 +110,12 @@ function buildNpcSystemPrompt(npcId: string): string {
     persona,
     "",
     "Odpowiadasz WYŁĄCZNIE jedną linią poprawnego JSON, bez markdownu, bez komentarzy:",
-    '{"say": "<krótka wypowiedź po polsku, maks 12 słów>", "tool": null}',
+    '{"say": "<krótka wypowiedź po polsku, maks 12 słów>", "tool": null, "walk_to": null}',
     toolList
       ? `Dostępne narzędzia (pole "tool"): ${toolList}. Przy narzędziu dodaj "args".`
       : 'Zawsze używaj "tool": null.',
     'Formaty args: give_block {"block_type": "planks"|"cobblestone"|"glass"|"iron_block", "count": 1-16}; give_quest {"step_id": "gather_wood"|"craft_planks"|"craft_sticks"|"find_stone"|"craft_tool"|"build_house"}; share_map_hint {"topic": "drewno"|"kamień"|"rzemiosło"|"domek"|"jaskinia"}.',
+    'Pole "walk_to": {"x": liczba, "z": liczba} — idź tam, gdy warto pokazać coś dzieciom (np. drzewa przy zbieraniu drewna). Punkty orientacyjne: polana startowa (0,0), drzewa na północ (0,-10), staw na wschodzie (12,0), skaliste zbocze (-10,8), manekin treningowy (2,3), maszyna tycoona (-3,7).',
   ].join("\n");
 }
 
@@ -100,16 +123,25 @@ async function handleNpcReason(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  if (npcRateLimited(ip)) {
+    return new Response(JSON.stringify({ error: "Too many requests" }), {
+      status: 429,
+      headers: { "content-type": "application/json" },
+    });
+  }
   let body: { npcId?: unknown; message?: unknown; history?: unknown };
   try {
-    body = (await req.json()) as typeof body;
+    const parsed: unknown = await req.json();
+    if (typeof parsed !== "object" || parsed === null) throw new Error("not an object");
+    body = parsed as typeof body;
   } catch {
     return new Response(JSON.stringify({ error: "Invalid JSON" }), {
       status: 400,
       headers: { "content-type": "application/json" },
     });
   }
-  const npcId = typeof body.npcId === "string" && NPC_TOOLS[body.npcId] ? body.npcId : "mina";
+  const npcId = typeof body.npcId === "string" && Object.hasOwn(NPC_TOOLS, body.npcId) ? body.npcId : "mina";
   const message = typeof body.message === "string" ? body.message.slice(0, 300) : "";
   if (!message.trim()) {
     return new Response(JSON.stringify({ error: "Empty message" }), {

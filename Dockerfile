@@ -11,5 +11,6 @@ ENV PORT=8080 GIERA_DATA_DIR=/data
 COPY --from=build /app/dist ./dist
 COPY server ./server
 COPY src/shared ./src/shared
+COPY agents ./agents
 EXPOSE 8080
 CMD ["bun", "server/index.ts"]

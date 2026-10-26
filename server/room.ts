@@ -4,6 +4,7 @@ import { CHUNK_SIZE, encodeRLE, getBlockIndex } from "../src/shared/chunk";
 
 export type WorldSnapshot = {
   seed: number;
+  worldgenVersion?: number;
   edits: Record<string, number>;
   savedAt: string;
 };
@@ -11,13 +12,15 @@ export type WorldSnapshot = {
 export class RoomState {
   readonly code: string;
   readonly seed: number;
+  readonly worldgenVersion: number;
   private readonly players = new Map<string, PlayerState>();
   private readonly edits = new Map<string, number>();
   private readonly chunks = new Map<string, Uint8Array>();
 
-  constructor(code: string, seed: number) {
+  constructor(code: string, seed: number, worldgenVersion: number) {
     this.code = code;
     this.seed = seed;
+    this.worldgenVersion = worldgenVersion;
   }
 
   getPlayerCount(): number {
@@ -85,7 +88,7 @@ export class RoomState {
     const key = `${cx},${cy},${cz}`;
     let data = this.chunks.get(key);
     if (!data) {
-      data = generateChunk(cx, cy, cz, this.seed);
+      data = generateChunk(cx, cy, cz, this.seed, this.worldgenVersion);
       for (const [editKey, id] of this.edits) {
         const [ex, ey, ez] = editKey.split(",").map(Number);
         const ecx = Math.floor(ex / CHUNK_SIZE);
@@ -108,13 +111,14 @@ export class RoomState {
     for (const [k, v] of this.edits) edits[k] = v;
     return {
       seed: this.seed,
+      worldgenVersion: this.worldgenVersion,
       edits,
       savedAt: new Date().toISOString(),
     };
   }
 
   static fromJSON(code: string, json: WorldSnapshot): RoomState {
-    const room = new RoomState(code, json.seed);
+    const room = new RoomState(code, json.seed, json.worldgenVersion ?? 1);
     for (const [k, v] of Object.entries(json.edits)) {
       room.edits.set(k, v);
     }
