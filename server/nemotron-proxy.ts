@@ -4,15 +4,17 @@ export const MAX_CONCURRENT_CONVERSATIONS = 2;
 let activeConversations = 0;
 
 export function validateProxyAuth(authHeader: string | null, expectedSecret: string): boolean {
+  if (expectedSecret.length === 0) return true;
   if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
   const token = authHeader.slice(7).trim();
-  return token === expectedSecret && expectedSecret.length > 0;
+  return token === expectedSecret;
 }
 
 export type ProxyOptions = {
   expectedSecret?: string;
   nexgateUrl?: string;
   nexgateKey?: string;
+  model?: string;
   fetchFn?: typeof fetch;
 };
 
@@ -47,15 +49,22 @@ export async function handleNemotronProxyRequest(
     // Enforce model and token bounds
     const payload = {
       ...rawBody,
-      model: "nemotron-bolt",
+      model: options?.model ?? process.env.GIERA_NPC_MODEL ?? "nemotron-bolt",
       max_tokens: Math.min(
         MAX_OUTPUT_TOKENS,
         typeof rawBody.max_tokens === "number" ? rawBody.max_tokens : MAX_OUTPUT_TOKENS
       ),
     };
 
-    const nexgateUrl = options?.nexgateUrl ?? "http://127.0.0.1:4000/v1/chat/completions";
-    const nexgateKey = options?.nexgateKey ?? process.env.NEXGATE_NEMOTRON_BOLT_API_KEY ?? "";
+    const nexgateUrl =
+      options?.nexgateUrl ??
+      process.env.NEXGATE_URL ??
+      "http://127.0.0.1:4000/v1/chat/completions";
+    const nexgateKey =
+      options?.nexgateKey ??
+      process.env.NEXGATE_NEMOTRON_BOLT_API_KEY ??
+      process.env.NEXGATE_OMP_API_KEY ??
+      "";
     const fetcher = options?.fetchFn ?? fetch;
 
     const headers: Record<string, string> = {

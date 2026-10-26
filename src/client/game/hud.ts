@@ -47,6 +47,11 @@ export class GameHUD {
   private readonly controlsModal: HTMLElement;
   private readonly npcPrompt: HTMLElement;
   private readonly npcModal: HTMLElement;
+  private readonly speechLayer: HTMLElement;
+  private readonly speechBubbles = new Map<
+    string,
+    { el: HTMLElement; nameEl: HTMLElement; textEl: HTMLElement; until: number }
+  >();
   private npcDialogOpen = false;
   private lanModalOpen = false;
   private controlsModalOpen = false;
@@ -97,6 +102,11 @@ export class GameHUD {
     this.tycoonTier.className = "hud-tycoon-tier";
     this.tycoonChip.append(starIcon, this.tycoonStars, this.tycoonTier);
     this.container.appendChild(this.tycoonChip);
+
+    // NPC speech bubbles (world-anchored)
+    this.speechLayer = document.createElement("div");
+    this.speechLayer.className = "hud-npc-speech-layer";
+    this.container.appendChild(this.speechLayer);
 
     // Hotbar
     this.hotbar = document.createElement("div");
@@ -533,5 +543,44 @@ export class GameHUD {
 
       this.recipeList.appendChild(recipeEl);
     });
+  }
+
+  showNpcSpeech(npcId: string, name: string, text: string, durationSec = 5): void {
+    let bubble = this.speechBubbles.get(npcId);
+    if (!bubble) {
+      const el = document.createElement("div");
+      el.className = "hud-npc-speech";
+      const nameEl = document.createElement("span");
+      nameEl.className = "hud-npc-speech-name";
+      const textEl = document.createElement("span");
+      textEl.className = "hud-npc-speech-text";
+      el.append(nameEl, textEl);
+      this.speechLayer.appendChild(el);
+      bubble = { el, nameEl, textEl, until: 0 };
+      this.speechBubbles.set(npcId, bubble);
+    }
+    bubble.nameEl.textContent = `${name}:`;
+    bubble.textEl.textContent = text;
+    bubble.until = performance.now() / 1000 + durationSec;
+  }
+
+  updateNpcSpeech(
+    project: (npcId: string) => { x: number; y: number; visible: boolean } | null
+  ): void {
+    const now = performance.now() / 1000;
+    for (const [npcId, bubble] of this.speechBubbles) {
+      if (now >= bubble.until) {
+        bubble.el.classList.remove("visible");
+        continue;
+      }
+      const pos = project(npcId);
+      if (!pos || !pos.visible) {
+        bubble.el.classList.remove("visible");
+        continue;
+      }
+      bubble.el.style.left = `${pos.x}px`;
+      bubble.el.style.top = `${pos.y}px`;
+      bubble.el.classList.add("visible");
+    }
   }
 }

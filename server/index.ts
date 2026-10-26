@@ -8,6 +8,7 @@ import {
   type ServerMessage,
 } from "../src/shared/lan-protocol";
 import { RoomState, type WorldSnapshot } from "./room";
+import { handleNemotronProxyRequest, MAX_OUTPUT_TOKENS } from "./nemotron-proxy";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_DIR = resolve(process.env.GIERA_DATA_DIR ?? "server/data");
@@ -70,6 +71,86 @@ type WsData = {
   hadInput: boolean;
 };
 
+const NPC_TOOLS: Record<string, string[]> = {
+  mina: ["give_block", "give_quest", "share_map_hint"],
+  staszek: ["give_block", "share_map_hint"],
+  papuga: ["give_block"],
+};
+
+function buildNpcSystemPrompt(npcId: string): string {
+  const personaPath = resolve("agents", npcId, "prompt.md");
+  const persona = existsSync(personaPath)
+    ? readFileSync(personaPath, "utf8").trim()
+    : "Jesteś przyjaznym NPC w grze dla dzieci.";
+  const tools = NPC_TOOLS[npcId] ?? [];
+  const toolList = tools.map((t) => `"${t}"`).join(" | ");
+  return [
+    persona,
+    "",
+    "Odpowiadasz WYŁĄCZNIE jedną linią poprawnego JSON, bez markdownu, bez komentarzy:",
+    '{"say": "<krótka wypowiedź po polsku, maks 12 słów>", "tool": null}',
+    toolList
+      ? `Dostępne narzędzia (pole "tool"): ${toolList}. Przy narzędziu dodaj "args".`
+      : 'Zawsze używaj "tool": null.',
+    'Formaty args: give_block {"block_type": "planks"|"cobblestone"|"glass"|"iron_block", "count": 1-16}; give_quest {"step_id": "gather_wood"|"craft_planks"|"craft_sticks"|"find_stone"|"craft_tool"|"build_house"}; share_map_hint {"topic": "drewno"|"kamień"|"rzemiosło"|"domek"|"jaskinia"}.',
+  ].join("\n");
+}
+
+async function handleNpcReason(req: Request): Promise<Response> {
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
+  }
+  let body: { npcId?: unknown; message?: unknown; history?: unknown };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  const npcId = typeof body.npcId === "string" && NPC_TOOLS[body.npcId] ? body.npcId : "mina";
+  const message = typeof body.message === "string" ? body.message.slice(0, 300) : "";
+  if (!message.trim()) {
+    return new Response(JSON.stringify({ error: "Empty message" }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  const history = Array.isArray(body.history)
+    ? (body.history as { role?: unknown; content?: unknown }[])
+        .filter(
+          (m) =>
+            m &&
+            (m.role === "assistant" || m.role === "user") &&
+            typeof m.content === "string" &&
+            m.content.length > 0
+        )
+        .slice(-6)
+        .map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: (m.content as string).slice(0, 300),
+        }))
+    : [];
+  const payload = {
+    messages: [
+      { role: "system", content: buildNpcSystemPrompt(npcId) },
+      ...history,
+      { role: "user", content: message },
+    ],
+    max_tokens: MAX_OUTPUT_TOKENS,
+  };
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const auth = req.headers.get("authorization");
+  if (auth) headers.authorization = auth;
+  const proxied = new Request(req.url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return handleNemotronProxyRequest(proxied);
+}
+
 const server = Bun.serve<WsData>({
   port: PORT,
   fetch(req, server) {
@@ -87,6 +168,10 @@ const server = Bun.serve<WsData>({
       });
       if (upgraded) return undefined;
       return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
+    if (url.pathname === "/npc/reason") {
+      return handleNpcReason(req);
     }
 
     // Static assets from dist

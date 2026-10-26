@@ -88,4 +88,28 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(document.querySelector(".hud-tycoon-stars")?.textContent).toBe("7");
     expect(document.querySelector(".hud-tycoon-tier")?.textContent).toBe("Poziom 2");
   });
+
+  it("shows and positions world-anchored NPC speech bubbles", () => {
+    const inventory = new GameInventory();
+    const objectives = new ObjectiveManager();
+    const hud = new GameHUD({ inventory, objectives });
+
+    hud.showNpcSpeech("mina", "Mina", "Zbierz drewno!");
+    const bubble = document.querySelector(".hud-npc-speech")!;
+    expect(bubble).not.toBeNull();
+    expect(bubble.querySelector(".hud-npc-speech-name")?.textContent).toBe("Mina:");
+    expect(bubble.querySelector(".hud-npc-speech-text")?.textContent).toBe("Zbierz drewno!");
+
+    hud.updateNpcSpeech((id) => (id === "mina" ? { x: 120, y: 80, visible: true } : null));
+    expect(bubble.classList.contains("visible")).toBe(true);
+    expect((bubble as HTMLElement).style.left).toBe("120px");
+    expect((bubble as HTMLElement).style.top).toBe("80px");
+
+    hud.updateNpcSpeech(() => null);
+    expect(bubble.classList.contains("visible")).toBe(false);
+
+    hud.showNpcSpeech("mina", "Mina", "Nowa wiadomość");
+    expect(bubble.querySelector(".hud-npc-speech-text")?.textContent).toBe("Nowa wiadomość");
+    expect(document.querySelectorAll(".hud-npc-speech").length).toBe(1);
+  });
 });

@@ -1,6 +1,16 @@
 import * as THREE from "three";
 import { Avatar } from "./avatar";
 import { applyNpcDetails } from "./hero-details";
+import { makeRng } from "../../shared/rng";
+
+function hashSeed(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
 
 export type NPCDef = {
   id: string;
@@ -136,13 +146,20 @@ export function createParrotObject(): THREE.Group {
 
 export class NPCInstance {
   readonly def: NPCDef;
-  readonly position: THREE.Vector3;
+  readonly position = new THREE.Vector3();
+  readonly home = new THREE.Vector3();
   private animTime = 0;
+  private rng: () => number;
+  private wanderState: "idle" | "walk" = "idle";
+  private wanderWait = 3;
+  private wanderTarget = new THREE.Vector3();
   avatar?: Avatar;
   customObject?: THREE.Object3D;
-  constructor(def: NPCDef) {
+  constructor(def: NPCDef, rng?: () => number) {
     this.def = def;
     this.position = new THREE.Vector3(...def.position);
+    this.home.copy(this.position);
+    this.rng = rng ?? makeRng(hashSeed(def.id));
   }
 
   get name(): string {
@@ -169,7 +186,7 @@ export class NPCInstance {
     return avatar;
   }
 
-  update(delta: number): void {
+  update(delta: number, terrainYAt?: (x: number, z: number) => number): void {
     this.avatar?.update(delta);
     this.animTime += delta;
     if (this.customObject) {
@@ -179,14 +196,56 @@ export class NPCInstance {
         bird.position.y = 1.0 + Math.sin(this.animTime * 0.006) * 0.02;
       }
     }
+    if (this.def.id === "papuga") return;
+    this.updateWander(delta, terrainYAt);
+  }
+
+  private updateWander(delta: number, terrainYAt?: (x: number, z: number) => number): void {
+    if (this.wanderState === "idle") {
+      this.wanderWait -= delta;
+      if (this.wanderWait > 0) return;
+      const angle = this.rng() * Math.PI * 2;
+      const dist = 1.5 + this.rng() * 4.5;
+      this.wanderTarget.set(
+        this.home.x + Math.cos(angle) * dist,
+        this.position.y,
+        this.home.z + Math.sin(angle) * dist
+      );
+      this.wanderState = "walk";
+      return;
+    }
+    const dx = this.wanderTarget.x - this.position.x;
+    const dz = this.wanderTarget.z - this.position.z;
+    const distSq = dx * dx + dz * dz;
+    if (distSq < 0.02) {
+      this.wanderState = "idle";
+      this.wanderWait = 4 + this.rng() * 8;
+      return;
+    }
+    const dist = Math.sqrt(distSq);
+    const step = Math.min(1.2 * delta, dist);
+    this.position.x += (dx / dist) * step;
+    this.position.z += (dz / dist) * step;
+    if (terrainYAt) this.position.y = terrainYAt(this.position.x, this.position.z) + 1;
+    const entity = this.avatar?.object ?? this.customObject;
+    if (entity) {
+      entity.position.set(this.position.x, this.position.y, this.position.z);
+      entity.rotation.y = Math.atan2(dx, dz);
+    }
   }
 }
 
 export class NPCManager {
   readonly npcs: NPCInstance[];
 
-  constructor() {
-    this.npcs = NPCS.map((def) => new NPCInstance(def));
+  constructor(rngFactory?: (seed: number) => () => number) {
+    this.npcs = NPCS.map((def) =>
+      rngFactory ? new NPCInstance(def, rngFactory(hashSeed(def.id))) : new NPCInstance(def)
+    );
+  }
+
+  updateAll(delta: number, terrainYAt?: (x: number, z: number) => number): void {
+    for (const npc of this.npcs) npc.update(delta, terrainYAt);
   }
 
   getNearestNPC(x: number, y: number, z: number, maxDist = 3.0): NPCInstance | null {

@@ -5,11 +5,13 @@ import { MicController } from "./client/audio/mic";
 import { LanClient } from "./client/net/client";
 import { PlayerController } from "./client/entities/player";
 import { NPCManager } from "./client/entities/npc";
+import { fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
+import { executeNpcClientTool } from "../server/npc-bridge";
 import { ItemDropManager } from "./client/entities/drops";
 import { TrainingDummy } from "./client/entities/dummy";
 import { GameHUD } from "./client/game/hud";
 import { GameInventory } from "./client/game/inventory";
-import { ObjectiveManager } from "./client/game/objectives";
+import { OBJECTIVE_STEPS, ObjectiveManager } from "./client/game/objectives";
 import { TycoonManager } from "./client/game/tycoon";
 import { TouchController } from "./client/input/touch";
 import { loadGameState, saveGameState } from "./client/persist/db";
@@ -293,6 +295,42 @@ async function boot(): Promise<void> {
     },
   });
 
+  const npcHistory = new Map<string, NpcHistoryEntry[]>();
+  const npcThinkTimers = new Map<string, number>();
+  const npcThinkRng = makeRng(20261026);
+  const npcNextThink = new Map<string, number>(
+    npcManager.npcs.map((n) => [n.def.id, 15 + npcThinkRng() * 20])
+  );
+  const speechProjector = new THREE.Vector3();
+
+  const applyNpcTool = (
+    npcId: string,
+    tool: string | null,
+    args: Record<string, unknown>
+  ): string | null => {
+    if (!tool) return null;
+    const result = executeNpcClientTool(tool, args, inventory, (stepId) => {
+      const idx = OBJECTIVE_STEPS.findIndex((s) => s.id === stepId);
+      if (idx >= 0) objectives.setStep(idx);
+    });
+    if (tool === "share_map_hint") return result.hint ?? null;
+    if (!result.success) return null;
+    if (tool === "give_block") hud.renderHotbar(inventory);
+    return result.message ?? null;
+  };
+
+  const speakNpc = (npcId: string, name: string, text: string): void => {
+    hud.showNpcSpeech(npcId, name, text);
+    audio.play("npc_chat_pop", { volume: 0.5 });
+  };
+
+  const rememberNpcExchange = (npcId: string, userText: string, assistantText: string): void => {
+    const history = npcHistory.get(npcId) ?? [];
+    history.push({ role: "user", content: userText }, { role: "assistant", content: assistantText });
+    if (history.length > 6) history.splice(0, history.length - 6);
+    npcHistory.set(npcId, history);
+  };
+
   window.__GIERA__ = {
     ready: false,
     seed,
@@ -341,7 +379,20 @@ async function boot(): Promise<void> {
           role: nearest.def.role,
           quickPrompts: nearest.def.quickPrompts,
           onSend: async (text) => {
-            return `${nearest.def.name}: Słyszę Cię! "${text}". Wspaniale, że jesteś!`;
+            if (qa) return fallbackSay(text);
+            try {
+              const reply = await reasonNpc(nearest.def.id, text, npcHistory.get(nearest.def.id) ?? []);
+              const toolNote = applyNpcTool(nearest.def.id, reply.tool, reply.args);
+              rememberNpcExchange(nearest.def.id, text, reply.say);
+              speakNpc(
+                nearest.def.id,
+                nearest.def.name,
+                toolNote ? `${reply.say} ${toolNote}` : reply.say
+              );
+              return reply.say;
+            } catch {
+              return fallbackSay(text);
+            }
           },
           onMicStart: () => mic.start(),
           onMicStop: () => mic.stop(),
@@ -582,7 +633,38 @@ async function boot(): Promise<void> {
     const nearestNpc = npcManager.getNearestNPC(player.position.x, player.position.y, player.position.z, 3.0);
     const shouldShowPrompt = nearestNpc && !hud.isNpcDialogOpen() && !hud.isInventoryOpen() && !hud.isControlsModalOpen();
     hud.setNpcPrompt(shouldShowPrompt ? nearestNpc.name : null);
-    npcManager.npcs.forEach((n) => n.update(delta));
+    npcManager.updateAll(delta, (x, z) => surfaceHeight(x, z, seed));
+    hud.updateNpcSpeech((npcId) => {
+      const n = npcManager.npcs.find((m) => m.def.id === npcId);
+      if (!n) return null;
+      const headY = n.def.id === "papuga" ? 1.2 : 2.2;
+      speechProjector.set(n.position.x, n.position.y + headY, n.position.z).project(camera);
+      if (speechProjector.z > 1) return null;
+      return {
+        x: (speechProjector.x * 0.5 + 0.5) * window.innerWidth,
+        y: (-speechProjector.y * 0.5 + 0.5) * window.innerHeight,
+        visible: true,
+      };
+    });
+    if (!qa && !hud.isNpcDialogOpen()) {
+      for (const n of npcManager.npcs) {
+        const t = (npcThinkTimers.get(n.def.id) ?? 0) + delta;
+        npcThinkTimers.set(n.def.id, t);
+        if (t < (npcNextThink.get(n.def.id) ?? 20)) continue;
+        npcThinkTimers.set(n.def.id, 0);
+        npcNextThink.set(n.def.id, 20 + npcThinkRng() * 20);
+        void reasonNpc(
+          n.def.id,
+          "(Pauza w rozmowie. Powiedz krótko coś zachęcającego do zabawy albo zaproponuj zadanie.)",
+          npcHistory.get(n.def.id) ?? []
+        )
+          .then((reply) => {
+            const toolNote = applyNpcTool(n.def.id, reply.tool, reply.args);
+            speakNpc(n.def.id, n.def.name, toolNote ? `${reply.say} ${toolNote}` : reply.say);
+          })
+          .catch(() => {});
+      }
+    }
     trainingDummy.update(delta);
     itemDrops.update(delta, player.position, () => {
       audio.play("craft_ok");

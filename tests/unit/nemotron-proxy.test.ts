@@ -52,4 +52,61 @@ describe("Nemotron Proxy for ElevenLabs Agents", () => {
     expect(capturedBody.model).toBe("nemotron-bolt");
     expect(capturedBody.max_tokens).toBe(300);
   });
+
+  it("allows requests when no secret is configured (open LAN mode)", async () => {
+    const req = new Request("http://localhost/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [] }),
+    });
+    const res = await handleNemotronProxyRequest(req, {
+      expectedSecret: "",
+      nexgateUrl: "http://mock-nexgate/v1/chat/completions",
+      fetchFn: (async () => new Response("{}", { status: 200 })) as unknown as typeof fetch,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("honors an explicit model override", async () => {
+    let capturedBody: { model?: string } = {};
+    const req = new Request("http://localhost/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [] }),
+    });
+    await handleNemotronProxyRequest(req, {
+      expectedSecret: "",
+      model: "qwen36-modal",
+      nexgateUrl: "http://mock-nexgate/v1/chat/completions",
+      fetchFn: (async (_url: RequestInfo | URL, init?: RequestInit) => {
+        capturedBody = JSON.parse(String(init?.body)) as { model?: string };
+        return new Response("{}", { status: 200 });
+      }) as typeof fetch,
+    });
+    expect(capturedBody.model).toBe("qwen36-modal");
+  });
+
+  it("falls back to NEXGATE_URL env when no explicit url is given", async () => {
+    const prev = process.env.NEXGATE_URL;
+    process.env.NEXGATE_URL = "http://env-nexgate/v1/chat/completions";
+    let capturedUrl = "";
+    try {
+      const req = new Request("http://localhost/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: [] }),
+      });
+      await handleNemotronProxyRequest(req, {
+        expectedSecret: "",
+        fetchFn: (async (url: RequestInfo | URL) => {
+          capturedUrl = String(url);
+          return new Response("{}", { status: 200 });
+        }) as typeof fetch,
+      });
+    } finally {
+      if (prev === undefined) delete process.env.NEXGATE_URL;
+      else process.env.NEXGATE_URL = prev;
+    }
+    expect(capturedUrl).toBe("http://env-nexgate/v1/chat/completions");
+  });
 });

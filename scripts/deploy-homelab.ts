@@ -272,6 +272,25 @@ if (!secretExists) {
 }
 
 must(
+  await step("nexgate auth secret", () => {
+    const exists = run("kubectl", ["-n", NAMESPACE, "get", "secret", "nexgate-auth"]).ok;
+    if (exists) return { ok: true, detail: "exists" };
+    const key = process.env.NEXGATE_OMP_API_KEY ?? process.env.NEXGATE_NEMOTRON_BOLT_API_KEY ?? "";
+    if (!key) return { ok: false, detail: "NEXGATE_OMP_API_KEY missing in env" };
+    const res = run("kubectl", [
+      "-n",
+      NAMESPACE,
+      "create",
+      "secret",
+      "generic",
+      "nexgate-auth",
+      "--from-literal=NEXGATE_OMP_API_KEY=" + key,
+    ]);
+    return { ok: res.ok, detail: res.out };
+  })
+);
+
+must(
   await step("tailscale acl tag + funnel", async () => {
     const res = await ensureTagFunnel();
     return res;

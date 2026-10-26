@@ -28,6 +28,13 @@ spec:
               value: "8080"
             - name: GIERA_DATA_DIR
               value: /data
+            - name: NEXGATE_URL
+              value: https://litellm.tail5d39b4.ts.net/v1/chat/completions
+            - name: NEXGATE_OMP_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nexgate-auth
+                  key: NEXGATE_OMP_API_KEY
           volumeMounts:
             - name: giera-data
               mountPath: /data

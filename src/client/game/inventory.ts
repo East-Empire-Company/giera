@@ -28,8 +28,8 @@ export class GameInventory {
   public creative: boolean;
   public activeSlot: number;
   public hotbar: BlockId[];
-  private blocks: Record<string, number>;
-  private items: Record<string, number>;
+  blocks: Record<string, number>;
+  items: Record<string, number>;
   private chunkEdits: Record<string, number>;
 
   constructor(options?: {
