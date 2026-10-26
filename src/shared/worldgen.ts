@@ -66,19 +66,25 @@ function treeHeight(x: number, z: number, seed: number): number {
   return 5 + Math.floor(hash2(x, z, seed ^ 0x6c8e9cf5) * 3);
 }
 
+const CROWN_ROUND = [2, 2, 1];
+const CROWN_TALL = [1, 1, 1, 1];
+const CROWN_WIDE = [2, 2, 2];
+
 function treeBlock(x: number, y: number, z: number, seed: number): number {
   for (let centerZ = z - 2; centerZ <= z + 2; centerZ++) {
     for (let centerX = x - 2; centerX <= x + 2; centerX++) {
       if (hash2(centerX, centerZ, seed ^ 0x4f1bbcdc) < 0.965) continue;
       const base = surfaceHeight(centerX, centerZ, seed);
       if (base <= WATER_LEVEL + 1) continue;
-      const height = treeHeight(centerX, centerZ, seed);
+      const shape = hash2(centerX, centerZ, seed ^ 0x2545f491);
+      const height = treeHeight(centerX, centerZ, seed) + (shape < 0.22 ? 2 : shape > 0.82 ? -1 : 0);
       const dx = Math.abs(x - centerX);
       const dz = Math.abs(z - centerZ);
       if (dx === 0 && dz === 0 && y > base && y <= base + height) return BLOCK_ID.oak_log;
       const crown = y - (base + height - 2);
-      const radius = crown <= 1 ? 2 : crown === 2 ? 1 : 0;
-      if (crown >= 0 && crown <= 2 && Math.max(dx, dz) <= radius && !(crown === 0 && dx === 0 && dz === 0)) return BLOCK_ID.oak_leaves;
+      const profile = shape < 0.22 ? CROWN_TALL : shape > 0.82 ? CROWN_WIDE : CROWN_ROUND;
+      const radius = crown >= 0 && crown < profile.length ? profile[crown] : -1;
+      if (radius >= 0 && Math.max(dx, dz) <= radius && !(crown === 0 && dx === 0 && dz === 0)) return BLOCK_ID.oak_leaves;
     }
   }
   return BLOCK_ID.air;

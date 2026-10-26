@@ -66,7 +66,7 @@ type WsData = {
   id: string;
   roomCode: string;
   name: string;
-  lastInputTime: number;
+  lastAcceptTime: number;
   hadInput: boolean;
 };
 
@@ -81,7 +81,7 @@ const server = Bun.serve<WsData>({
           id,
           roomCode: "DOM1",
           name: "Gracz",
-          lastInputTime: Date.now(),
+          lastAcceptTime: Date.now(),
           hadInput: false,
         },
       });
@@ -152,12 +152,12 @@ const server = Bun.serve<WsData>({
             const player = room.getPlayer(data.id);
             if (player) {
               const now = Date.now();
-              const dt = Math.max(0.01, (now - data.lastInputTime) / 1000);
-              data.lastInputTime = now;
+              const dt = Math.max(0.01, (now - data.lastAcceptTime) / 1000);
 
               const next = { x: msg.x, y: msg.y, z: msg.z };
               if (!data.hadInput || isValidPlayerSpeed(player, next, dt)) {
                 data.hadInput = true;
+                data.lastAcceptTime = now;
                 room.updatePlayer(data.id, {
                   x: msg.x,
                   y: msg.y,

@@ -567,6 +567,7 @@ async function boot(): Promise<void> {
       player2.avatar?.freezePose(0.5);
     }
     sky.update(elapsed, player.position);
+    world.updateWater(elapsed);
     hud.updateTycoon(tycoon.collectedStars, tycoon.dropperTier);
 
     const camPos = player.getCameraPosition(5.5);

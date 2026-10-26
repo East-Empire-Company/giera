@@ -43,6 +43,8 @@ export async function loadRenderAssets(): Promise<RenderAssets> {
   ]);
   nearestTexture(atlas, SRGBColorSpace);
   nearestTexture(waterNormal, NoColorSpace);
+  waterNormal.wrapS = RepeatWrapping;
+  waterNormal.wrapT = RepeatWrapping;
   for (const texture of [clouds, sideClouds]) {
     nearestTexture(texture, SRGBColorSpace);
     texture.wrapS = RepeatWrapping;

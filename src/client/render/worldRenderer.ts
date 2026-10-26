@@ -158,6 +158,7 @@ export class WorldRenderer {
   private readonly pending = new Set<string>();
   private readonly workers: ChunkWorkerPool;
   private readonly materials: THREE.Material[];
+  private readonly waterNormal: THREE.Texture;
   private readonly seed: number;
   private readonly scene: THREE.Scene;
   private readonly onProgress?: (loaded: number, total: number) => void;
@@ -179,11 +180,16 @@ export class WorldRenderer {
     this.seed = options.seed;
     this.onProgress = options.onProgress;
     this.materials = createTileMaterials(options.atlasTexture, options.waterNormal);
+    this.waterNormal = options.waterNormal;
     const workerCount = options.workerCount ?? Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 2) - 1));
     this.workers = new ChunkWorkerPool(workerCount);
   }
   get loadedChunkCount(): number {
     return this.chunks.size;
+  }
+
+  updateWater(time: number): void {
+    this.waterNormal.offset.set((time * 0.02) % 1, (time * 0.013) % 1);
   }
 
   async loadArea(worldX: number, worldZ: number, radius: number, otherCenters?: { worldX: number; worldZ: number }[]): Promise<void> {
