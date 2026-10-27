@@ -144,7 +144,12 @@ async function standAt(page: Page, spot: FlatSpot, yaw: number, pitch: number): 
     },
     [spot, yaw, pitch] as [FlatSpot, number, number]
   );
-  await page.waitForTimeout(250);
+  const frame = await page.evaluate(() => (window as unknown as G).__GIERA__.qa.frame);
+  await page.waitForFunction(
+    (start) => (window as unknown as G).__GIERA__.qa.frame >= start + 30,
+    frame,
+    { timeout: 20_000 }
+  );
 }
 
 async function cameraRay(page: Page): Promise<CameraRay> {
@@ -408,7 +413,13 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     const armed = await armFrontBlock(page, spots);
     const canvas = page.locator("canvas#game");
     await canvas.hover();
+    const frameBefore = await page.evaluate(() => (window as unknown as G).__GIERA__.qa.frame);
     await page.mouse.down({ button: "right" });
+    await page.waitForFunction(
+      (start) => (window as unknown as G).__GIERA__.qa.frame >= start + 3,
+      frameBefore,
+      { timeout: 20_000 }
+    );
     await page.mouse.up({ button: "right" });
     await page.waitForTimeout(300);
     const placedId = await page.evaluate(

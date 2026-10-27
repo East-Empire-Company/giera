@@ -28,4 +28,13 @@ describe("collideCamera", () => {
     expect(dist).toBeGreaterThan(3);
     expect(out.y).toBeGreaterThan(5);
   });
+
+  it("sidesteps a trunk behind the character at the same height instead of lifting overhead", () => {
+    const trunk = (x: number, _y: number, z: number) => Math.abs(x - 0.5) < 1 && z >= 3 && z <= 8;
+    const target = { x: 0.5, y: 5.5, z: 0.5 };
+    const out = collideCamera(target, { x: 0.5, y: 5.5, z: 6 }, trunk);
+    expect(out.y).toBeCloseTo(5.5, 5);
+    expect(Math.hypot(out.x - target.x, out.z - target.z)).toBeGreaterThanOrEqual(3.2);
+    expect(Math.abs(out.x - 0.5)).toBeGreaterThan(1);
+  });
 });

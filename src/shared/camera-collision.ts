@@ -4,6 +4,7 @@ const WALL_MARGIN = 0.35;
 const MIN_DISTANCE = 0.5;
 const COMFORT_DISTANCE = 3.2;
 const LIFT_STEPS = [1.2, 2.4, 3.6];
+const ORBIT_ANGLES = [0.35, -0.35, 0.7, -0.7, 1.05, -1.05];
 
 function pullIn(target: Vec3, desired: Vec3, isSolid: (x: number, y: number, z: number) => boolean): { pos: Vec3; distance: number; blocked: boolean } {
   const dx = desired.x - target.x;
@@ -18,10 +19,23 @@ function pullIn(target: Vec3, desired: Vec3, isSolid: (x: number, y: number, z: 
   return { pos: { x: target.x + dx * scale, y: target.y + dy * scale, z: target.z + dz * scale }, distance, blocked: true };
 }
 
+function orbit(target: Vec3, desired: Vec3, angle: number): Vec3 {
+  const dx = desired.x - target.x;
+  const dz = desired.z - target.z;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return { x: target.x + dx * cos - dz * sin, y: desired.y, z: target.z + dx * sin + dz * cos };
+}
+
 export function collideCamera(target: Vec3, desired: Vec3, isSolid: (x: number, y: number, z: number) => boolean): Vec3 {
   const first = pullIn(target, desired, isSolid);
   if (!first.blocked || first.distance >= COMFORT_DISTANCE) return first.pos;
   let best = first;
+  for (const angle of ORBIT_ANGLES) {
+    const alt = pullIn(target, orbit(target, desired, angle), isSolid);
+    if (alt.distance > best.distance) best = alt;
+    if (alt.distance >= COMFORT_DISTANCE) return best.pos;
+  }
   for (const lift of LIFT_STEPS) {
     const alt = pullIn(target, { x: desired.x, y: desired.y + lift, z: desired.z }, isSolid);
     if (alt.distance > best.distance) best = alt;
