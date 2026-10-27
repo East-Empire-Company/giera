@@ -127,6 +127,7 @@ export class PlayerController {
     if (this.onGround) {
       this.velocity.x = wishDir.x * speed;
       this.velocity.z = wishDir.z * speed;
+      this.velocity.y = -1.0;
       if (moveInput.jump) {
         this.velocity.y = 9.0;
         this.onGround = false;

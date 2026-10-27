@@ -153,27 +153,48 @@ export class Avatar {
     this.layerLife(deltaSeconds);
   }
 
+  private layered = new Map<string, { applied: number; delta: number }>();
+  private amp = 1;
+
+  private addLayer(bone: THREE.Bone, key: "rx" | "ry" | "rz" | "py", delta: number): void {
+    const id = `${bone.name}:${key}`;
+    const get = (): number => (key === "rx" ? bone.rotation.x : key === "ry" ? bone.rotation.y : key === "rz" ? bone.rotation.z : bone.position.y);
+    const set = (v: number): void => {
+      if (key === "rx") bone.rotation.x = v;
+      else if (key === "ry") bone.rotation.y = v;
+      else if (key === "rz") bone.rotation.z = v;
+      else bone.position.y = v;
+    };
+    const prev = this.layered.get(id);
+    if (prev && Math.abs(get() - prev.applied) < 1e-9) set(get() - prev.delta);
+    const next = get() + delta;
+    set(next);
+    this.layered.set(id, { applied: next, delta });
+  }
+
   private layerLife(deltaSeconds: number): void {
     this.life += deltaSeconds;
     const t = this.life + this.phase;
-    const amp = this.motion === "idle" && !this.oneShot ? 1 : this.motion === "walk" ? 0.35 : 0.2;
+    const target = this.motion === "idle" && !this.oneShot ? 1 : this.motion === "walk" ? 0.35 : 0.2;
+    this.amp += (target - this.amp) * Math.min(1, deltaSeconds * 4);
+    const amp = this.amp;
     const b = this.bones;
-    if (b.spine) b.spine.rotation.x += Math.sin(t * 1.7) * 0.02 * amp;
+    if (b.spine) this.addLayer(b.spine, "rx", Math.sin(t * 1.7) * 0.02 * amp);
     if (b.chest) {
-      b.chest.rotation.x += Math.sin(t * 1.7 + 0.5) * 0.025 * amp;
-      b.chest.rotation.y += Math.sin(t * 0.45) * 0.03 * amp;
+      this.addLayer(b.chest, "rx", Math.sin(t * 1.7 + 0.5) * 0.025 * amp);
+      this.addLayer(b.chest, "ry", Math.sin(t * 0.45) * 0.03 * amp);
     }
     if (b.head) {
-      b.head.rotation.y += Math.sin(t * 0.5) * 0.12 * amp + Math.sin(t * 1.3) * 0.02 * amp;
-      b.head.rotation.x += Math.sin(t * 0.8 + 1.0) * 0.04 * amp;
-      b.head.rotation.z += Math.sin(t * 0.37) * 0.02 * amp;
+      this.addLayer(b.head, "ry", Math.sin(t * 0.5) * 0.12 * amp);
+      this.addLayer(b.head, "rx", Math.sin(t * 0.8 + 1.0) * 0.04 * amp);
+      this.addLayer(b.head, "rz", Math.sin(t * 0.37) * 0.02 * amp);
     }
     if (b.hips) {
-      b.hips.rotation.z += Math.sin(t * 0.6) * 0.035 * amp;
-      b.hips.position.y += Math.sin(t * 1.7) * 0.004 * amp;
+      this.addLayer(b.hips, "rz", Math.sin(t * 0.6) * 0.035 * amp);
+      this.addLayer(b.hips, "py", Math.sin(t * 1.7) * 0.004 * amp);
     }
-    if (b.armL) b.armL.rotation.x += Math.sin(t * 1.7 + 0.8) * 0.03 * amp;
-    if (b.armR) b.armR.rotation.x += Math.sin(t * 1.7 + 1.6) * 0.03 * amp;
+    if (b.armL) this.addLayer(b.armL, "rx", Math.sin(t * 1.7 + 0.8) * 0.03 * amp);
+    if (b.armR) this.addLayer(b.armR, "rx", Math.sin(t * 1.7 + 1.6) * 0.03 * amp);
   }
 
   playOnce(motion: AvatarOneShot): void {

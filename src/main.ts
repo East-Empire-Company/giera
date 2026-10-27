@@ -74,6 +74,7 @@ const message: HTMLElement = messageElement;
 const progress: HTMLElement = progressElement;
 const qa = new URLSearchParams(window.location.search).get("qa") === "1";
 const INTERACT_REACH = 12;
+const VIEW_RADIUS = 14;
 
 function chooseSeed(): number {
   const value = new Uint32Array(1);
@@ -106,8 +107,8 @@ async function boot(): Promise<void> {
   updateSeedUrl(seed);
   const renderer = createRenderer(canvas);
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 256);
-  const camera2 = new THREE.PerspectiveCamera(68, (window.innerWidth / 2) / window.innerHeight, 0.1, 256);
+  const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 480);
+  const camera2 = new THREE.PerspectiveCamera(68, (window.innerWidth / 2) / window.innerHeight, 0.1, 480);
   const stats: GameStats = { fps: 0, drawCalls: 0, chunkCount: 0 };
   const assets = await loadRenderAssets(renderer);
   scene.environment = assets.environment;
@@ -384,7 +385,10 @@ async function boot(): Promise<void> {
   await world.loadArea(0, 0, 2);
   status.classList.add("boot-ready");
   window.__GIERA__.ready = true;
-  void world.loadArea(0, 0, 8).catch(showBootError);
+  let streamCx = 0;
+  let streamCz = 0;
+  let streamBusy = true;
+  void world.loadArea(0, 0, qa ? 8 : VIEW_RADIUS).catch(showBootError).finally(() => { streamBusy = false; });
 
   // Input states
   const keys = new Set<string>();
@@ -682,13 +686,20 @@ async function boot(): Promise<void> {
     }
     {
       const gb = (x: number, y: number, z: number): number => world.getBlock(x, y, z);
-      for (const p of [player, player2]) {
-        if (p.avatar) p.avatar.object.position.y = p.position.y + smoothGroundOffset(gb, p.position.x, p.position.z, p.position.y);
-      }
-      for (const n of npcManager.npcs) {
-        const o = n.avatar?.object ?? n.customObject;
-        if (o) o.position.y = n.position.y + smoothGroundOffset(gb, n.position.x, n.position.z, n.position.y);
-      }
+      const follow = (o: THREE.Object3D, x: number, y: number, z: number, grounded: boolean, damp: boolean): void => {
+        const target = grounded ? smoothGroundOffset(gb, x, z, y) : 0;
+        const prev = (o.userData.groundOffset as number | undefined) ?? target;
+        const next = prev + (target - prev) * Math.min(1, delta * 12);
+        o.userData.groundOffset = next;
+        let baseY = y;
+        if (damp) {
+          const prevY = (o.userData.baseY as number | undefined) ?? y;
+          baseY = Math.abs(y - prevY) > 2 ? y : prevY + (y - prevY) * Math.min(1, delta * 9);
+          o.userData.baseY = baseY;
+        }
+        o.position.y = baseY + next;
+      };
+      for (const p of [player, player2]) if (p.avatar) follow(p.avatar.object, p.position.x, p.position.y, p.position.z, p.onGround, false);
     }
     player.avatar?.update(delta);
     if (!splitScreen.isSplitScreen) player2.avatar?.update(delta);
@@ -696,6 +707,19 @@ async function boot(): Promise<void> {
       player.avatar?.freezePose(0.5);
       player2.avatar?.freezePose(0.5);
       for (const n of npcManager.npcs) n.avatar?.freezePose(0.5);
+    }
+    if (!qa) {
+      const ccx = Math.floor(player.position.x / 16);
+      const ccz = Math.floor(player.position.z / 16);
+      if (!streamBusy && (ccx !== streamCx || ccz !== streamCz)) {
+        streamCx = ccx;
+        streamCz = ccz;
+        streamBusy = true;
+        void world
+          .loadArea(player.position.x, player.position.z, VIEW_RADIUS, splitScreen.isSplitScreen ? [{ worldX: player2.position.x, worldZ: player2.position.z }] : undefined)
+          .catch(() => {})
+          .finally(() => { streamBusy = false; });
+      }
     }
     sky.update(elapsed, player.position);
     world.updateWater(elapsed);
@@ -724,6 +748,21 @@ async function boot(): Promise<void> {
     const shouldShowPrompt = nearestNpc && !hud.isNpcDialogOpen() && !hud.isInventoryOpen() && !hud.isControlsModalOpen();
     hud.setNpcPrompt(shouldShowPrompt ? nearestNpc.name : null);
     npcManager.updateAll(delta, (x, z) => surfaceHeight(Math.floor(x), Math.floor(z), seed), (x, y, z) => world.getBlock(x, y, z) !== 0);
+    {
+      const gb2 = (x: number, y: number, z: number): number => world.getBlock(x, y, z);
+      for (const n of npcManager.npcs) {
+        const o = n.avatar?.object ?? n.customObject;
+        if (!o) continue;
+        const target = smoothGroundOffset(gb2, n.position.x, n.position.z, n.position.y);
+        const prev = (o.userData.groundOffset as number | undefined) ?? target;
+        const off = prev + (target - prev) * Math.min(1, delta * 12);
+        o.userData.groundOffset = off;
+        const prevY = (o.userData.baseY as number | undefined) ?? n.position.y;
+        const baseY = Math.abs(n.position.y - prevY) > 2 ? n.position.y : prevY + (n.position.y - prevY) * Math.min(1, delta * 9);
+        o.userData.baseY = baseY;
+        o.position.y = baseY + off;
+      }
+    }
     hud.updateNpcSpeech((npcId) => {
       const n = npcManager.npcs.find((m) => m.def.id === npcId);
       if (!n) return null;
