@@ -16,6 +16,10 @@ import { OBJECTIVE_STEPS, ObjectiveManager } from "./client/game/objectives";
 import { TycoonManager } from "./client/game/tycoon";
 import { TouchController } from "./client/input/touch";
 import { loadGameState, saveGameState } from "./client/persist/db";
+import { pushOutOfCylinders } from "./shared/entity-collision";
+import { smoothGroundOffset } from "./shared/mesher";
+import { collideCamera } from "./shared/camera-collision";
+import { GameplayVfx } from "./client/effects/gameplay-vfx";
 import { createRenderer, loadRenderAssets, SkyCycle } from "./client/render/renderer";
 import { getSplitViewports, SplitScreenManager } from "./client/render/split-screen";
 import { PostFX } from "./client/render/postfx";
@@ -123,6 +127,7 @@ async function boot(): Promise<void> {
   crackMesh.visible = false;
   scene.add(crackMesh);
   const itemDrops = new ItemDropManager({ scene, rng: makeRng(1337) });
+  const gameplayVfx = new GameplayVfx(scene, seed, assets.particles);
 
   // Sunny clearing spawn away from tree trunks
   const spawnY = surfaceHeight(3, 5, seed) + 1;
@@ -196,6 +201,8 @@ async function boot(): Promise<void> {
         inventory.recordChunkEdit(cKey);
         lanClient?.sendBlockEdit(placeX, placeY, placeZ, activeBlock);
         audio.play("place_block");
+        gameplayVfx.emit("place", new THREE.Vector3(placeX + 0.5, placeY + 0.5, placeZ + 0.5));
+        player.avatar?.playOnce("place");
         if (objectives.recordAction("build_house", 1)) {
           audio.play("objective_done");
           audio.play("celebrate_win");
@@ -250,6 +257,8 @@ async function boot(): Promise<void> {
     objectives,
     onCraft: (recipeId) => {
       audio.play("craft_ok");
+      gameplayVfx.emit("craft", new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z));
+      player.avatar?.playOnce("craft");
       if (recipeId === "planks") {
         if (objectives.recordAction("craft_planks", 4)) {
           audio.play("objective_done");
@@ -386,8 +395,10 @@ async function boot(): Promise<void> {
   window.addEventListener("keydown", (e) => {
     keys.add(e.code);
     if (e.code === "KeyI") {
-      const open = hud.toggleInventory(inventory, (recId) => {
+      const open = hud.toggleInventory(inventory, () => {
         audio.play("craft_ok");
+        gameplayVfx.emit("craft", new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z));
+        player.avatar?.playOnce("craft");
       });
       audio.play(open ? "ui_open" : "ui_click");
     } else if (e.code === "KeyE") {
@@ -546,7 +557,11 @@ async function boot(): Promise<void> {
         tryPlaceBlock();
       }
       if (p1Pad.toggleInventory && !prevP1Buttons.toggleInventory) {
-        const open = hud.toggleInventory(inventory, (recId) => audio.play("craft_ok"));
+        const open = hud.toggleInventory(inventory, () => {
+          audio.play("craft_ok");
+          gameplayVfx.emit("craft", new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z));
+          player.avatar?.playOnce("craft");
+        });
         audio.play(open ? "ui_open" : "ui_click");
       }
       if (p1Pad.toggleSplit && !prevP1Buttons.toggleSplit) {
@@ -634,28 +649,81 @@ async function boot(): Promise<void> {
       player2.avatar?.update(delta);
     }
 
+    {
+      const solid = (x: number, y: number, z: number): boolean => world.getBlock(x, y, z) !== 0;
+      const npcBodies = npcManager.npcs.map((n) => ({ x: n.position.x, y: n.position.y, z: n.position.z, radius: n.def.id === "papuga" ? 0.2 : 0.4, height: n.def.id === "papuga" ? 0.6 : 1.8 }));
+      const statics = [
+        ...npcBodies,
+        { x: trainingDummy.position.x, y: trainingDummy.position.y, z: trainingDummy.position.z, radius: 0.4, height: 1.6 },
+        { x: tycoon.origin.x, y: tycoon.origin.y, z: tycoon.origin.z, radius: 0.2, height: 2.4 },
+      ];
+      const resolve = (self: PlayerController, other: PlayerController): void => {
+        const bodies = [...statics, { x: other.position.x, y: other.position.y, z: other.position.z, radius: 0.3, height: 1.8 }];
+        const r = pushOutOfCylinders(self.position, 0.3, 1.8, bodies);
+        if (!r.pushed) return;
+        const y0 = Math.floor(self.position.y);
+        if (solid(Math.floor(r.x), y0, Math.floor(r.z)) || solid(Math.floor(r.x), y0 + 1, Math.floor(r.z))) return;
+        self.position.x = r.x;
+        self.position.z = r.z;
+        self.syncAvatar();
+      };
+      if (splitScreen.isSplitScreen) {
+        resolve(player, player2);
+        resolve(player2, player);
+      } else {
+        const r = pushOutOfCylinders(player.position, 0.3, 1.8, statics);
+        const y0 = Math.floor(player.position.y);
+        if (r.pushed && !solid(Math.floor(r.x), y0, Math.floor(r.z)) && !solid(Math.floor(r.x), y0 + 1, Math.floor(r.z))) {
+          player.position.x = r.x;
+          player.position.z = r.z;
+          player.syncAvatar();
+        }
+      }
+    }
+    {
+      const gb = (x: number, y: number, z: number): number => world.getBlock(x, y, z);
+      for (const p of [player, player2]) {
+        if (p.avatar) p.avatar.object.position.y = p.position.y + smoothGroundOffset(gb, p.position.x, p.position.z, p.position.y);
+      }
+      for (const n of npcManager.npcs) {
+        const o = n.avatar?.object ?? n.customObject;
+        if (o) o.position.y = n.position.y + smoothGroundOffset(gb, n.position.x, n.position.z, n.position.y);
+      }
+    }
     player.avatar?.update(delta);
+    if (!splitScreen.isSplitScreen) player2.avatar?.update(delta);
     if (qa) {
       player.avatar?.freezePose(0.5);
       player2.avatar?.freezePose(0.5);
+      for (const n of npcManager.npcs) n.avatar?.freezePose(0.5);
     }
     sky.update(elapsed, player.position);
     world.updateWater(elapsed);
     hud.updateTycoon(tycoon.collectedStars, tycoon.dropperTier);
 
-    const camPos = player.getCameraPosition(5.5);
-    camera.position.copy(camPos);
+    const camSolid = (x: number, y: number, z: number): boolean => {
+      const id = world.getBlock(x, y, z);
+      return id !== BLOCK_ID.air && id !== BLOCK_ID.water;
+    };
+    camera.position.copy(player.getCameraPosition(5.5));
+    {
+      const t = player.getCameraTarget();
+      const c = collideCamera(t, camera.position, camSolid);
+      camera.position.set(c.x, c.y, c.z);
+    }
     camera.lookAt(player.getCameraTarget());
     if (splitScreen.isSplitScreen) {
-      const camPos2 = player2.getCameraPosition(5.5);
-      camera2.position.copy(camPos2);
+      camera2.position.copy(player2.getCameraPosition(5.5));
+      const t2 = player2.getCameraTarget();
+      const c2 = collideCamera(t2, camera2.position, camSolid);
+      camera2.position.set(c2.x, c2.y, c2.z);
       camera2.lookAt(player2.getCameraTarget());
     }
 
     const nearestNpc = npcManager.getNearestNPC(player.position.x, player.position.y, player.position.z, 3.0);
     const shouldShowPrompt = nearestNpc && !hud.isNpcDialogOpen() && !hud.isInventoryOpen() && !hud.isControlsModalOpen();
     hud.setNpcPrompt(shouldShowPrompt ? nearestNpc.name : null);
-    npcManager.updateAll(delta, (x, z) => surfaceHeight(x, z, seed));
+    npcManager.updateAll(delta, (x, z) => surfaceHeight(Math.floor(x), Math.floor(z), seed), (x, y, z) => world.getBlock(x, y, z) !== 0);
     hud.updateNpcSpeech((npcId) => {
       const n = npcManager.npcs.find((m) => m.def.id === npcId);
       if (!n) return null;
@@ -698,14 +766,18 @@ async function boot(): Promise<void> {
       }
     }
     trainingDummy.update(delta);
+    gameplayVfx.update(delta);
     itemDrops.update(delta, player.position, () => {
       audio.play("craft_ok");
+      player.avatar?.playOnce("pickup");
     });
     tycoon.update(
       delta,
       player.position,
       () => {
         audio.play("craft_ok", { rate: 1.4 });
+        gameplayVfx.emit("collect", new THREE.Vector3(player.position.x, player.position.y + 1.4, player.position.z));
+        player.avatar?.playOnce("pickup");
         audio.play("celebrate_collect");
       },
       () => {
@@ -713,6 +785,7 @@ async function boot(): Promise<void> {
       },
       () => {
         player.velocity.y = 22.0;
+        gameplayVfx.emit("bounce", new THREE.Vector3(player.position.x, player.position.y + 0.2, player.position.z));
         player.onGround = false;
         audio.play("jump", { rate: 1.5, volume: 1.0 });
       }
@@ -721,6 +794,9 @@ async function boot(): Promise<void> {
     if (splitScreen.isSplitScreen) {
       const distP2Tramp = Math.hypot(player2.position.x - tycoon.trampolinePos.x, player2.position.z - tycoon.trampolinePos.z);
       if (distP2Tramp < 1.1) {
+        if (player2.velocity.y < 20) {
+          gameplayVfx.emit("bounce", new THREE.Vector3(player2.position.x, player2.position.y + 0.2, player2.position.z));
+        }
         player2.velocity.y = 22.0;
         player2.onGround = false;
         audio.play("jump", { rate: 1.5, volume: 1.0 });
@@ -733,6 +809,7 @@ async function boot(): Promise<void> {
       const toDummy = trainingDummy.position.clone().sub(player.position).normalize();
       if (dir.dot(toDummy) > 0.6) {
         trainingDummy.hit();
+        player.avatar?.playOnce("hit");
         audio.play("dig_wood");
       }
     }
@@ -774,6 +851,7 @@ async function boot(): Promise<void> {
             const blockName = def ? Object.keys(BLOCK_ID).find((k) => (BLOCK_ID as Record<string, number>)[k] === bId) ?? "stone" : "stone";
             inventory.addMinedBlock(blockName, 1);
             itemDrops.spawn(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5, bId, world.getTileMaterial(def?.tiles.side ?? "stone"));
+            gameplayVfx.emit("mine", new THREE.Vector3(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5));
             if (bId === BLOCK_ID.oak_log) {
               audio.play("dig_wood");
               if (objectives.recordAction("gather_wood", 1)) {

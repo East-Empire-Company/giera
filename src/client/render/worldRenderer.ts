@@ -52,7 +52,7 @@ export function createTileMaterials(
     const ore = ORE_STYLES[name];
     const material = new THREE.MeshStandardMaterial({
       map: atlasTexture,
-      normalMap: water ? waterNormal : atlasNormal,
+      normalMap: water ? waterNormal : null,
       aoMap: water || glass ? null : atlasOrm,
       roughnessMap: water || glass ? null : atlasOrm,
       vertexColors: true,
@@ -97,7 +97,10 @@ export function createTileMaterials(
         `#ifdef USE_MAP
           vec2 localUv = fract( vMapUv );
           vec2 gieraTileUv = mix( gieraTileRect.xy, gieraTileRect.zw, localUv );
-          vec4 sampledDiffuseColor = texture2D( map, gieraTileUv );
+          vec2 gieraTileScale = gieraTileRect.zw - gieraTileRect.xy;
+          vec2 gieraDx = dFdx( vMapUv ) * gieraTileScale;
+          vec2 gieraDy = dFdy( vMapUv ) * gieraTileScale;
+          vec4 sampledDiffuseColor = textureGrad( map, gieraTileUv, gieraDx, gieraDy );
           #ifdef DECODE_VIDEO_TEXTURE
             sampledDiffuseColor = sRGBTransferEOTF( sampledDiffuseColor );
           #endif
@@ -108,9 +111,13 @@ export function createTileMaterials(
         #endif`
       );
       if (usesAtlasNormal) {
-        shader.fragmentShader = shader.fragmentShader.replace("vRoughnessMapUv", "gieraTileUv");
-        shader.fragmentShader = shader.fragmentShader.replace("vAoMapUv", "gieraTileUv");
-        shader.fragmentShader = shader.fragmentShader.replace("vNormalMapUv", "gieraTileUv");
+        const expand = (chunk: "normal_fragment_maps" | "roughnessmap_fragment" | "aomap_fragment", from: string, to: string): void => {
+          const source = THREE.ShaderChunk[chunk];
+          if (!source.includes(from)) throw new Error(`Three.js ${chunk} chunk changed; ${from} missing`);
+          shader.fragmentShader = shader.fragmentShader.replace(`#include <${chunk}>`, source.replace(from, to));
+        };
+        expand("roughnessmap_fragment", "texture2D( roughnessMap, vRoughnessMapUv )", "textureGrad( roughnessMap, gieraTileUv, gieraDx, gieraDy )");
+        expand("aomap_fragment", "texture2D( aoMap, vAoMapUv )", "textureGrad( aoMap, gieraTileUv, gieraDx, gieraDy )");
       }
     };
     material.customProgramCacheKey = () => `giera-atlas-pbr-${tile.id}-${water ? "water" : usesAtlasNormal ? "atlas" : "flat"}`;

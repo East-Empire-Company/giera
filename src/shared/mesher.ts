@@ -12,7 +12,7 @@ export type ChunkMesh = {
   indices: Uint32Array;
   groups: MeshGroup[];
 };
-type Face = { tile: AtlasTile; sign: number; ao0: number; ao1: number; ao2: number; ao3: number; key: string };
+type Face = { tile: AtlasTile; sign: number; ao0: number; ao1: number; ao2: number; ao3: number; key: string; smooth: boolean };
 type TileMesh = { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; indices: number[] };
 
 const AXES = [
@@ -21,6 +21,38 @@ const AXES = [
   { normal: 2, u: 0, v: 1 },
 ] as const;
 
+const isSmoothBlock = (id: number): boolean => id === 4 || id === 5 || id === 6;
+
+function columnTop(getBlock: (x: number, y: number, z: number) => number, x: number, z: number, y: number): number | null {
+  for (let yy = y + 1; yy >= y - 2; yy--) {
+    if (isSmoothBlock(getBlock(x, yy, z)) && !isSmoothBlock(getBlock(x, yy + 1, z))) return yy + 1;
+  }
+  return null;
+}
+
+export function smoothVertexHeight(getBlock: (x: number, y: number, z: number) => number, x: number, y: number, z: number): number {
+  let sum = 0;
+  let anyAtLevel = false;
+  for (const [ox, oz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]] as const) {
+    const top = columnTop(getBlock, x + ox, z + oz, y);
+    if (top === y) anyAtLevel = true;
+    sum += top !== null && Math.abs(top - y) <= 1 ? top : y;
+  }
+  return anyAtLevel ? sum / 4 : y;
+}
+
+/** Visual height of the smoothed ground under (x,z) minus the voxel top the physics body stands on. */
+export function smoothGroundOffset(getBlock: (x: number, y: number, z: number) => number, x: number, z: number, feetY: number): number {
+  const cx = Math.floor(x);
+  const cz = Math.floor(z);
+  const top = Math.round(feetY);
+  if (!isSmoothBlock(getBlock(cx, top - 1, cz))) return 0;
+  const fx = x - cx;
+  const fz = z - cz;
+  const h = (ox: number, oz: number) => smoothVertexHeight(getBlock, cx + ox, top, cz + oz);
+  const visual = h(0, 0) * (1 - fx) * (1 - fz) + h(1, 0) * fx * (1 - fz) + h(0, 1) * (1 - fx) * fz + h(1, 1) * fx * fz;
+  return visual - top;
+}
 export function meshChunk(input: {
   data: Uint8Array;
   cx: number;
@@ -38,6 +70,7 @@ export function meshChunk(input: {
     }
     return input.getBlock(origin[0] + x, origin[1] + y, origin[2] + z);
   };
+  const smoothHeight = (x: number, y: number, z: number): number => smoothVertexHeight(localBlock, x, y, z);
   const addFace = (face: Face, axis: typeof AXES[number], slice: number, u: number, v: number, width: number, height: number): void => {
     let mesh = meshes.get(face.tile.id);
     if (!mesh) {
@@ -56,7 +89,8 @@ export function meshChunk(input: {
       const x = baseX + (axis.u === 0 ? uCoord : axis.v === 0 ? vCoord : 0);
       const y = baseY + (axis.u === 1 ? uCoord : axis.v === 1 ? vCoord : 0);
       const z = baseZ + (axis.u === 2 ? uCoord : axis.v === 2 ? vCoord : 0);
-      mesh.positions.push(x, y, z);
+      const vy = face.smooth ? smoothHeight(x, y, z) : y;
+      mesh.positions.push(x, vy, z);
       mesh.normals.push(axis.normal === 0 ? face.sign : 0, axis.normal === 1 ? face.sign : 0, axis.normal === 2 ? face.sign : 0);
       mesh.uvs.push(uCoord, vCoord);
       let shade = face.ao0;
@@ -70,6 +104,27 @@ export function meshChunk(input: {
         else if (i === 3) shade = face.ao1;
       }
       mesh.colors.push(shade, shade, shade);
+    }
+    if (face.smooth && axis.normal === 1 && face.sign > 0) {
+      const p = mesh.positions;
+      const o = vertexStart * 3;
+      const sx = p[o + 3 * 2] - p[o];
+      const sy = p[o + 3 * 2 + 1] - p[o + 1];
+      const sz = p[o + 3 * 2 + 2] - p[o + 2];
+      const tx = p[o + 3 * 3] - p[o + 3];
+      const ty = p[o + 3 * 3 + 1] - p[o + 3 + 1];
+      const tz = p[o + 3 * 3 + 2] - p[o + 3 + 2];
+      let nx = sy * tz - sz * ty;
+      let ny = sz * tx - sx * tz;
+      let nz = sx * ty - sy * tx;
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      nx /= nl; ny /= nl; nz /= nl;
+      if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      for (let i = 0; i < 4; i++) {
+        mesh.normals[(vertexStart + i) * 3] = nx;
+        mesh.normals[(vertexStart + i) * 3 + 1] = ny;
+        mesh.normals[(vertexStart + i) * 3 + 2] = nz;
+      }
     }
     mesh.indices.push(vertexStart, vertexStart + 1, vertexStart + 2, vertexStart, vertexStart + 2, vertexStart + 3);
   };
@@ -113,8 +168,9 @@ export function meshChunk(input: {
               else if (corner === 2) ao2 = shade;
               else ao3 = shade;
             }
-            const key = `${blockId}:${tile.id}:${sign}:${ao0.toFixed(3)},${ao1.toFixed(3)},${ao2.toFixed(3)},${ao3.toFixed(3)}`;
-            mask[u + CHUNK_SIZE * v] = { tile, sign, ao0, ao1, ao2, ao3, key };
+            const smoothBlock = blockId === 4 || blockId === 5 || blockId === 6;
+            const key = `${blockId}:${tile.id}:${sign}:${ao0.toFixed(3)},${ao1.toFixed(3)},${ao2.toFixed(3)},${ao3.toFixed(3)}${smoothBlock ? `@${px},${py},${pz}` : ""}`;
+            mask[u + CHUNK_SIZE * v] = { tile, sign, ao0, ao1, ao2, ao3, key, smooth: smoothBlock };
           }
         }
         for (let v = 0; v < CHUNK_SIZE; v++) {

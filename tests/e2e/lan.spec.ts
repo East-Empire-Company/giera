@@ -104,8 +104,8 @@ test("lan: two clients join one room, exchange a block edit, server persists the
       g.player.pitch = 0;
       g.player.syncAvatar();
     }, [yaw]);
-    await A.waitForTimeout(150);
-    for (const dist of [3, 2.5, 3.5, 4, 2]) {
+    await A.waitForTimeout(400);
+    for (const dist of [8, 7.5, 8.5, 9, 7]) {
     const fixture = await A.evaluate(([d]) => {
       const g = (window as unknown as G).__GIERA__;
       const cam = g.camera;
@@ -153,6 +153,7 @@ test("lan: two clients join one room, exchange a block edit, server persists the
     g.player.pitch = 0;
     g.player.syncAvatar();
   }, [armedYaw]);
+  await A.waitForTimeout(400);
   await A.mouse.down({ button: "right" });
   await A.mouse.up({ button: "right" });
   await A.waitForTimeout(500);

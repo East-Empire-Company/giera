@@ -147,7 +147,10 @@ export class PlayerController {
     this.position.x = result.position.x + 0.3;
     this.position.y = result.position.y;
     this.position.z = result.position.z + 0.3;
+    const wasAirborne = !this.onGround;
+    const impactSpeed = -this.velocity.y;
     this.onGround = result.onGround;
+    if (wasAirborne && this.onGround && impactSpeed > 6) this.avatar?.playOnce("land");
 
     if (result.hitAxis === "y") this.velocity.y = 0;
     if (result.hitAxis === "x") this.velocity.x = 0;

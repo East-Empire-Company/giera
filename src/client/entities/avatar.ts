@@ -1,3 +1,4 @@
+import { detailCharacter, type CharacterKind } from "./character-detail";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
@@ -12,6 +13,16 @@ export const ANIM_MAP: Record<AvatarMotion, string[]> = {
   sprint: ["Running_A", "Running_B"],
   jump: ["Jump_Start", "Jump_Full_Short", "Jump_Idle"],
   mine: ["Use_Item", "Hit_A", "Interact"],
+};
+
+export type AvatarOneShot = "place" | "craft" | "pickup" | "land" | "hit";
+
+export const ONE_SHOT_MAP: Record<AvatarOneShot, string[]> = {
+  place: ["Interact", "Use_Item"],
+  craft: ["Use_Item", "Interact"],
+  pickup: ["PickUp", "Interact"],
+  land: ["Jump_Land"],
+  hit: ["Hit_A", "Throw"],
 };
 
 export function resolveClip(candidates: string[], available: string[]): string | null {
@@ -43,10 +54,26 @@ export class Avatar {
   private requested: AvatarMotion = "idle";
   private frozen = false;
 
+  private life = 0;
+  private static count = 0;
+  private readonly phase = (Avatar.count++ * 2.399963) % 6.28;
+  private oneShot?: THREE.AnimationAction;
+  private readonly bones: { spine?: THREE.Bone; chest?: THREE.Bone; head?: THREE.Bone; hips?: THREE.Bone; armL?: THREE.Bone; armR?: THREE.Bone } = {};
+
   private constructor(object: THREE.Group, animations: THREE.AnimationClip[]) {
     this.object = object;
     this.mixer = new THREE.AnimationMixer(object);
     for (const clip of animations) this.actions[clip.name.toLowerCase()] = this.mixer.clipAction(clip);
+    object.traverse((o) => {
+      if (!(o instanceof THREE.Bone)) return;
+      const n = o.name.toLowerCase();
+      if (n === "spine") this.bones.spine = o;
+      else if (n === "chest") this.bones.chest = o;
+      else if (n === "head") this.bones.head = o;
+      else if (n === "hips") this.bones.hips = o;
+      else if (n === "upperarm.l") this.bones.armL = o;
+      else if (n === "upperarm.r") this.bones.armR = o;
+    });
     this.setMotion("idle");
   }
 
@@ -76,6 +103,8 @@ export class Avatar {
       };
       object.material = Array.isArray(object.material) ? object.material.map(tint) : tint(object.material);
     });
+    const kind: CharacterKind = id === "playerOne" ? "ziemek" : id === "playerTwo" ? "gniewko" : "generic";
+    detailCharacter(model.scene, kind, clothing);
     return new Avatar(model.scene, [...model.animations, ...animGltfs.flatMap((gltf) => gltf.animations)]);
   }
 
@@ -89,6 +118,10 @@ export class Avatar {
 
   setMotion(motion: AvatarMotion): void {
     this.requested = motion;
+    if (this.oneShot) {
+      this.motion = motion;
+      return;
+    }
     if (motion === this.motion && this.active?.isRunning()) return;
     this.motion = motion;
     const clipName = resolveClip(ANIM_MAP[motion], Object.keys(this.actions));
@@ -117,6 +150,51 @@ export class Avatar {
   update(deltaSeconds: number): void {
     if (this.frozen) return;
     this.mixer.update(deltaSeconds);
+    this.layerLife(deltaSeconds);
+  }
+
+  private layerLife(deltaSeconds: number): void {
+    this.life += deltaSeconds;
+    const t = this.life + this.phase;
+    const amp = this.motion === "idle" && !this.oneShot ? 1 : this.motion === "walk" ? 0.35 : 0.2;
+    const b = this.bones;
+    if (b.spine) b.spine.rotation.x += Math.sin(t * 1.7) * 0.02 * amp;
+    if (b.chest) {
+      b.chest.rotation.x += Math.sin(t * 1.7 + 0.5) * 0.025 * amp;
+      b.chest.rotation.y += Math.sin(t * 0.45) * 0.03 * amp;
+    }
+    if (b.head) {
+      b.head.rotation.y += Math.sin(t * 0.5) * 0.12 * amp + Math.sin(t * 1.3) * 0.02 * amp;
+      b.head.rotation.x += Math.sin(t * 0.8 + 1.0) * 0.04 * amp;
+      b.head.rotation.z += Math.sin(t * 0.37) * 0.02 * amp;
+    }
+    if (b.hips) {
+      b.hips.rotation.z += Math.sin(t * 0.6) * 0.035 * amp;
+      b.hips.position.y += Math.sin(t * 1.7) * 0.004 * amp;
+    }
+    if (b.armL) b.armL.rotation.x += Math.sin(t * 1.7 + 0.8) * 0.03 * amp;
+    if (b.armR) b.armR.rotation.x += Math.sin(t * 1.7 + 1.6) * 0.03 * amp;
+  }
+
+  playOnce(motion: AvatarOneShot): void {
+    const clipName = resolveClip(ONE_SHOT_MAP[motion], Object.keys(this.actions));
+    if (!clipName || this.frozen) return;
+    const next = this.actions[clipName];
+    next.reset();
+    next.setLoop(THREE.LoopOnce, 1);
+    next.clampWhenFinished = false;
+    next.play();
+    if (this.active && this.active !== next) this.active.crossFadeTo(next, 0.1, true);
+    this.oneShot = next;
+    this.active = next;
+    const onDone = (event: { action: THREE.AnimationAction }): void => {
+      if (event.action !== next) return;
+      this.mixer.removeEventListener("finished", onDone as never);
+      this.oneShot = undefined;
+      this.active = undefined;
+      this.setMotion(this.motion);
+    };
+    this.mixer.addEventListener("finished", onDone as never);
   }
 
   dispose(): void {

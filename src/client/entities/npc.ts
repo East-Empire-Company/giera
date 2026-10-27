@@ -184,7 +184,7 @@ export class NPCInstance {
     return avatar;
   }
 
-  update(delta: number, terrainYAt?: (x: number, z: number) => number): void {
+  update(delta: number, terrainYAt?: (x: number, z: number) => number, isSolid?: (x: number, y: number, z: number) => boolean): void {
     this.avatar?.update(delta);
     this.animTime += delta;
     if (this.customObject) {
@@ -195,7 +195,7 @@ export class NPCInstance {
       }
     }
     if (this.def.id === "papuga") return;
-    this.updateWander(delta, terrainYAt);
+    this.updateWander(delta, terrainYAt, isSolid);
   }
 
   walkTo(x: number, z: number): void {
@@ -210,8 +210,9 @@ export class NPCInstance {
     this.wanderWait = 4 + this.rng() * 8;
   }
 
-  private updateWander(delta: number, terrainYAt?: (x: number, z: number) => number): void {
+  private updateWander(delta: number, terrainYAt?: (x: number, z: number) => number, isSolid?: (x: number, y: number, z: number) => boolean): void {
     if (this.wanderState === "idle") {
+      this.avatar?.setMotion("idle");
       this.wanderWait -= delta;
       if (this.wanderWait > 0) return;
       const angle = this.rng() * Math.PI * 2;
@@ -222,6 +223,7 @@ export class NPCInstance {
         this.home.z + Math.sin(angle) * dist
       );
       this.wanderState = "walk";
+      this.avatar?.setMotion("walk");
       return;
     }
     const dx = this.wanderTarget.x - this.position.x;
@@ -229,11 +231,23 @@ export class NPCInstance {
     const distSq = dx * dx + dz * dz;
     if (distSq < 0.02) {
       this.wanderState = "idle";
+      this.avatar?.setMotion("idle");
       this.wanderWait = 4 + this.rng() * 8;
       return;
     }
     const dist = Math.sqrt(distSq);
     const step = Math.min(1.2 * delta, dist);
+    if (isSolid) {
+      const probeX = this.position.x + (dx / dist) * (step + 0.45);
+      const probeZ = this.position.z + (dz / dist) * (step + 0.45);
+      const feet = Math.floor(this.position.y);
+      if (isSolid(Math.floor(probeX), feet, Math.floor(probeZ)) || isSolid(Math.floor(probeX), feet + 1, Math.floor(probeZ))) {
+        this.wanderState = "idle";
+        this.avatar?.setMotion("idle");
+        this.wanderWait = 1 + this.rng() * 3;
+        return;
+      }
+    }
     this.position.x += (dx / dist) * step;
     this.position.z += (dz / dist) * step;
     if (terrainYAt) this.position.y = terrainYAt(this.position.x, this.position.z) + 1;
@@ -254,8 +268,8 @@ export class NPCManager {
     );
   }
 
-  updateAll(delta: number, terrainYAt?: (x: number, z: number) => number): void {
-    for (const npc of this.npcs) npc.update(delta, terrainYAt);
+  updateAll(delta: number, terrainYAt?: (x: number, z: number) => number, isSolid?: (x: number, y: number, z: number) => boolean): void {
+    for (const npc of this.npcs) npc.update(delta, terrainYAt, isSolid);
   }
 
   getNearestNPC(x: number, y: number, z: number, maxDist = 3.0): NPCInstance | null {

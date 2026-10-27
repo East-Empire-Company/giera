@@ -21,6 +21,7 @@ import {
   type Texture,
   type Scene,
 } from "three";
+import type { GameplayVfxTextures } from "../effects/gameplay-vfx";
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import { daylightAt } from "./day-cycle";
@@ -33,6 +34,7 @@ export type RenderAssets = {
   clouds: Texture;
   sideClouds: Texture;
   environment: Texture;
+  particles: GameplayVfxTextures;
 };
 
 function nearestTexture(texture: Texture, colorSpace: typeof SRGBColorSpace | typeof NoColorSpace): Texture {
@@ -59,7 +61,7 @@ function linearTexture(texture: Texture, colorSpace: typeof SRGBColorSpace | typ
 
 export async function loadRenderAssets(renderer: WebGLRenderer): Promise<RenderAssets> {
   const loader = new TextureLoader();
-  const [atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, hdr] = await Promise.all([
+  const [atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, hdr, dirt01, dirt02, spark01, smoke01, star01] = await Promise.all([
     loader.loadAsync("/assets/textures/atlas.png"),
     loader.loadAsync("/assets/textures/atlas-normal.png"),
     loader.loadAsync("/assets/textures/atlas-orm.png"),
@@ -67,7 +69,14 @@ export async function loadRenderAssets(renderer: WebGLRenderer): Promise<RenderA
     loader.loadAsync("/assets/sky/clouds.png"),
     loader.loadAsync("/assets/sky/skybox_sideClouds.png"),
     new HDRLoader().loadAsync("/assets/sky/kloofendal_48d_partly_cloudy_2k.hdr"),
+    loader.loadAsync("/assets/particles/dirt_01.png"),
+    loader.loadAsync("/assets/particles/dirt_02.png"),
+    loader.loadAsync("/assets/particles/spark_01.png"),
+    loader.loadAsync("/assets/particles/smoke_01.png"),
+    loader.loadAsync("/assets/particles/star_01.png"),
   ]);
+  const particles: GameplayVfxTextures = { dirt01, dirt02, spark01, smoke01, star01 };
+  for (const texture of Object.values(particles)) texture.colorSpace = SRGBColorSpace;
   linearTexture(atlas, SRGBColorSpace, renderer);
   linearTexture(atlasNormal, NoColorSpace, renderer);
   linearTexture(atlasOrm, NoColorSpace, renderer);
@@ -83,7 +92,7 @@ export async function loadRenderAssets(renderer: WebGLRenderer): Promise<RenderA
   const environment = pmrem.fromEquirectangular(hdr).texture;
   pmrem.dispose();
   hdr.dispose();
-  return { atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, environment };
+  return { atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, environment, particles };
 }
 
 export function createRenderer(canvas: HTMLCanvasElement): WebGLRenderer {
