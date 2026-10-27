@@ -61,23 +61,17 @@ export class RoomState {
   }
 
   setBlock(x: number, y: number, z: number, id: number): void {
-    const key = `${x},${y},${z}`;
-    this.edits.set(key, id);
+    this.edits.set(`${x},${y},${z}`, id);
 
-    // Also update cached chunk if loaded
     const cx = Math.floor(x / CHUNK_SIZE);
+    const cy = Math.floor(y / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
-    const cKey = `${cx},${cz}`;
-    const chunk = this.chunks.get(cKey);
-    if (chunk) {
-      const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-      const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-      const cy = Math.floor(y / CHUNK_SIZE);
-      const ly = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-      if (cy >= 0 && cy < 8) {
-        chunk[getBlockIndex(lx, ly, lz)] = id;
-      }
-    }
+    const chunk = this.chunks.get(`${cx},${cy},${cz}`);
+    if (!chunk) return;
+    const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const ly = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    chunk[getBlockIndex(lx, ly, lz)] = id;
   }
 
   getBlock(x: number, y: number, z: number): number | undefined {
