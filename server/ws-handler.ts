@@ -1,6 +1,6 @@
 import { BLOCK_BY_ID } from "../src/shared/blocks";
 import { CHUNK_SIZE, WORLD_HEIGHT } from "../src/shared/chunk";
-import { encodeBinaryChunkFrame, isValidPlayerSpeed, type ServerMessage } from "../src/shared/lan-protocol";
+import { MAX_PLAYER_SPEED, encodeBinaryChunkFrame, isValidPlayerSpeed, type ServerMessage } from "../src/shared/lan-protocol";
 import type { RoomState } from "./room";
 
 export const DEFAULT_ROOM = "DOM1";
@@ -57,14 +57,23 @@ export function normalizeRoomCode(raw: unknown): string | null {
   return code;
 }
 
-export function createRoomRegistry(maxRooms: number, load: (code: string) => RoomState): RoomRegistry {
+export function createRoomRegistry(
+  maxRooms: number,
+  load: (code: string) => RoomState,
+  onEvict: (code: string, room: RoomState) => void = () => {},
+): RoomRegistry {
   const rooms = new Map<string, RoomState>();
   return {
     get: (code) => rooms.get(code),
     getOrCreate(code) {
       let room = rooms.get(code);
       if (!room) {
-        if (rooms.size >= maxRooms) return undefined;
+        if (rooms.size >= maxRooms) {
+          const idle = [...rooms].find(([, r]) => r.getPlayerCount() === 0);
+          if (!idle) return undefined;
+          onEvict(idle[0], idle[1]);
+          rooms.delete(idle[0]);
+        }
         room = load(code);
         rooms.set(code, room);
       }
@@ -95,7 +104,6 @@ function handleHello(ws: WsSocket, msg: Record<string, unknown>, deps: WsDeps): 
   data.name = name;
   data.joined = true;
   const player = room.addPlayer(data.id, name);
-  ws.subscribe(`room:${code}`);
 
   const welcome: ServerMessage = {
     t: "welcome",
@@ -107,6 +115,7 @@ function handleHello(ws: WsSocket, msg: Record<string, unknown>, deps: WsDeps): 
   ws.send(JSON.stringify(welcome));
   const join: ServerMessage = { t: "join", id: data.id, name };
   deps.publish(`room:${code}`, JSON.stringify(join));
+  ws.subscribe(`room:${code}`);
 }
 
 function handleNeed(ws: WsSocket, msg: Record<string, unknown>, deps: WsDeps): void {
@@ -149,8 +158,9 @@ function handleInput(ws: WsSocket, msg: Record<string, unknown>, deps: WsDeps): 
   if (data.hadInput) {
     const dt = Math.max(0.01, (now - data.lastAcceptTime) / 1000);
     if (!isValidPlayerSpeed(player, { x, y, z }, dt)) return;
-  } else if (Math.hypot(x - player.x, y - player.y, z - player.z) > MAX_FIRST_INPUT_DISTANCE) {
-    return;
+  } else {
+    const reach = MAX_FIRST_INPUT_DISTANCE + MAX_PLAYER_SPEED * Math.max(0, (now - data.lastAcceptTime) / 1000);
+    if (Math.hypot(x - player.x, y - player.y, z - player.z) > reach) return;
   }
   data.hadInput = true;
   data.lastAcceptTime = now;

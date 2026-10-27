@@ -158,6 +158,46 @@ describe("ws hello", () => {
     expect(JSON.parse(d.sent[0] as string).t).toBe("welcome");
     expect(h.room("R1").getPlayerCount()).toBe(2);
   });
+
+  it("subscribes the joining socket only after publishing its join so it never receives its own join", () => {
+    const order: string[] = [];
+    const rooms = createRoomRegistry(4, (code) => new RoomState(code, 1, 2));
+    const deps: WsDeps = { rooms, publish: (_t, p) => order.push(`publish:${JSON.parse(p).t}`), now: () => 0 };
+    const ws: WsSocket = {
+      data: createWsConnection("p1", 0),
+      send: (p) => order.push(`send:${JSON.parse(p as string).t}`),
+      subscribe: () => order.push("subscribe"),
+    };
+    send(ws, deps, hello());
+    expect(order).toEqual(["send:welcome", "publish:join", "subscribe"]);
+  });
+
+  it("evicts an empty room (saving it first) to make space, but never a room with players", () => {
+    const evicted: string[] = [];
+    const rooms = createRoomRegistry(2, (code) => new RoomState(code, 1, 2), (code, room) => {
+      expect(room.getPlayerCount()).toBe(0);
+      evicted.push(code);
+    });
+    const h = harness();
+    const deps: WsDeps = { ...h.deps, rooms };
+    const a = h.connect("a");
+    send(a, deps, hello("R1"));
+    const b = h.connect("b");
+    send(b, deps, hello("R2"));
+
+    const c = h.connect("c");
+    send(c, deps, hello("R3"));
+    expect(c.data.joined).toBe(false);
+    expect(evicted).toEqual([]);
+
+    handleWsClose(a, deps);
+    send(c, deps, hello("R3"));
+    expect(c.data.joined).toBe(true);
+    expect(evicted).toEqual(["R1"]);
+    expect(rooms.get("R1")).toBeUndefined();
+    expect(rooms.get("R2")).toBeDefined();
+    expect(rooms.get("R3")).toBeDefined();
+  });
 });
 
 describe("ws malformed traffic", () => {
@@ -217,6 +257,22 @@ describe("ws input", () => {
     send(ws, h.deps, input(spawn.x + MAX_FIRST_INPUT_DISTANCE, spawn.y, spawn.z));
     expect(h.published).toHaveLength(1);
     expect(ws.data.hadInput).toBe(true);
+  });
+
+  it("lets a first input far from spawn through once enough time has passed to have walked there", () => {
+    const h = harness();
+    const ws = join(h);
+    const spawn = { ...h.room("DOM1").getPlayer("p1")! };
+    const far = MAX_FIRST_INPUT_DISTANCE + MAX_PLAYER_SPEED * 50;
+
+    h.clock.now += 49_000;
+    send(ws, h.deps, input(spawn.x + far, spawn.y, spawn.z));
+    expect(h.published).toEqual([]);
+
+    h.clock.now += 1_001;
+    send(ws, h.deps, input(spawn.x + far, spawn.y, spawn.z));
+    expect(h.published).toHaveLength(1);
+    expect(h.room("DOM1").getPlayer("p1")!.x).toBe(spawn.x + far);
   });
 
   it("accepts a legal move and drops a teleport after the first input", () => {

@@ -35,17 +35,19 @@ function loadOrCreateRoom(normalized: string): RoomState {
   return new RoomState(normalized, Math.floor(Math.random() * 1_000_000) + 1, WORLDGEN_VERSION);
 }
 
-const rooms = createRoomRegistry(MAX_ROOMS, loadOrCreateRoom);
+function saveRoom(code: string, room: RoomState): void {
+  const file = resolve(DATA_DIR, `world-${code}.json`);
+  try {
+    writeFileSync(file, JSON.stringify(room.toJSON(), null, 2), "utf-8");
+  } catch (e) {
+    console.error(`Failed to save room ${code}:`, e);
+  }
+}
+
+const rooms = createRoomRegistry(MAX_ROOMS, loadOrCreateRoom, saveRoom);
 
 function saveAllRooms(): void {
-  for (const [code, room] of rooms.entries()) {
-    const file = resolve(DATA_DIR, `world-${code}.json`);
-    try {
-      writeFileSync(file, JSON.stringify(room.toJSON(), null, 2), "utf-8");
-    } catch (e) {
-      console.error(`Failed to save room ${code}:`, e);
-    }
-  }
+  for (const [code, room] of rooms.entries()) saveRoom(code, room);
 }
 
 setInterval(saveAllRooms, 30_000);
