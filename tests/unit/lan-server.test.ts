@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RoomState } from "../../server/room";
+import { generateChunk } from "../../src/shared/worldgen";
 import { CHUNK_SIZE, decodeRLE, getBlockIndex } from "../../src/shared/chunk";
 
 const cases = [
@@ -86,10 +87,9 @@ describe("RoomState", () => {
     expect(json.edits["5,50,5"]).toBe(3);
   });
 
-  it("generates and encodes chunk RLE on demand", () => {
+  it("serves the worldgen chunk for its seed when there are no edits", () => {
     const room = new RoomState("K7QX", 9999, 2);
-    const rle = room.getChunkRLE(0, 2, 0);
-    expect(rle.length).toBeGreaterThan(0);
+    expect(Array.from(decodeRLE(room.getChunkRLE(0, 2, 0)))).toEqual(Array.from(generateChunk(0, 2, 0, 9999, 2)));
   });
 
   it("round-trips worldgen version and defaults legacy snapshots to v1", () => {
