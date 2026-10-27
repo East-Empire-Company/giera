@@ -146,7 +146,7 @@ export class SkyCycle {
 
     this.hemisphere = new HemisphereLight("#c5e2f4", "#82785f", 0.72);
     scene.add(this.hemisphere);
-    this.fog = new FogExp2("#a9d0e8", 0.0065);
+    this.fog = new FogExp2("#a9d0e8", 0.0038);
     scene.fog = this.fog;
 
     this.cloudLayers = [

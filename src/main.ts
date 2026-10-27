@@ -74,7 +74,7 @@ const message: HTMLElement = messageElement;
 const progress: HTMLElement = progressElement;
 const qa = new URLSearchParams(window.location.search).get("qa") === "1";
 const INTERACT_REACH = 12;
-const VIEW_RADIUS = 14;
+const VIEW_RADIUS = 20;
 
 function chooseSeed(): number {
   const value = new Uint32Array(1);
@@ -107,8 +107,8 @@ async function boot(): Promise<void> {
   updateSeedUrl(seed);
   const renderer = createRenderer(canvas);
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 480);
-  const camera2 = new THREE.PerspectiveCamera(68, (window.innerWidth / 2) / window.innerHeight, 0.1, 480);
+  const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 900);
+  const camera2 = new THREE.PerspectiveCamera(68, (window.innerWidth / 2) / window.innerHeight, 0.1, 900);
   const stats: GameStats = { fps: 0, drawCalls: 0, chunkCount: 0 };
   const assets = await loadRenderAssets(renderer);
   scene.environment = assets.environment;
