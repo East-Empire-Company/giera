@@ -12,7 +12,7 @@ export type ChunkMesh = {
   indices: Uint32Array;
   groups: MeshGroup[];
 };
-type Face = { tile: AtlasTile; sign: number; ao0: number; ao1: number; ao2: number; ao3: number; key: string; smooth: boolean };
+type Face = { tile: AtlasTile; sign: number; ao0: number; ao1: number; ao2: number; ao3: number; key: string; smooth: boolean; leaf: boolean };
 type TileMesh = { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; indices: number[] };
 
 const AXES = [
@@ -53,6 +53,59 @@ export function smoothGroundOffset(getBlock: (x: number, y: number, z: number) =
   const visual = h(0, 0) * (1 - fx) * (1 - fz) + h(1, 0) * fx * (1 - fz) + h(0, 1) * (1 - fx) * fz + h(1, 1) * fx * fz;
   return visual - top;
 }
+const LEAF_ID = 8;
+
+export function roundLeafVertex(
+  getBlock: (x: number, y: number, z: number) => number,
+  x: number,
+  y: number,
+  z: number,
+  fnx: number,
+  fny: number,
+  fnz: number,
+  origin: readonly number[] = [0, 0, 0]
+): { x: number; y: number; z: number; nx: number; ny: number; nz: number } {
+  let n = 0;
+  let sx = 0;
+  let sy = 0;
+  let sz = 0;
+  for (let dx = -1; dx <= 0; dx++) for (let dy = -1; dy <= 0; dy++) for (let dz = -1; dz <= 0; dz++) {
+    if (getBlock(x + dx, y + dy, z + dz) === LEAF_ID) {
+      n++;
+      sx += x + dx + 0.5;
+      sy += y + dy + 0.5;
+      sz += z + dz + 0.5;
+    }
+  }
+  if (n === 0 || n === 8) return { x, y, z, nx: fnx, ny: fny, nz: fnz };
+  const cx = sx / n;
+  const cy = sy / n;
+  const cz = sz / n;
+  const k = Math.min(0.5, 0.1 * (8 - n));
+  const jit = (a: number, b: number, c: number): number => {
+    let h = Math.imul(a, 374761393) ^ Math.imul(b, 668265263) ^ Math.imul(c, 2147483647);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return (((h ^ (h >>> 16)) >>> 0) / 4294967295 - 0.5) * 0.3;
+  };
+  const wx = x + origin[0];
+  const wy = y + origin[1];
+  const wz = z + origin[2];
+  const px = x + (cx - x) * k + jit(wx, wy, wz);
+  const py = y + (cy - y) * k + jit(wy, wz, wx);
+  const pz = z + (cz - z) * k + jit(wz, wx, wy);
+  let bx = px - cx;
+  let by = py - cy;
+  let bz = pz - cz;
+  const bl = Math.hypot(bx, by, bz) || 1;
+  bx /= bl; by /= bl; bz /= bl;
+  let nx = bx * 0.75 + fnx * 0.25;
+  let ny = by * 0.75 + fny * 0.25;
+  let nz = bz * 0.75 + fnz * 0.25;
+  const nl = Math.hypot(nx, ny, nz) || 1;
+  nx /= nl; ny /= nl; nz /= nl;
+  return { x: px, y: py, z: pz, nx, ny, nz };
+}
+
 export function meshChunk(input: {
   data: Uint8Array;
   cx: number;
@@ -90,9 +143,19 @@ export function meshChunk(input: {
       const y = baseY + (axis.u === 1 ? uCoord : axis.v === 1 ? vCoord : 0);
       const z = baseZ + (axis.u === 2 ? uCoord : axis.v === 2 ? vCoord : 0);
       const vy = face.smooth ? smoothHeight(x, y, z) : y;
-      mesh.positions.push(x, vy, z);
-      mesh.normals.push(axis.normal === 0 ? face.sign : 0, axis.normal === 1 ? face.sign : 0, axis.normal === 2 ? face.sign : 0);
-      mesh.uvs.push(uCoord, vCoord);
+      let vpx = x;
+      let vpy = vy;
+      let vpz = z;
+      let vnx = axis.normal === 0 ? face.sign : 0;
+      let vny = axis.normal === 1 ? face.sign : 0;
+      let vnz = axis.normal === 2 ? face.sign : 0;
+      if (face.leaf) {
+        const r = roundLeafVertex(localBlock, x, y, z, vnx, vny, vnz, origin);
+        vpx = r.x; vpy = r.y; vpz = r.z; vnx = r.nx; vny = r.ny; vnz = r.nz;
+      }
+      mesh.positions.push(vpx, vpy, vpz);
+      mesh.normals.push(vnx, vny, vnz);
+      mesh.uvs.push(face.leaf ? uCoord * 3 : uCoord, face.leaf ? vCoord * 3 : vCoord);
       let shade = face.ao0;
       if (face.sign > 0) {
         if (i === 1) shade = face.ao1;
@@ -169,8 +232,9 @@ export function meshChunk(input: {
               else ao3 = shade;
             }
             const smoothBlock = blockId === 4 || blockId === 5 || blockId === 6;
-            const key = `${blockId}:${tile.id}:${sign}:${ao0.toFixed(3)},${ao1.toFixed(3)},${ao2.toFixed(3)},${ao3.toFixed(3)}${smoothBlock ? `@${px},${py},${pz}` : ""}`;
-            mask[u + CHUNK_SIZE * v] = { tile, sign, ao0, ao1, ao2, ao3, key, smooth: smoothBlock };
+            const leaf = blockId === 8;
+            const key = `${blockId}:${tile.id}:${sign}:${ao0.toFixed(3)},${ao1.toFixed(3)},${ao2.toFixed(3)},${ao3.toFixed(3)}${smoothBlock || leaf ? `@${px},${py},${pz}` : ""}`;
+            mask[u + CHUNK_SIZE * v] = { tile, sign, ao0, ao1, ao2, ao3, key, smooth: smoothBlock, leaf };
           }
         }
         for (let v = 0; v < CHUNK_SIZE; v++) {

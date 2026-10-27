@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BLOCK_ID } from "../../src/shared/blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, getBlockIndex } from "../../src/shared/chunk";
-import { meshChunk, smoothGroundOffset, smoothVertexHeight } from "../../src/shared/mesher";
+import { meshChunk, roundLeafVertex, smoothGroundOffset, smoothVertexHeight } from "../../src/shared/mesher";
 
 const atlas: Record<string, { id: number; uv: readonly [number, number, number, number] }> = {
   stone: { id: 0, uv: [0, 0, 1, 1] },
@@ -74,5 +74,24 @@ describe("smooth ground height", () => {
   it("is zero over non-smooth blocks and keeps vertices level without neighbours", () => {
     expect(smoothGroundOffset(() => BLOCK_ID.stone, 0.5, 0.5, 1)).toBe(0);
     expect(smoothVertexHeight(() => 0, 5, 5, 5)).toBe(5);
+  });
+});
+
+describe("rounded leaf canopies", () => {
+  const cube = (x: number, y: number, z: number): number => (x >= 0 && x < 3 && y >= 0 && y < 3 && z >= 0 && z < 3 ? BLOCK_ID.oak_leaves : 0);
+  it("pulls an exposed corner vertex inward and leaves an enclosed vertex alone", () => {
+    const corner = roundLeafVertex(cube, 0, 0, 0, -1, 0, 0);
+    expect(corner.x).toBeGreaterThan(0);
+    expect(corner.y).toBeGreaterThan(0);
+    expect(Math.hypot(corner.nx, corner.ny, corner.nz)).toBeCloseTo(1, 6);
+    expect(roundLeafVertex(cube, 1, 1, 1, 0, 0, 0)).toMatchObject({ x: 1, y: 1, z: 1 });
+    expect(roundLeafVertex(() => 0, 5, 5, 5, 0, 1, 0)).toMatchObject({ x: 5, y: 5, z: 5 });
+  });
+  it("keeps the canopy mesh un-merged so every vertex can round", () => {
+    const data = new Uint8Array(CHUNK_VOLUME);
+    for (let x = 1; x < 4; x++) data[getBlockIndex(x, 1, 1)] = BLOCK_ID.oak_leaves;
+    const leafAtlas = { ...atlas, ginkgo_leaves: { id: 4, uv: [0, 0, 1, 1] as const } };
+    const mesh = meshChunk({ data, cx: 0, cy: 0, cz: 0, getBlock: () => 0, atlas: leafAtlas });
+    expect(mesh.positions.length / 3).toBe(14 * 4);
   });
 });

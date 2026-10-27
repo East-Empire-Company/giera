@@ -56,7 +56,7 @@ export function createTileMaterials(
       aoMap: water || glass ? null : atlasOrm,
       roughnessMap: water || glass ? null : atlasOrm,
       vertexColors: true,
-      color: ore ? new THREE.Color(ore.color) : new THREE.Color(0xffffff),
+      color: ore ? new THREE.Color(ore.color) : new THREE.Color(name === "ginkgo_leaves" ? 0x8fe070 : 0xffffff),
       roughness: water ? 0.08 : glass ? 0.05 : ore ? ore.roughness : 1,
       metalness: ore ? ore.metalness : 0,
       transparent: glass || water,
