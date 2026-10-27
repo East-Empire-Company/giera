@@ -78,6 +78,10 @@ export class RoomState {
     return this.edits.get(`${x},${y},${z}`);
   }
 
+  getEditCount(): number {
+    return this.edits.size;
+  }
+
   getChunkRLE(cx: number, cy: number, cz: number): Uint8Array {
     const key = `${cx},${cy},${cz}`;
     let data = this.chunks.get(key);
