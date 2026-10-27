@@ -129,9 +129,9 @@ export class GameHUD {
     // Music track button
     const musicBtn = document.createElement("button");
     musicBtn.className = "hud-music-btn";
-    musicBtn.textContent = "🎵 Drift Phonk";
+    musicBtn.textContent = "🎵 Sigma Phonk";
     musicBtn.addEventListener("click", () => {
-      const next = options.onCycleMusic?.() ?? "Drift Phonk";
+      const next = options.onCycleMusic?.() ?? "Sigma Phonk";
       musicBtn.textContent = `🎵 ${next}`;
     });
     this.container.appendChild(musicBtn);

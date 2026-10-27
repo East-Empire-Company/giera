@@ -301,6 +301,14 @@ must(
   })
 );
 
+await step("elevenlabs voice secret", () => {
+  const exists = run("kubectl", ["-n", NAMESPACE, "get", "secret", "elevenlabs-auth"]).ok;
+  if (exists) return { ok: true, detail: "exists" };
+  const key = process.env.ELEVEN_LABS_API_KEY ?? "";
+  if (!key) return { ok: true, detail: "ELEVEN_LABS_API_KEY not set; NPCs will use the browser voice fallback" };
+  const res = run("kubectl", ["-n", NAMESPACE, "create", "secret", "generic", "elevenlabs-auth", "--from-literal=ELEVEN_LABS_API_KEY=" + key]);
+  return { ok: res.ok, detail: res.out };
+});
 must(
   await step("tailscale acl tag + funnel", async () => {
     const res = await ensureTagFunnel();
@@ -344,16 +352,23 @@ must(
 );
 
 must(
-  await step("public url serves the game", async () => {
-    for (let attempt = 1; attempt <= 12; attempt++) {
-      const res = await fetch(PUBLIC_URL, { redirect: "follow" });
-      if (res.ok) {
-        const body = await res.text();
-        return { ok: body.includes("<html"), detail: `HTTP ${res.status} (attempt ${attempt})` };
+  await step("public url serves the game (via public DNS, outside the tailnet)", async () => {
+    const host = new URL(PUBLIC_URL).hostname;
+    let lastDetail = "";
+    for (let attempt = 1; attempt <= 18; attempt++) {
+      const doh = await fetch(`https://cloudflare-dns.com/dns-query?name=${host}&type=A`, { headers: { accept: "application/dns-json" } })
+        .then((r) => r.json() as Promise<{ Answer?: { type: number; data: string }[] }>)
+        .catch(() => ({ Answer: [] as { type: number; data: string }[] }));
+      const ips = (doh.Answer ?? []).filter((a) => a.type === 1).map((a) => a.data);
+      for (const ip of ips) {
+        const res = run("curl", ["-s", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}", "--resolve", `${host}:443:${ip}`, PUBLIC_URL]);
+        lastDetail = `${ip} -> HTTP ${res.out.trim() || "no response"}`;
+        if (res.out.trim() === "200") return { ok: true, detail: `${lastDetail} (attempt ${attempt})` };
       }
+      if (!ips.length) lastDetail = "public DNS returned no A record";
       await new Promise((r) => setTimeout(r, 5000));
     }
-    return { ok: false, detail: `${PUBLIC_URL} did not serve the game` };
+    return { ok: false, detail: `${PUBLIC_URL} not reachable from the public internet: ${lastDetail}` };
   })
 );
 

@@ -20,6 +20,7 @@ import { pushOutOfCylinders } from "./shared/entity-collision";
 import { smoothGroundOffset } from "./shared/mesher";
 import { collideCamera } from "./shared/camera-collision";
 import { pickViewRadius } from "./shared/view-radius";
+import { lookGain } from "./shared/look-sensitivity";
 import { GameplayVfx } from "./client/effects/gameplay-vfx";
 import { createRenderer, loadRenderAssets, SkyCycle } from "./client/render/renderer";
 import { getSplitViewports, SplitScreenManager } from "./client/render/split-screen";
@@ -94,13 +95,41 @@ function showBootError(error: unknown): void {
   const statusEl = document.querySelector<HTMLElement>("#boot-status");
   const msgEl = document.querySelector<HTMLElement>("#boot-message");
   if (statusEl && msgEl) {
+    statusEl.classList.remove("boot-ready");
     statusEl.classList.add("boot-error");
-    msgEl.textContent = "Nie udało się przygotować świata. Odśwież stronę, aby spróbować ponownie.";
+    msgEl.textContent = "Nie udało się wczytać gry. Sprawdź internet i spróbuj ponownie.";
+    if (!statusEl.querySelector(".boot-retry")) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "boot-retry";
+      retry.textContent = "↻ Spróbuj ponownie";
+      retry.addEventListener("click", () => window.location.reload());
+      statusEl.appendChild(retry);
+    }
   }
   console.error(error);
 }
 
 async function boot(): Promise<void> {
+  const playlist = [
+    { id: "sigma_protocol", name: "Sigma Phonk" },
+    { id: "drift_phonk", name: "Drift Phonk" },
+    { id: "combat_phonk", name: "Combat Phonk" },
+    { id: "adventure_island", name: "Adventure" },
+    { id: "little_farm", name: "Little Farm" },
+  ];
+  let currentTrackIndex = 0;
+  const audio = new AudioManager();
+  if (!qa) {
+    const startMusic = (): void => void audio.playMusic(playlist[currentTrackIndex].id).catch(() => {});
+    startMusic();
+    const unlockEvents = ["pointerdown", "keydown", "touchstart"] as const;
+    const unlockMusic = (): void => {
+      for (const type of unlockEvents) window.removeEventListener(type, unlockMusic);
+      startMusic();
+    };
+    for (const type of unlockEvents) window.addEventListener(type, unlockMusic, { passive: true });
+  }
   const saved = await loadGameState();
   const urlHasSeed = new URLSearchParams(window.location.search).has("seed");
   const seed = urlHasSeed ? chooseSeed() : saved?.seed ?? chooseSeed();
@@ -111,7 +140,10 @@ async function boot(): Promise<void> {
   const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 900);
   const camera2 = new THREE.PerspectiveCamera(68, (window.innerWidth / 2) / window.innerHeight, 0.1, 900);
   const stats: GameStats = { fps: 0, drawCalls: 0, chunkCount: 0 };
-  const assets = await loadRenderAssets(renderer);
+  const assets = await loadRenderAssets(renderer, (done, total) => {
+    progress.style.width = `${Math.min(100, (done / total) * 20)}%`;
+    message.textContent = `Wczytujemy zasoby: ${done} / ${total}`;
+  });
   scene.environment = assets.environment;
   let lanClient: LanClient | null = null;
   const crackTexture = new THREE.TextureLoader().load("/assets/textures/crackover.png");
@@ -147,14 +179,6 @@ async function boot(): Promise<void> {
   const tycoonY = surfaceHeight(-3, 7, seed);
   const tycoon = new TycoonManager({ x: -3, y: tycoonY, z: 7 }, scene);
 
-  const playlist = [
-    { id: "drift_phonk", name: "Drift Phonk" },
-    { id: "sigma_protocol", name: "Sigma Phonk" },
-    { id: "combat_phonk", name: "Combat Phonk" },
-    { id: "adventure_island", name: "Adventure" },
-    { id: "little_farm", name: "Little Farm" },
-  ];
-  let currentTrackIndex = 0;
   const splitScreen = new SplitScreenManager(false);
   const inventory = saved?.inventory
     ? GameInventory.fromJSON(saved.inventory)
@@ -239,7 +263,6 @@ async function boot(): Promise<void> {
 
   const sky = new SkyCycle(scene, assets);
   const postfx = new PostFX(renderer, scene, camera, window.innerWidth, window.innerHeight);
-  const audio = new AudioManager();
   const qaState = { simTime: 0, frame: 0, events: [] as { ev: string; id?: string; t: number }[] };
   if (qa) {
     const origPlay = audio.play.bind(audio);
@@ -351,6 +374,10 @@ async function boot(): Promise<void> {
   const speakNpc = (npcId: string, name: string, text: string): void => {
     hud.showNpcSpeech(npcId, name, text);
     audio.play("npc_chat_pop", { volume: 0.5 });
+    if (qa) return;
+    const speaker = npcManager.npcs.find((m) => m.def.id === npcId);
+    const distance = speaker ? Math.hypot(speaker.position.x - player.position.x, speaker.position.z - player.position.z) : 0;
+    void audio.speak(npcId, text, Math.max(0, 1 - distance / 40)).catch(() => {});
   };
 
   const rememberNpcExchange = (npcId: string, userText: string, assistantText: string): void => {
@@ -466,7 +493,8 @@ async function boot(): Promise<void> {
 
   window.addEventListener("mousemove", (e) => {
     if (document.pointerLockElement === canvas) {
-      player.rotateCamera(e.movementX * 0.0025, e.movementY * 0.0025);
+      const gain = lookGain(e.movementX, e.movementY);
+      player.rotateCamera(e.movementX * gain, e.movementY * gain);
     }
   });
   window.addEventListener("wheel", (e) => {

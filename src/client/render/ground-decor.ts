@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { makeRng } from "../../shared/rng";
+import { withRetry } from "../../shared/retry";
 
 export type ScatterKind = "tuft" | "flower" | "rock" | "mushroom";
 
@@ -16,7 +17,7 @@ function loadProp(file: string): Promise<PropPart[]> {
   let cached = propCache.get(file);
   if (!cached) {
     cached = (async () => {
-      const gltf = await new GLTFLoader().loadAsync(`/assets/models/props/${file}`);
+      const gltf = await withRetry(() => new GLTFLoader().loadAsync(`/assets/models/props/${file}`));
       gltf.scene.updateMatrixWorld(true);
       const parts: PropPart[] = [];
       const box = new THREE.Box3();

@@ -11,6 +11,8 @@ import { RoomState, type WorldSnapshot } from "./room";
 import { WORLDGEN_VERSION } from "../src/shared/worldgen";
 import { NPC_ALLOWED_TOOLS as NPC_TOOLS } from "./npc-bridge";
 import { handleNpcReason } from "./npc-reason";
+import { handleNpcTts } from "./npc-tts";
+import { serveStatic } from "./static";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_DIR = resolve(process.env.GIERA_DATA_DIR ?? "server/data");
@@ -82,6 +84,7 @@ for (const npcId of Object.keys(NPC_TOOLS)) {
 
 const server = Bun.serve<WsData>({
   port: PORT,
+  idleTimeout: 60,
   fetch(req, server) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
@@ -103,15 +106,11 @@ const server = Bun.serve<WsData>({
       return handleNpcReason(req);
     }
 
-    // Static assets from dist
-    let filePath = resolve("dist", url.pathname.slice(1));
-    if (!existsSync(filePath) || url.pathname === "/") {
-      filePath = resolve("dist", "index.html");
+    if (url.pathname === "/npc/tts") {
+      return handleNpcTts(req);
     }
-    if (existsSync(filePath)) {
-      return new Response(Bun.file(filePath));
-    }
-    return new Response("Not found", { status: 404 });
+
+    return serveStatic(req, "dist");
   },
   websocket: {
     open(ws) {

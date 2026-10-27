@@ -39,6 +39,8 @@ export class AudioManager {
   private readonly buffers = new Map<string, Promise<AudioBuffer | null>>();
   private readonly sources = new Set<AudioBufferSourceNode>();
   private currentMusic?: { id: string; source: AudioBufferSourceNode; gain: GainNode };
+  private wantedMusic?: string;
+  private voiceBusyUntil = 0;
 
   constructor() {
     Object.assign(this.paths, VOICE_PATHS);
@@ -104,9 +106,12 @@ export class AudioManager {
   }
 
   async playMusic(id: string): Promise<void> {
+    this.wantedMusic = id;
     if (document.hidden || this.currentMusic?.id === id) return;
     const context = await this.unlock();
+    if (this.wantedMusic !== id || this.currentMusic?.id === id) return;
     const buffer = await this.loadBuffer(id);
+    if (this.wantedMusic !== id || this.currentMusic?.id === id) return;
     if (!buffer || !this.master) return;
     const now = context.currentTime;
     const source = context.createBufferSource();
@@ -130,5 +135,61 @@ export class AudioManager {
       if (this.currentMusic?.source === source) this.currentMusic = undefined;
     };
     source.start();
+  }
+
+  private duckMusic(seconds: number): void {
+    const music = this.currentMusic;
+    const context = this.context;
+    if (!music || !context) return;
+    const now = context.currentTime;
+    music.gain.gain.cancelScheduledValues(now);
+    music.gain.gain.setValueAtTime(music.gain.gain.value, now);
+    music.gain.gain.linearRampToValueAtTime(0.3, now + 0.25);
+    music.gain.gain.setValueAtTime(0.3, now + seconds);
+    music.gain.gain.linearRampToValueAtTime(1, now + seconds + 0.8);
+  }
+
+  async speak(npcId: string, text: string, volume = 1): Promise<void> {
+    if (document.hidden || volume <= 0.05) return;
+    if (!this.context || this.context.state !== "running" || !this.master) return;
+    const context = this.context;
+    let buffer: AudioBuffer | null = null;
+    try {
+      const response = await fetch("/npc/tts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ npcId, text }),
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (response.ok) buffer = await context.decodeAudioData(await response.arrayBuffer());
+    } catch {
+      buffer = null;
+    }
+    if (!buffer) {
+      this.speakWithBrowserVoice(text, volume);
+      return;
+    }
+    const now = context.currentTime;
+    const startAt = Math.max(now, this.voiceBusyUntil);
+    this.voiceBusyUntil = startAt + buffer.duration + 0.3;
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = buffer;
+    gain.gain.value = Math.min(1, volume);
+    source.connect(gain).connect(this.master);
+    this.sources.add(source);
+    source.onended = () => this.sources.delete(source);
+    source.start(startAt);
+    this.duckMusic(startAt - now + buffer.duration);
+  }
+
+  private speakWithBrowserVoice(text: string, volume: number): void {
+    if (typeof speechSynthesis === "undefined") return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "pl-PL";
+    utterance.volume = Math.min(1, volume);
+    const voice = speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith("pl"));
+    if (voice) utterance.voice = voice;
+    speechSynthesis.speak(utterance);
   }
 }

@@ -25,6 +25,7 @@ import type { GameplayVfxTextures } from "../effects/gameplay-vfx";
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import { daylightAt } from "./day-cycle";
+import { withRetry } from "../../shared/retry";
 
 export type RenderAssets = {
   atlas: Texture;
@@ -33,7 +34,7 @@ export type RenderAssets = {
   waterNormal: Texture;
   clouds: Texture;
   sideClouds: Texture;
-  environment: Texture;
+  environment: Texture | null;
   particles: GameplayVfxTextures;
 };
 
@@ -59,21 +60,33 @@ function linearTexture(texture: Texture, colorSpace: typeof SRGBColorSpace | typ
   return texture;
 }
 
-export async function loadRenderAssets(renderer: WebGLRenderer): Promise<RenderAssets> {
+export async function loadRenderAssets(renderer: WebGLRenderer, onProgress?: (done: number, total: number) => void): Promise<RenderAssets> {
   const loader = new TextureLoader();
+  const total = 12;
+  let done = 0;
+  const tracked = <T>(load: () => Promise<T>): Promise<T> =>
+    withRetry(load).then((value) => {
+      onProgress?.(++done, total);
+      return value;
+    });
+  const tex = (url: string) => tracked(() => loader.loadAsync(url));
   const [atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, hdr, dirt01, dirt02, spark01, smoke01, star01] = await Promise.all([
-    loader.loadAsync("/assets/textures/atlas.png"),
-    loader.loadAsync("/assets/textures/atlas-normal.png"),
-    loader.loadAsync("/assets/textures/atlas-orm.png"),
-    loader.loadAsync("/assets/textures/water-normal.jpg"),
-    loader.loadAsync("/assets/sky/clouds.png"),
-    loader.loadAsync("/assets/sky/skybox_sideClouds.png"),
-    new HDRLoader().loadAsync("/assets/sky/kloofendal_48d_partly_cloudy_2k.hdr"),
-    loader.loadAsync("/assets/particles/dirt_01.png"),
-    loader.loadAsync("/assets/particles/dirt_02.png"),
-    loader.loadAsync("/assets/particles/spark_01.png"),
-    loader.loadAsync("/assets/particles/smoke_01.png"),
-    loader.loadAsync("/assets/particles/star_01.png"),
+    tex("/assets/textures/atlas.png"),
+    tex("/assets/textures/atlas-normal.png"),
+    tex("/assets/textures/atlas-orm.png"),
+    tex("/assets/textures/water-normal.jpg"),
+    tex("/assets/sky/clouds.png"),
+    tex("/assets/sky/skybox_sideClouds.png"),
+    tracked(() => new HDRLoader().loadAsync("/assets/sky/kloofendal_48d_partly_cloudy_2k.hdr")).catch((error) => {
+      console.warn("HDR environment unavailable; continuing without image-based lighting", error);
+      onProgress?.(++done, total);
+      return null;
+    }),
+    tex("/assets/particles/dirt_01.png"),
+    tex("/assets/particles/dirt_02.png"),
+    tex("/assets/particles/spark_01.png"),
+    tex("/assets/particles/smoke_01.png"),
+    tex("/assets/particles/star_01.png"),
   ]);
   const particles: GameplayVfxTextures = { dirt01, dirt02, spark01, smoke01, star01 };
   for (const texture of Object.values(particles)) texture.colorSpace = SRGBColorSpace;
@@ -88,10 +101,13 @@ export async function loadRenderAssets(renderer: WebGLRenderer): Promise<RenderA
     texture.wrapS = RepeatWrapping;
     texture.wrapT = RepeatWrapping;
   }
-  const pmrem = new PMREMGenerator(renderer);
-  const environment = pmrem.fromEquirectangular(hdr).texture;
-  pmrem.dispose();
-  hdr.dispose();
+  let environment: Texture | null = null;
+  if (hdr) {
+    const pmrem = new PMREMGenerator(renderer);
+    environment = pmrem.fromEquirectangular(hdr).texture;
+    pmrem.dispose();
+    hdr.dispose();
+  }
   return { atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, environment, particles };
 }
 

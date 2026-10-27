@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import assetManifest from "../../shared/asset-manifest.json";
+import { withRetry } from "../../shared/retry";
 
 export type PlayerAvatarId = keyof typeof assetManifest.models;
 export type AvatarMotion = "idle" | "walk" | "sprint" | "jump" | "mine";
@@ -85,8 +86,8 @@ export class Avatar {
   ): Promise<Avatar> {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const [model, ...animGltfs] = await Promise.all([
-      loader.loadAsync(`/${assetManifest.models[id]}`),
-      ...ANIM_FILES.map((file) => loader.loadAsync(`/${file}`)),
+      withRetry(() => loader.loadAsync(`/${assetManifest.models[id]}`)),
+      ...ANIM_FILES.map((file) => withRetry(() => loader.loadAsync(`/${file}`))),
     ]);
     const accent = new THREE.Color(accentColor);
     model.scene.scale.setScalar(scale);

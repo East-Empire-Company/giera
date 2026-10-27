@@ -13,8 +13,8 @@ export const SPEC = {
 
   upgradeCostPerTier: 5,
 
-  musicLabels: ["Drift Phonk", "Sigma Phonk", "Combat Phonk", "Adventure", "Little Farm"],
-  musicIdsAfterFirstClick: ["sigma_protocol", "combat_phonk", "adventure_island", "little_farm", "drift_phonk"],
+  musicLabels: ["Sigma Phonk", "Drift Phonk", "Combat Phonk", "Adventure", "Little Farm"],
+  musicIdsAfterFirstClick: ["drift_phonk", "combat_phonk", "adventure_island", "little_farm", "sigma_protocol"],
 
   splitLabelTwoPlayers: "Tryb: 2 Graczy (Ziemek & Gniewko)",
   npcPromptPrefix: "Naciśnij [E]",
