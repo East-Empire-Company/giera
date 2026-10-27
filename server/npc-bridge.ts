@@ -13,20 +13,24 @@ export const NPC_ALLOWED_TOOLS: Record<string, string[]> = {
 };
 
 export function executeNpcClientTool(
+  npcId: string,
   toolName: string,
   params: Record<string, unknown>,
   inventory?: { blocks: Record<string, number>; items: Record<string, number> },
   onQuestUpdate?: (stepId: string) => void
 ): ToolExecutionResult {
-  if (toolName === "give_block") {
-    const blockType = String(params.block_type ?? "");
-    const count = Number(params.count ?? 0);
+  if (!Object.hasOwn(NPC_ALLOWED_TOOLS, npcId) || !NPC_ALLOWED_TOOLS[npcId].includes(toolName)) {
+    return { success: false, message: `NPC ${npcId} nie może użyć narzędzia: ${toolName}` };
+  }
 
-    if (!(ALLOWED_NPC_BLOCKS as readonly string[]).includes(blockType)) {
-      return { success: false, message: `Nieznany lub niedozwolony blok: ${blockType}` };
+  if (toolName === "give_block") {
+    const { block_type: blockType, count } = params;
+
+    if (typeof blockType !== "string" || !(ALLOWED_NPC_BLOCKS as readonly string[]).includes(blockType)) {
+      return { success: false, message: `Nieznany lub niedozwolony blok: ${String(blockType)}` };
     }
-    if (count < 1 || count > 16 || !Number.isInteger(count)) {
-      return { success: false, message: `Niepoprawna liczba bloków: ${count}` };
+    if (typeof count !== "number" || !Number.isInteger(count) || count < 1 || count > 16) {
+      return { success: false, message: `Niepoprawna liczba bloków: ${String(count)}` };
     }
 
     if (inventory) {
@@ -36,10 +40,10 @@ export function executeNpcClientTool(
   }
 
   if (toolName === "give_quest") {
-    const stepId = String(params.step_id ?? "");
+    const stepId = params.step_id;
     const validSteps = ["gather_wood", "craft_planks", "craft_sticks", "find_stone", "craft_tool", "build_house"];
-    if (!validSteps.includes(stepId)) {
-      return { success: false, message: `Nieznany krok zadania: ${stepId}` };
+    if (typeof stepId !== "string" || !validSteps.includes(stepId)) {
+      return { success: false, message: `Nieznany krok zadania: ${String(stepId)}` };
     }
     onQuestUpdate?.(stepId);
     return { success: true, message: `Ustawiono zadanie: ${stepId}` };

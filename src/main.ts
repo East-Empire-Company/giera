@@ -7,7 +7,7 @@ import { PlayerController } from "./client/entities/player";
 import { NPCManager } from "./client/entities/npc";
 import { chatterDelayMs, fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
 import { fallbackLine } from "./shared/npc-fallbacks";
-import { executeNpcClientTool, NPC_ALLOWED_TOOLS } from "../server/npc-bridge";
+import { executeNpcClientTool } from "../server/npc-bridge";
 import { ItemDropManager } from "./client/entities/drops";
 import { TrainingDummy } from "./client/entities/dummy";
 import { GameHUD } from "./client/game/hud";
@@ -359,9 +359,8 @@ async function boot(): Promise<void> {
     args: Record<string, unknown>
   ): string | null => {
     if (!tool) return null;
-    if (!(NPC_ALLOWED_TOOLS[npcId] ?? []).includes(tool)) return null;
     if (tool === "give_quest" && objectives.currentStep.id === String(args.step_id ?? "")) return null;
-    const result = executeNpcClientTool(tool, args, inventory, (stepId) => {
+    const result = executeNpcClientTool(npcId, tool, args, inventory, (stepId) => {
       const idx = OBJECTIVE_STEPS.findIndex((s) => s.id === stepId);
       if (idx >= 0) objectives.setStep(idx);
     });
