@@ -727,7 +727,7 @@ async function boot(): Promise<void> {
 
     const camSolid = (x: number, y: number, z: number): boolean => {
       const id = world.getBlock(x, y, z);
-      return id !== BLOCK_ID.air && id !== BLOCK_ID.water;
+      return id !== BLOCK_ID.air && id !== BLOCK_ID.water && id !== BLOCK_ID.oak_leaves;
     };
     camera.position.copy(player.getCameraPosition(5.5));
     {
