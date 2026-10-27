@@ -155,10 +155,10 @@ class ChunkWorkerPool {
   }
 
   generate(coordinates: Omit<ChunkBuildRequest, "taskId">): Promise<ChunkBuildResponse> {
-    const { promise, resolve, reject } = Promise.withResolvers<ChunkBuildResponse>();
-    this.queue.push({ taskId: this.nextTaskId++, coordinates, resolve, reject });
-    this.dispatch();
-    return promise;
+    return new Promise<ChunkBuildResponse>((resolve, reject) => {
+      this.queue.push({ taskId: this.nextTaskId++, coordinates, resolve, reject });
+      this.dispatch();
+    });
   }
 
   dispose(): void {

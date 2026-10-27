@@ -19,6 +19,7 @@ import { loadGameState, saveGameState } from "./client/persist/db";
 import { pushOutOfCylinders } from "./shared/entity-collision";
 import { smoothGroundOffset } from "./shared/mesher";
 import { collideCamera } from "./shared/camera-collision";
+import { pickViewRadius } from "./shared/view-radius";
 import { GameplayVfx } from "./client/effects/gameplay-vfx";
 import { createRenderer, loadRenderAssets, SkyCycle } from "./client/render/renderer";
 import { getSplitViewports, SplitScreenManager } from "./client/render/split-screen";
@@ -74,7 +75,7 @@ const message: HTMLElement = messageElement;
 const progress: HTMLElement = progressElement;
 const qa = new URLSearchParams(window.location.search).get("qa") === "1";
 const INTERACT_REACH = 12;
-const VIEW_RADIUS = 20;
+const VIEW_RADIUS = pickViewRadius(navigator.userAgent, (navigator as Navigator & { deviceMemory?: number }).deviceMemory);
 
 function chooseSeed(): number {
   const value = new Uint32Array(1);
