@@ -93,7 +93,7 @@ export function isValidPlayerSpeed(
   curr: { x: number; y: number; z: number },
   deltaSeconds: number
 ): boolean {
-  if (deltaSeconds <= 0) return true;
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return false;
   const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y, curr.z - prev.z);
   return dist / deltaSeconds <= MAX_PLAYER_SPEED;
 }
