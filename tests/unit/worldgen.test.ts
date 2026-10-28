@@ -61,9 +61,9 @@ describe("world generation", () => {
   });
 
   it("pins surface height for the trailer seed and a legacy seed", () => {
-    expect(surfaceHeight(0, 0, 424242, 2)).toBe(61);
-    expect(surfaceHeight(3, 5, 424242, 2)).toBe(60);
-    expect(surfaceHeight(-1, 2, 17, 1)).toBe(56);
+    expect(surfaceHeight(0, 0, 424242)).toBe(61);
+    expect(surfaceHeight(3, 5, 424242)).toBe(60);
+    expect(surfaceHeight(-1, 2, 17)).toBe(56);
     expect(generateBlock(0, 61, 0, 424242, 2)).toBe(BLOCK_ID.grass);
   });
 });
