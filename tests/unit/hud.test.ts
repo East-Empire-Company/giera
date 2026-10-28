@@ -38,6 +38,18 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(card?.innerHTML).toContain("X");
   });
 
+  it("releases keyboard focus after a HUD button click so Enter cannot re-trigger it", () => {
+    const inventory = new GameInventory();
+    const objectives = new ObjectiveManager();
+    let toggles = 0;
+    const hud = new GameHUD({ inventory, objectives, onToggleSplitScreen: () => ++toggles % 2 === 1 });
+    hud.modeBtn.focus();
+    expect(document.activeElement).toBe(hud.modeBtn);
+    hud.modeBtn.click();
+    expect(toggles).toBe(1);
+    expect(document.activeElement).not.toBe(hud.modeBtn);
+  });
+
   it("renders visual resource icons and recipe equations in inventory modal", () => {
     const inventory = new GameInventory();
     inventory.addMinedBlock("oak_log", 4);

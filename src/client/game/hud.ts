@@ -71,6 +71,9 @@ export class GameHUD {
       document.body.appendChild(root);
     }
     this.container = root;
+    root.addEventListener("click", (event) => {
+      (event.target as HTMLElement | null)?.closest("button")?.blur();
+    });
 
     // Crosshair
     this.crosshair = document.createElement("div");

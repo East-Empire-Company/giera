@@ -30,4 +30,19 @@ describe("voxel raycast", () => {
     const hit = raycastInteract({ x: 0.2, y: 0.2, z: 0.2 }, { x: 1, y: 0, z: 0 }, 5, (x, y, z) => (x === 0 || x === 2) && y === 0 && z === 0 ? 1 : 0);
     expect(hit).toEqual({ hit: { x: 2, y: 0, z: 0 }, normal: { x: -1, y: 0, z: 0 }, distance: 1.8 });
   });
+
+  it("starts at the head plane so foliage between camera and player cannot block the reach", () => {
+    const world = (x: number, y: number, z: number) => (y === 0 && z === 0 && (x === 2 || x === 7) ? 8 : 0) || (y === 0 && z === 0 && x === 9 ? 7 : 0);
+    const camera = { x: 0.5, y: 0.5, z: 0.5 };
+    const right = { x: 1, y: 0, z: 0 };
+    expect(raycastInteract(camera, right, 12, world)?.hit).toEqual({ x: 2, y: 0, z: 0 });
+    const hit = raycastInteract(camera, right, 12, world, { x: 6, y: 2, z: 0.5 });
+    expect(hit?.hit).toEqual({ x: 7, y: 0, z: 0 });
+    expect(hit?.distance).toBeCloseTo(6.5, 6);
+  });
+
+  it("keeps the original far reach endpoint when skipping to the head plane", () => {
+    const far = (x: number, y: number, z: number) => (y === 0 && z === 0 && x === 13 ? 7 : 0);
+    expect(raycastInteract({ x: 0.5, y: 0.5, z: 0.5 }, { x: 1, y: 0, z: 0 }, 12, far, { x: 6, y: 0.5, z: 0.5 })).toBeNull();
+  });
 });

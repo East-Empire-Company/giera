@@ -190,7 +190,8 @@ async function cameraRay(page: Page): Promise<CameraRay> {
 
 function hitFrom(data: CameraRay): RayHit | null {
   const lookup = new Map(data.blocks.map((b) => [`${b.x},${b.y},${b.z}`, b.id]));
-  return raycastInteract(data.origin, data.dir, INTERACT_REACH, (x, y, z) => lookup.get(`${x},${y},${z}`) ?? 0);
+  const head = { x: data.player.x, y: data.player.y + 1.55, z: data.player.z };
+  return raycastInteract(data.origin, data.dir, INTERACT_REACH, (x, y, z) => lookup.get(`${x},${y},${z}`) ?? 0, head);
 }
 
 function overlapsPlayer(player: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }): boolean {

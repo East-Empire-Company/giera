@@ -202,7 +202,7 @@ async function boot(): Promise<void> {
   const tryPlaceBlock = (): void => {
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
-    const hit = raycastInteract(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z));
+    const hit = raycastInteract(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z), player.getCameraTarget());
     if (hit && hit.distance > 0) {
       const placeX = hit.hit.x + hit.normal.x;
       const placeY = hit.hit.y + hit.normal.y;
@@ -885,7 +885,7 @@ async function boot(): Promise<void> {
     if (activeMining) {
       const dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      const hit = raycastInteract(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z));
+      const hit = raycastInteract(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z), player.getCameraTarget());
       if (hit && hit.distance > 0) {
         const bId = world.getBlock(hit.hit.x, hit.hit.y, hit.hit.z);
         if (bId !== BLOCK_ID.air && bId !== BLOCK_ID.bedrock) {
@@ -961,6 +961,7 @@ async function boot(): Promise<void> {
     } else {
       postfx.renderSolo();
     }
+    fpsFrames++;
     if (now - fpsStart >= 1000) {
       stats.fps = Math.round((fpsFrames * 1000) / (now - fpsStart));
       stats.drawCalls = renderer.info.render.calls;

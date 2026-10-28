@@ -46,9 +46,23 @@ export function raycastVoxels(origin: Vec3, direction: Vec3, maxDistance: number
   }
 }
 
-export function raycastInteract(origin: Vec3, direction: Vec3, maxDistance: number, getBlock: (x: number, y: number, z: number) => number): RayHit | null {
-  const ox = Math.floor(origin.x);
-  const oy = Math.floor(origin.y);
-  const oz = Math.floor(origin.z);
-  return raycastVoxels(origin, direction, maxDistance, (x, y, z) => (x === ox && y === oy && z === oz ? 0 : getBlock(x, y, z)));
+export function raycastInteract(
+  origin: Vec3,
+  direction: Vec3,
+  maxDistance: number,
+  getBlock: (x: number, y: number, z: number) => number,
+  pivot?: Vec3
+): RayHit | null {
+  const length = Math.hypot(direction.x, direction.y, direction.z);
+  if (!Number.isFinite(length) || length === 0) return null;
+  const ux = direction.x / length;
+  const uy = direction.y / length;
+  const uz = direction.z / length;
+  const skip = pivot ? Math.max(0, Math.min(maxDistance, (pivot.x - origin.x) * ux + (pivot.y - origin.y) * uy + (pivot.z - origin.z) * uz)) : 0;
+  const start = { x: origin.x + ux * skip, y: origin.y + uy * skip, z: origin.z + uz * skip };
+  const ox = Math.floor(start.x);
+  const oy = Math.floor(start.y);
+  const oz = Math.floor(start.z);
+  const hit = raycastVoxels(start, direction, maxDistance - skip, (x, y, z) => (x === ox && y === oy && z === oz ? 0 : getBlock(x, y, z)));
+  return hit ? { ...hit, distance: hit.distance + skip } : null;
 }
