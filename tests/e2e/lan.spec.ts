@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { raycastVoxels } from "../../src/shared/raycast";
 
@@ -58,7 +58,7 @@ test("lan: two clients join one room, exchange a block edit, server persists the
   await B.waitForFunction(
     () => {
       const g = (window as unknown as G).__GIERA__;
-      return Math.abs(g.player2.position.x - 9) < 1.5 || Math.abs(g.player2.position.z - 9) < 1.5;
+      return Math.abs(g.player2.position.x - 9) < 1.5 && Math.abs(g.player2.position.z - 9) < 1.5;
     },
     null,
     { timeout: 20_000 }
@@ -173,9 +173,9 @@ test("lan: two clients join one room, exchange a block edit, server persists the
     { timeout: 20_000 }
   );
 
-  await expect
-    .poll(() => existsSync(SAVE_FILE), { timeout: 40_000, intervals: [500] })
-    .toBe(true);
+  await expect.poll(() => existsSync(SAVE_FILE), { timeout: 40_000, intervals: [500] }).toBe(true);
+  const saved = JSON.parse(readFileSync(SAVE_FILE, "utf8")) as { edits?: Record<string, number> };
+  expect(saved.edits?.[`${placed.x},${placed.y},${placed.z}`]).toBe(placed.id);
 
   expect(errorsA).toEqual([]);
   expect(errorsB).toEqual([]);

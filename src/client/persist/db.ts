@@ -21,24 +21,26 @@ export function formatSaveData(state: SavedGameState): string {
 }
 
 function isSavedGameState(data: unknown): data is SavedGameState {
-  if (typeof data !== "object" || data === null) return false;
-  const d = data as Record<string, unknown>;
-  const inv = d.inventory as Record<string, unknown> | undefined;
-  const objectives = d.objectives as Record<string, unknown> | undefined;
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return false;
+  if (!("seed" in data) || !("savedAt" in data) || !("inventory" in data) || !("objectives" in data) || !("edits" in data)) return false;
+  const { seed, savedAt, inventory, objectives, edits } = data;
+  if (typeof seed !== "number" || typeof savedAt !== "string") return false;
+  if (typeof inventory !== "object" || inventory === null || Array.isArray(inventory)) return false;
+  if (typeof objectives !== "object" || objectives === null || Array.isArray(objectives)) return false;
+  if (typeof edits !== "object" || edits === null || Array.isArray(edits)) return false;
+  if (!("hotbar" in inventory) || !("activeSlot" in inventory) || !("blocks" in inventory) || !("items" in inventory)) return false;
+  if (!("stepIndex" in objectives)) return false;
+  const { hotbar, activeSlot, blocks, items } = inventory;
   return (
-    typeof d.seed === "number" &&
-    typeof inv === "object" &&
-    inv !== null &&
-    Array.isArray(inv.hotbar) &&
-    typeof inv.activeSlot === "number" &&
-    typeof inv.blocks === "object" &&
-    inv.blocks !== null &&
-    typeof objectives === "object" &&
-    objectives !== null &&
-    typeof objectives.stepIndex === "number" &&
-    typeof d.edits === "object" &&
-    d.edits !== null &&
-    typeof d.savedAt === "string"
+    Array.isArray(hotbar) &&
+    typeof activeSlot === "number" &&
+    typeof blocks === "object" &&
+    blocks !== null &&
+    !Array.isArray(blocks) &&
+    typeof items === "object" &&
+    items !== null &&
+    !Array.isArray(items) &&
+    typeof objectives.stepIndex === "number"
   );
 }
 

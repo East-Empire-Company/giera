@@ -53,10 +53,10 @@ test.describe("Evidence screenshot generator", () => {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(300);
 
-    // 03-lan-client-b.png (simulate second client joining LAN view)
-    const lanPath = resolve(EVIDENCE_DIR, "03-lan-client-b.png");
-    await page.screenshot({ path: lanPath });
-    expect(existsSync(lanPath)).toBe(true);
-    expect(statSync(lanPath).size).toBeGreaterThan(10_000);
+    const closedPath = resolve(EVIDENCE_DIR, "03-hud-closed.png");
+    await page.screenshot({ path: closedPath });
+    expect(existsSync(closedPath)).toBe(true);
+    expect(statSync(closedPath).size).toBeGreaterThan(10_000);
+    expect(await page.locator(".hud-controls-modal.hud-modal-open").count()).toBe(0);
   });
 });

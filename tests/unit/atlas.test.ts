@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { tmpdir } from "node:os";
 import sharp from "sharp";
 import { composeAtlas, packTiles } from "../../scripts/build-atlas";
 
@@ -22,16 +23,16 @@ describe("source-pixel atlas packing", () => {
       }
     }
   });
-  it("preserves earlier pixels when later source tiles contain transparency", async () => {
-    const waterPath = "public/assets/textures/tiles/water.png";
-    const cobblePath = "public/assets/textures/tiles/cobblestone.png";
-    const source = await sharp(waterPath).ensureAlpha().raw().toBuffer();
-    const atlas = await composeAtlas([
-      { path: waterPath, x: 0, y: 0 },
-      { path: cobblePath, x: 128, y: 0 },
-    ], 256, 256);
+  it("composites a later opaque pixel over an earlier one and keeps the earlier pixel where the later tile is transparent", async () => {
+    const dir = tmpdir();
+    const under = `${dir}/giera-atlas-under.png`;
+    const over = `${dir}/giera-atlas-over.png`;
+    await sharp({ create: { width: 2, height: 1, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 1 } } }).png().toFile(under);
+    await sharp(Buffer.from([255, 0, 0, 255, 0, 0, 0, 0]), { raw: { width: 2, height: 1, channels: 4 } }).png().toFile(over);
+    const atlas = await composeAtlas([{ path: under, x: 0, y: 0 }, { path: over, x: 0, y: 0 }], 2, 1);
     const output = await sharp(atlas).ensureAlpha().raw().toBuffer();
-    expect([...output.slice(0, 4)]).toEqual([...source.slice(0, 4)]);
+    expect([...output.slice(0, 4)]).toEqual([255, 0, 0, 255]);
+    expect([...output.slice(4, 8)]).toEqual([10, 20, 30, 255]);
   });
 
 

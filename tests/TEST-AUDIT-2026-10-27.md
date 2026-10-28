@@ -183,9 +183,9 @@ All pipeline e2e runs use `?qa=1`, so the following are never exercised:
 | F8 | drops magnet test passes without the magnet; unseeded randomness | done this commit |
 | F9 | worldgen lacks golden values for v1/v2 | done this commit |
 | F10 | raycast under-tested | done this commit |
-| F11 | persist IndexedDB path never run; weak schema checks | open |
-| F12 | atlas overlap test cannot fail | open |
-| F13 | Playwright specs circular, skipped in pipeline, or flaky by design | open |
+| F11 | persist IndexedDB path never run; weak schema checks | arrays rejected; IDB path still untested |
+| F12 | atlas overlap test cannot fail | done this commit |
+| F13 | Playwright specs circular, skipped in pipeline, or flaky by design | circular mine-place removed; lan && and save voxel asserted; shots no longer claims a second client. Goldens ratio and waitForTimeout still open |
 | F14 | accept/pipeline gates broken (mechanics regex, goldens copy, gitignored triage, quality OK on 0) | done this commit |
 | F15 | `server/` excluded from coverage; no per-file gates on core files | open |
 | F16 | Many MED/LOW unit-test weaknesses | open |

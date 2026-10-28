@@ -32,14 +32,9 @@ describe("save store", () => {
     vi.unstubAllGlobals();
   });
 
-  it("round-trips a save through the storage fallback", async () => {
+  it("round-trips every save field through the storage fallback", async () => {
     await saveGameState(state);
-
-    const loaded = await loadGameState();
-    expect(loaded?.seed).toBe(424242);
-    expect(loaded?.inventory.activeSlot).toBe(4);
-    expect(loaded?.inventory.chunkEdits["0,0,0"]).toBe(9);
-    expect(loaded?.edits["0,0,0"]).toBe(9);
+    expect(await loadGameState()).toEqual(state);
   });
 
   it("returns null when nothing was saved", async () => {
@@ -61,9 +56,10 @@ describe("save store", () => {
     expect(parseSaveData(JSON.stringify({ seed: 1, inventory: {} }))).toBeNull();
     expect(parseSaveData(JSON.stringify({ seed: 1, inventory: state.inventory, objectives: {} }))).toBeNull();
     expect(parseSaveData(JSON.stringify({ seed: 1, inventory: state.inventory, edits: "nope" }))).toBeNull();
-    expect(
-      parseSaveData(JSON.stringify({ seed: 1, inventory: state.inventory, objectives: state.objectives, edits: state.edits }))
-    ).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, edits: [9] }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, inventory: [state.inventory] }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, inventory: { ...state.inventory, blocks: [1] } }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, inventory: { ...state.inventory, items: [1] } }))).toBeNull();
   });
 
   it("serializes save state to JSON", () => {
