@@ -9,41 +9,62 @@ describe("TycoonManager", () => {
     expect(tycoon.vaultCoins).toBe(0);
   });
 
-  it("drops coins over time into the vault", () => {
+  it("drops exactly one coin per 2.5s at tier 1", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
-    // Advance 3 seconds
-    tycoon.update(3.0, { x: 0, y: 50, z: 0 });
-    expect(tycoon.vaultCoins).toBeGreaterThanOrEqual(1);
+    tycoon.update(2.49, { x: 0, y: 50, z: 0 });
+    expect(tycoon.vaultCoins).toBe(0);
+    tycoon.update(0.02, { x: 0, y: 50, z: 0 });
+    expect(tycoon.vaultCoins).toBe(1);
   });
 
-  it("collects vault coins when player steps on collector pad", () => {
+  it("pays the vault onto the collector pad and empties it", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
-    tycoon.update(3.0, { x: 0, y: 50, z: 0 });
-    const coinsBefore = tycoon.vaultCoins;
-
-    // Step on collector pad at (-3, 50, 6)
+    tycoon.update(2.5, { x: 0, y: 50, z: 0 });
     let collected = 0;
     tycoon.update(0.1, { x: -3, y: 50, z: 6 }, (stars: number) => {
       collected = stars;
     });
-
-    expect(collected).toBe(coinsBefore);
-    expect(tycoon.collectedStars).toBe(coinsBefore);
+    expect(collected).toBe(1);
+    expect(tycoon.collectedStars).toBe(1);
     expect(tycoon.vaultCoins).toBe(0);
   });
 
-  it("purchases upgrade when player with enough stars steps on purchase pad", () => {
+  it("refuses an upgrade the player cannot afford", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
-    tycoon.addStars(10);
-
-    // Step on upgrade pad at (-1, 50, 6) (Cost 5 stars)
+    tycoon.addStars(4);
     let upgraded = false;
     tycoon.update(0.1, { x: -1, y: 50, z: 6 }, () => {}, () => {
       upgraded = true;
     });
+    expect(upgraded).toBe(false);
+    expect(tycoon.dropperTier).toBe(1);
+    expect(tycoon.collectedStars).toBe(4);
+    expect(tycoon.upgradeCost).toBe(5);
+  });
 
-    expect(upgraded).toBe(true);
+  it("charges tier times 5 and raises the next cost", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(10);
+    tycoon.update(0.1, { x: -1, y: 50, z: 6 });
     expect(tycoon.dropperTier).toBe(2);
     expect(tycoon.collectedStars).toBe(5);
+    expect(tycoon.upgradeCost).toBe(10);
+  });
+
+  it("bounces once then waits out the 0.6s cooldown", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    let bounces = 0;
+    const onPad = { x: -5, y: 50, z: 6 };
+    tycoon.update(0.1, onPad, undefined, undefined, () => {
+      bounces++;
+    });
+    tycoon.update(0.2, onPad, undefined, undefined, () => {
+      bounces++;
+    });
+    expect(bounces).toBe(1);
+    tycoon.update(0.5, onPad, undefined, undefined, () => {
+      bounces++;
+    });
+    expect(bounces).toBe(2);
   });
 });

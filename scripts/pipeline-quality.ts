@@ -65,8 +65,12 @@ if (unreferenced.length > 0) {
   for (const f of unreferenced) console.warn(`  - ${f.slice(resolve(ROOT, "public").length + 1)}`);
 }
 
+if (scanned.length === 0) {
+  console.error("quality FAIL — no playwright *-results.json in .ai/evidence/pipeline");
+  process.exit(1);
+}
 console.log(
-  `quality: scanned ${scanned.length} playwright result file(s) (${scanned.join(", ") || "none"}), ${assetFiles.length} assets checked.`
+  `quality: scanned ${scanned.length} playwright result file(s) (${scanned.join(", ")}), ${assetFiles.length} assets checked.`
 );
 
 if (pageErrors.length > 0) {

@@ -189,6 +189,7 @@ async function runAccept(): Promise<number> {
   }
   ensureDirs();
   mkdirSync(GOLDENS_DIR, { recursive: true });
+  const triagePath = resolve(ROOT, "tests/goldens/TRIAGE.md");
   if (stage === "goldens") {
     const staging = resolve(GOLDENS_DIR, ".staging");
     const capture = await runCmd("goldens-capture", ["bunx", "playwright", "test", "--project=goldens"], {
@@ -199,8 +200,25 @@ async function runAccept(): Promise<number> {
       console.error("Golden capture failed; baselines left untouched.");
       return 1;
     }
+    const force = flag("--force");
     for (const f of readdirSync(staging)) {
-      if (f.endsWith(".png")) copyFileSync(resolve(staging, f), resolve(GOLDENS_DIR, f));
+      if (!f.endsWith(".png")) continue;
+      const staged = resolve(staging, f);
+      const size = readFileSync(staged).length;
+      if (size < 8_000) {
+        console.error(`${f} is ${size} bytes; refusing a blank capture.`);
+        return 1;
+      }
+      const current = resolve(GOLDENS_DIR, f);
+      if (existsSync(current) && !force) {
+        const ratio = Math.abs(size - readFileSync(current).length) / readFileSync(current).length;
+        if (ratio > 0.4) {
+          console.error(`${f} size changed ${(ratio * 100).toFixed(0)}%. Re-run with --force if that is intended.`);
+          return 1;
+        }
+      }
+      copyFileSync(staged, current);
+      console.log(`accepted ${f} (${size} bytes)`);
     }
     rmSync(staging, { recursive: true, force: true });
   } else if (stage === "mechanics") {
@@ -209,16 +227,26 @@ async function runAccept(): Promise<number> {
       console.error('mechanics accept requires --values "KEY=VALUE,KEY2=VALUE2"');
       return 2;
     }
+    const allowed = new Set([
+      "seed", "qaFixedDelta", "walkSpeedBlocksPerSec", "walkFrames", "walkDistanceBand",
+      "jumpVyMin", "trampolineVy", "trampolineVyTolerance", "upgradeCostPerTier",
+    ]);
     const constantsPath = resolve(ROOT, "tests/spec-constants.ts");
     let src = readFileSync(constantsPath, "utf-8");
     for (const pair of values.split(",")) {
-      const [key, val] = pair.split("=");
-      const re = new RegExp(`(export const ${key} = )(.*?)(;)`);
-      if (!re.test(src)) {
+      const eq = pair.indexOf("=");
+      const key = pair.slice(0, eq).trim();
+      const val = pair.slice(eq + 1).trim();
+      if (!allowed.has(key) || !val) {
         console.error(`Unknown spec constant: ${key}`);
         return 2;
       }
-      src = src.replace(re, `$1${val}$3`);
+      const re = new RegExp(`(${key}:\\s*)([^,\\n]+)`);
+      if (!re.test(src)) {
+        console.error(`Spec property not found: ${key}`);
+        return 2;
+      }
+      src = src.replace(re, `$1${val}`);
     }
     writeFileSync(constantsPath, src, "utf-8");
   } else {
@@ -226,11 +254,12 @@ async function runAccept(): Promise<number> {
     return 2;
   }
   appendFileSync(
-    resolve(EVIDENCE, "TRIAGE.md"),
+    triagePath,
     `## ${new Date().toISOString()} stage=${stage}\nreason: ${reason}\n${valueOf("--values") ? `values: ${valueOf("--values")}\n` : ""}\n`
   );
-  console.log(`Accepted ${stage}. Triage entry appended.`);
+  console.log(`Accepted ${stage}. Triage: ${triagePath}`);
   return 0;
+
 }
 
 async function runManual(): Promise<number> {

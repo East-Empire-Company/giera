@@ -28,14 +28,15 @@ describe("ItemDropManager", () => {
     expect(manager.drops.length).toBe(0);
   });
 
-  it("pulls a nearby drop toward the player", () => {
-    const manager = new ItemDropManager({ rng: makeRng(7) });
+  it("pulls a settled drop toward the player and ignores drift", () => {
+    const manager = new ItemDropManager({ rng: () => 0.5 });
     const drop = manager.spawn(12, 40, 10, 3);
-
-    manager.update(0.1, { x: 10, y: 40, z: 10 });
-    manager.update(0.3, { x: 10, y: 40, z: 10 });
-
-    expect(drop.position.x).toBeLessThan(12);
+    drop.velocity.set(0, 0, 0);
+    manager.update(0.31, { x: 100, y: 40, z: 10 });
+    const drifted = drop.position.x;
+    drop.velocity.set(0, 0, 0);
+    manager.update(0.2, { x: 10, y: 40, z: 10 });
+    expect(drop.position.x).toBeLessThan(drifted - 1);
   });
 
   it("despawns drops older than 60 seconds", () => {

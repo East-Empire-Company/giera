@@ -66,4 +66,43 @@ describe("PlayerController", () => {
     expect(player.profile.clothing.torso).toMatch(/^#/);
     expect(player.profile.name).toBe("Ziemek");
   });
+
+  const air = () => false;
+  const floorAt = (y: number) => (_x: number, by: number, _z: number) => by < y;
+
+  it("walks at 4.3 blocks/s on the ground and pins downward velocity to -1", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
+    player.onGround = true;
+    player.step(1 / 60, air, { forward: 1, right: 0, jump: false, sprint: false });
+    expect(player.velocity.y).toBe(-1);
+    expect(Math.hypot(player.velocity.x, player.velocity.z)).toBeCloseTo(4.3, 5);
+  });
+
+  it("jumps at 9 and then falls under gravity", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
+    player.onGround = true;
+    player.step(1 / 60, air, { forward: 0, right: 0, jump: true, sprint: false });
+    expect(player.velocity.y).toBe(9);
+    expect(player.onGround).toBe(false);
+    player.step(0.1, air, { forward: 0, right: 0, jump: false, sprint: false });
+    expect(player.velocity.y).toBeCloseTo(9 - 3.2, 5);
+  });
+
+  it("stops horizontal velocity against a wall", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
+    player.onGround = true;
+    player.yaw = Math.PI;
+    const wall = (_x: number, y: number, z: number) => y < 40 || z >= 1;
+    player.step(0.5, wall, { forward: 1, right: 0, jump: false, sprint: false });
+    expect(player.position.z).toBeLessThan(1);
+    expect(player.velocity.z).toBe(0);
+  });
+
+  it("lands on a floor instead of falling through", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 41, 0] });
+    player.velocity.y = -8;
+    player.step(0.2, floorAt(40), { forward: 0, right: 0, jump: false, sprint: false });
+    expect(player.onGround).toBe(true);
+    expect(player.position.y).toBeGreaterThanOrEqual(40);
+  });
 });

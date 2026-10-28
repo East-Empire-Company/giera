@@ -173,20 +173,20 @@ All pipeline e2e runs use `?qa=1`, so the following are never exercised:
 
 | ID | Finding | Status |
 | --- | --- | --- |
-| F1 | `room.ts` setBlock chunk-cache key mismatch (`cx,cz` vs `cx,cy,cz`) | open |
-| F2 | Untested, unvalidated inline WS handler in `server/index.ts` | open |
-| F3 | static-server traversal test passes for the wrong reason | open |
-| F4 | `isValidPlayerSpeed` tests too weak to catch mutations | open |
-| F5 | npc-bridge `give_block` bounds and permissions untested | open |
-| F6 | tycoon tests circular; behaviors missing | open |
-| F7 | player `step()` / grounded-flicker regression untested; misleading names | open |
-| F8 | drops magnet test passes without the magnet; unseeded randomness | open |
-| F9 | worldgen lacks golden values for v1/v2 | open |
-| F10 | raycast under-tested | open |
+| F1 | `room.ts` setBlock chunk-cache key mismatch (`cx,cz` vs `cx,cy,cz`) | done add9eee |
+| F2 | Untested, unvalidated inline WS handler in `server/index.ts` | done a05d938 89b397e 31ff64a |
+| F3 | static-server traversal test passes for the wrong reason | done c01184a |
+| F4 | `isValidPlayerSpeed` tests too weak to catch mutations | done 66dcf23 |
+| F5 | npc-bridge `give_block` bounds and permissions untested | done 76991cf |
+| F6 | tycoon tests circular; behaviors missing | done this commit |
+| F7 | player `step()` / grounded-flicker regression untested; misleading names | done this commit |
+| F8 | drops magnet test passes without the magnet; unseeded randomness | done this commit |
+| F9 | worldgen lacks golden values for v1/v2 | done this commit |
+| F10 | raycast under-tested | done this commit |
 | F11 | persist IndexedDB path never run; weak schema checks | open |
 | F12 | atlas overlap test cannot fail | open |
 | F13 | Playwright specs circular, skipped in pipeline, or flaky by design | open |
-| F14 | accept/pipeline gates broken (mechanics regex, goldens copy, gitignored triage, quality OK on 0) | open |
+| F14 | accept/pipeline gates broken (mechanics regex, goldens copy, gitignored triage, quality OK on 0) | done this commit |
 | F15 | `server/` excluded from coverage; no per-file gates on core files | open |
 | F16 | Many MED/LOW unit-test weaknesses | open |
 | F17 | Real-mode (non-qa) blind spots | open |
