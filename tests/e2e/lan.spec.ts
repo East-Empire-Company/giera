@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { raycastVoxels } from "../../src/shared/raycast";
+import { raycastInteract } from "../../src/shared/raycast";
 
 const WS_URL = process.env.GIERA_TEST_WS;
 const ROOM = "QATEST";
@@ -119,7 +119,7 @@ test("lan: two clients join one room, exchange a block edit, server persists the
     }, [dist]);
     const ray = await camRay();
     const lookup = new Map(ray.blocks.map((b) => [`${b.x},${b.y},${b.z}`, b.id]));
-    const hit = raycastVoxels(ray.origin, ray.dir, 12, (x, y, z) => lookup.get(`${x},${y},${z}`) ?? 0);
+    const hit = raycastInteract(ray.origin, ray.dir, 12, (x, y, z) => lookup.get(`${x},${y},${z}`) ?? 0);
     const usable = hit !== null && hit.hit.x === fixture.x && hit.hit.y === fixture.y && hit.hit.z === fixture.z;
     const target = hit
       ? { x: hit.hit.x + hit.normal.x, y: hit.hit.y + hit.normal.y, z: hit.hit.z + hit.normal.z }

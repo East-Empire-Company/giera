@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { raycastVoxels } from "../../src/shared/raycast";
+import { raycastInteract, raycastVoxels } from "../../src/shared/raycast";
 
 describe("voxel raycast", () => {
   it("returns the first hit, entry normal and distance", () => {
@@ -24,5 +24,10 @@ describe("voxel raycast", () => {
       distance: 0,
     });
     expect(raycastVoxels({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, 4, () => 1)).toBeNull();
+  });
+
+  it("skips the voxel the ray starts inside", () => {
+    const hit = raycastInteract({ x: 0.2, y: 0.2, z: 0.2 }, { x: 1, y: 0, z: 0 }, 5, (x, y, z) => (x === 0 || x === 2) && y === 0 && z === 0 ? 1 : 0);
+    expect(hit).toEqual({ hit: { x: 2, y: 0, z: 0 }, normal: { x: -1, y: 0, z: 0 }, distance: 1.8 });
   });
 });

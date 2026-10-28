@@ -30,7 +30,7 @@ import { resolveWorldSeed } from "./client/startup/world-seed";
 import { WORLDGEN_VERSION } from "./shared/worldgen";
 import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "./shared/blocks";
 import { chunkKey } from "./shared/chunk";
-import { raycastVoxels } from "./shared/raycast";
+import { raycastInteract } from "./shared/raycast";
 import { makeRng } from "./shared/rng";
 import { surfaceHeight } from "./shared/worldgen";
 
@@ -202,7 +202,7 @@ async function boot(): Promise<void> {
   const tryPlaceBlock = (): void => {
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
-    const hit = raycastVoxels(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z));
+    const hit = raycastInteract(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z));
     if (hit && hit.distance > 0) {
       const placeX = hit.hit.x + hit.normal.x;
       const placeY = hit.hit.y + hit.normal.y;
@@ -885,7 +885,7 @@ async function boot(): Promise<void> {
     if (activeMining) {
       const dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      const hit = raycastVoxels(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z));
+      const hit = raycastInteract(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z));
       if (hit && hit.distance > 0) {
         const bId = world.getBlock(hit.hit.x, hit.hit.y, hit.hit.z);
         if (bId !== BLOCK_ID.air && bId !== BLOCK_ID.bedrock) {

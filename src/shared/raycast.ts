@@ -45,3 +45,10 @@ export function raycastVoxels(origin: Vec3, direction: Vec3, maxDistance: number
     if (getBlock(x, y, z) !== 0) return { hit: { x, y, z }, normal, distance };
   }
 }
+
+export function raycastInteract(origin: Vec3, direction: Vec3, maxDistance: number, getBlock: (x: number, y: number, z: number) => number): RayHit | null {
+  const ox = Math.floor(origin.x);
+  const oy = Math.floor(origin.y);
+  const oz = Math.floor(origin.z);
+  return raycastVoxels(origin, direction, maxDistance, (x, y, z) => (x === ox && y === oy && z === oz ? 0 : getBlock(x, y, z)));
+}

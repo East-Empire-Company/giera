@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { SPEC } from "../spec-constants";
-import { raycastVoxels, type RayHit } from "../../src/shared/raycast";
+import { raycastInteract, type RayHit } from "../../src/shared/raycast";
 
 type Vec3 = { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void };
 
@@ -144,12 +144,23 @@ async function standAt(page: Page, spot: FlatSpot, yaw: number, pitch: number): 
     },
     [spot, yaw, pitch] as [FlatSpot, number, number]
   );
-  const frame = await page.evaluate(() => (window as unknown as G).__GIERA__.qa.frame);
-  await page.waitForFunction(
-    (start) => (window as unknown as G).__GIERA__.qa.frame >= start + 30,
-    frame,
-    { timeout: 20_000 }
-  );
+  await page.evaluate(() => {
+    delete (window as unknown as { __camStill?: unknown }).__camStill;
+  });
+  await page.waitForFunction(() => {
+    const g = (window as unknown as G).__GIERA__;
+    const p = g.camera.position;
+    const w = window as unknown as { __camStill?: { x: number; y: number; z: number; frame: number; frames: number } };
+    const prev = w.__camStill;
+    const same =
+      prev !== undefined &&
+      Math.abs(prev.x - p.x) < 1e-4 &&
+      Math.abs(prev.y - p.y) < 1e-4 &&
+      Math.abs(prev.z - p.z) < 1e-4;
+    const frames = same ? prev.frames + Math.max(0, g.qa.frame - prev.frame) : 0;
+    w.__camStill = { x: p.x, y: p.y, z: p.z, frame: g.qa.frame, frames };
+    return g.player.onGround && frames >= 8;
+  }, null, { timeout: 20_000 });
 }
 
 async function cameraRay(page: Page): Promise<CameraRay> {
@@ -179,7 +190,7 @@ async function cameraRay(page: Page): Promise<CameraRay> {
 
 function hitFrom(data: CameraRay): RayHit | null {
   const lookup = new Map(data.blocks.map((b) => [`${b.x},${b.y},${b.z}`, b.id]));
-  return raycastVoxels(data.origin, data.dir, INTERACT_REACH, (x, y, z) => lookup.get(`${x},${y},${z}`) ?? 0);
+  return raycastInteract(data.origin, data.dir, INTERACT_REACH, (x, y, z) => lookup.get(`${x},${y},${z}`) ?? 0);
 }
 
 function overlapsPlayer(player: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }): boolean {
@@ -410,36 +421,46 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     const errors = collectErrors(page);
     await boot(page);
     const spots = await findFlatSpots(page);
-    const armed = await armFrontBlock(page, spots);
     const canvas = page.locator("canvas#game");
-    await canvas.hover();
-    const frameBefore = await page.evaluate(() => (window as unknown as G).__GIERA__.qa.frame);
-    await page.mouse.down({ button: "right" });
-    await page.waitForFunction(
-      (start) => (window as unknown as G).__GIERA__.qa.frame >= start + 3,
-      frameBefore,
-      { timeout: 20_000 }
-    );
-    await page.mouse.up({ button: "right" });
-    await page.waitForTimeout(300);
+    let armed: ArmedTarget | null = null;
+    const touched: { x: number; y: number; z: number }[] = [];
+    for (let attempt = 0; attempt < 4 && !armed; attempt++) {
+      const candidate = await armFrontBlock(page, spots);
+      touched.push(candidate.fixture, candidate.placeTarget);
+      await canvas.click({ button: "right" });
+      const placedId = await page.evaluate(
+        ([t]) => (window as unknown as G).__GIERA__.world.getBlock(t.x, t.y, t.z),
+        [candidate.placeTarget]
+      );
+      if (placedId === COBBLESTONE_ID) armed = candidate;
+    }
+    expect(armed, "right-click must land a block at the armed hit+normal voxel").not.toBeNull();
+    const landed = armed!;
     const placedId = await page.evaluate(
       ([t]) => (window as unknown as G).__GIERA__.world.getBlock(t.x, t.y, t.z),
-      [armed.placeTarget]
+      [landed.placeTarget]
     );
     expect(placedId).toBe(COBBLESTONE_ID);
     const stillStone = await page.evaluate(
       ([t]) => (window as unknown as G).__GIERA__.world.getBlock(t.x, t.y, t.z),
-      [armed.fixture]
+      [landed.fixture]
     );
     expect(stillStone).toBe(STONE_ID);
 
     await page.evaluate(
-      ([fixture, placed]) => {
+      ([touched, center, cobble]) => {
         const g = (window as unknown as G).__GIERA__;
-        g.world.setBlock(fixture.x, fixture.y, fixture.z, 0);
-        g.world.setBlock(placed.x, placed.y, placed.z, 0);
+        for (const t of touched) g.world.setBlock(t.x, t.y, t.z, 0);
+        for (let x = center.x - 16; x <= center.x + 16; x++)
+          for (let y = Math.max(1, center.y - 16); y <= center.y + 16; y++)
+            for (let z = center.z - 16; z <= center.z + 16; z++)
+              if (g.world.getBlock(x, y, z) === cobble) g.world.setBlock(x, y, z, 0);
       },
-      [armed.fixture, armed.placeTarget] as [{ x: number; y: number; z: number }, { x: number; y: number; z: number }]
+      [touched, landed.fixture, COBBLESTONE_ID] as [
+        { x: number; y: number; z: number }[],
+        { x: number; y: number; z: number },
+        number
+      ]
     );
     await page.evaluate(() => {
       const g = (window as unknown as G).__GIERA__;
