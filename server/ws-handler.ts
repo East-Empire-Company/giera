@@ -60,7 +60,7 @@ export function normalizeRoomCode(raw: unknown): string | null {
 export function createRoomRegistry(
   maxRooms: number,
   load: (code: string) => RoomState,
-  onEvict: (code: string, room: RoomState) => void = () => {},
+  onEvict: (code: string, room: RoomState) => boolean = () => true,
 ): RoomRegistry {
   const rooms = new Map<string, RoomState>();
   return {
@@ -69,9 +69,14 @@ export function createRoomRegistry(
       let room = rooms.get(code);
       if (!room) {
         if (rooms.size >= maxRooms) {
-          const idle = [...rooms].find(([, r]) => r.getPlayerCount() === 0);
-          if (!idle) return undefined;
-          onEvict(idle[0], idle[1]);
+          let idle: [string, RoomState] | undefined;
+          for (const entry of rooms) {
+            if (entry[1].getPlayerCount() === 0) {
+              idle = entry;
+              break;
+            }
+          }
+          if (!idle || !onEvict(idle[0], idle[1])) return undefined;
           rooms.delete(idle[0]);
         }
         room = load(code);

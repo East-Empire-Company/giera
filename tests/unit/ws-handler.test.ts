@@ -172,11 +172,34 @@ describe("ws hello", () => {
     expect(order).toEqual(["send:welcome", "publish:join", "subscribe"]);
   });
 
+  it("keeps an idle room in memory and refuses the newcomer when saving it before eviction fails", () => {
+    let allowSave = false;
+    const rooms = createRoomRegistry(1, (code) => new RoomState(code, 1, 2), () => allowSave);
+    const h = harness();
+    const deps: WsDeps = { ...h.deps, rooms };
+    const a = h.connect("a");
+    send(a, deps, hello("R1"));
+    rooms.get("R1")!.setBlock(1, 50, 1, BLOCK_ID.stone);
+    handleWsClose(a, deps);
+
+    const b = h.connect("b");
+    send(b, deps, hello("R2"));
+    expect(b.data.joined).toBe(false);
+    expect(rooms.get("R1")!.getBlock(1, 50, 1)).toBe(BLOCK_ID.stone);
+    expect(rooms.get("R2")).toBeUndefined();
+
+    allowSave = true;
+    send(b, deps, hello("R2"));
+    expect(b.data.joined).toBe(true);
+    expect(rooms.get("R1")).toBeUndefined();
+  });
+
   it("evicts an empty room (saving it first) to make space, but never a room with players", () => {
     const evicted: string[] = [];
     const rooms = createRoomRegistry(2, (code) => new RoomState(code, 1, 2), (code, room) => {
       expect(room.getPlayerCount()).toBe(0);
       evicted.push(code);
+      return true;
     });
     const h = harness();
     const deps: WsDeps = { ...h.deps, rooms };

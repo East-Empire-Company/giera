@@ -35,12 +35,14 @@ function loadOrCreateRoom(normalized: string): RoomState {
   return new RoomState(normalized, Math.floor(Math.random() * 1_000_000) + 1, WORLDGEN_VERSION);
 }
 
-function saveRoom(code: string, room: RoomState): void {
+function saveRoom(code: string, room: RoomState): boolean {
   const file = resolve(DATA_DIR, `world-${code}.json`);
   try {
     writeFileSync(file, JSON.stringify(room.toJSON(), null, 2), "utf-8");
+    return true;
   } catch (e) {
     console.error(`Failed to save room ${code}:`, e);
+    return false;
   }
 }
 
