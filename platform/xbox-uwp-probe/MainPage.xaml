@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Giera.XboxProbe.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Giera.XboxProbe"
+    Background="#0b1020">
+    <Grid>
+        <WebView x:Name="ProbeView" />
+        <Border VerticalAlignment="Bottom"
+                Background="#CC000000"
+                Padding="16"
+                MaxHeight="420">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="Status"
+                           Foreground="#7CFC9A"
+                           FontFamily="Consolas"
+                           FontSize="18"
+                           TextWrapping="Wrap"
+                           Text="booting probe" />
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Page>
