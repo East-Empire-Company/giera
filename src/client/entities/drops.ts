@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { ensureWhiteVertexColors } from "../render/vertex-color";
 
 export type DropItem = {
   id: number;
@@ -15,7 +16,7 @@ export class ItemDropManager {
   private nextId = 1;
   private readonly scene?: THREE.Scene;
   private readonly rng: () => number;
-  private readonly sharedGeometry = new THREE.BoxGeometry(0.32, 0.32, 0.32);
+  private readonly sharedGeometry = ensureWhiteVertexColors(new THREE.BoxGeometry(0.32, 0.32, 0.32));
   private readonly defaultMaterial = new THREE.MeshStandardMaterial({
     roughness: 0.8,
     metalness: 0.1,

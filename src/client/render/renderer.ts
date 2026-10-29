@@ -1,5 +1,4 @@
 import {
-  ACESFilmicToneMapping,
   Color,
   DirectionalLight,
   FogExp2,
@@ -10,6 +9,7 @@ import {
   MeshBasicMaterial,
   NearestFilter,
   NoColorSpace,
+  NoToneMapping,
   PCFShadowMap,
   PlaneGeometry,
   PMREMGenerator,
@@ -62,7 +62,7 @@ function linearTexture(texture: Texture, colorSpace: typeof SRGBColorSpace | typ
 
 export async function loadRenderAssets(renderer: WebGLRenderer, onProgress?: (done: number, total: number) => void): Promise<RenderAssets> {
   const loader = new TextureLoader();
-  const total = 12;
+  const total = 13;
   let done = 0;
   const tracked = <T>(load: () => Promise<T>): Promise<T> =>
     withRetry(load).then((value) => {
@@ -70,7 +70,21 @@ export async function loadRenderAssets(renderer: WebGLRenderer, onProgress?: (do
       return value;
     });
   const tex = (url: string) => tracked(() => loader.loadAsync(url));
-  const [atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, hdr, dirt01, dirt02, spark01, smoke01, star01] = await Promise.all([
+  const [
+    atlas,
+    atlasNormal,
+    atlasOrm,
+    waterNormal,
+    clouds,
+    sideClouds,
+    hdr,
+    dirt01,
+    dirt02,
+    spark01,
+    smoke01,
+    star01,
+    leaf01,
+  ] = await Promise.all([
     tex("/assets/textures/atlas.png"),
     tex("/assets/textures/atlas-normal.png"),
     tex("/assets/textures/atlas-orm.png"),
@@ -87,8 +101,9 @@ export async function loadRenderAssets(renderer: WebGLRenderer, onProgress?: (do
     tex("/assets/particles/spark_01.png"),
     tex("/assets/particles/smoke_01.png"),
     tex("/assets/particles/star_01.png"),
+    tex("/assets/textures/tiles/ginkgo_leaves.png"),
   ]);
-  const particles: GameplayVfxTextures = { dirt01, dirt02, spark01, smoke01, star01 };
+  const particles: GameplayVfxTextures = { dirt01, dirt02, spark01, smoke01, star01, leaf01 };
   for (const texture of Object.values(particles)) texture.colorSpace = SRGBColorSpace;
   linearTexture(atlas, SRGBColorSpace, renderer);
   linearTexture(atlasNormal, NoColorSpace, renderer);
@@ -111,15 +126,16 @@ export async function loadRenderAssets(renderer: WebGLRenderer, onProgress?: (do
   return { atlas, atlasNormal, atlasOrm, waterNormal, clouds, sideClouds, environment, particles };
 }
 
+export const SHADOW_MAP_TYPE = PCFShadowMap;
 export function createRenderer(canvas: HTMLCanvasElement): WebGLRenderer {
   const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = SRGBColorSpace;
-  renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMapping = NoToneMapping;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFShadowMap;
+  renderer.shadowMap.type = SHADOW_MAP_TYPE;
+  renderer.info.autoReset = false;
   return renderer;
 }
 
@@ -130,7 +146,7 @@ export class SkyCycle {
   private readonly hemisphere: HemisphereLight;
   private readonly fog: FogExp2;
   private readonly nightColor = new Color("#273956");
-  private readonly dayColor = new Color("#84bfe4");
+  private readonly dayColor = new Color("#97c6e2");
   private readonly currentColor = new Color();
   private readonly sunPosition = new Vector3();
   private readonly cloudLayers: Array<{ mesh: Mesh; material: MeshBasicMaterial }>;
@@ -141,28 +157,31 @@ export class SkyCycle {
     this.sky = new Sky();
     this.sky.scale.setScalar(450000);
     const uniforms = this.sky.material.uniforms;
-    uniforms["turbidity"].value = 2.4;
-    uniforms["rayleigh"].value = 1.8;
+    uniforms["turbidity"].value = 2.8;
+    uniforms["rayleigh"].value = 1.6;
     uniforms["mieCoefficient"].value = 0.0025;
     uniforms["mieDirectionalG"].value = 0.76;
     scene.add(this.sky);
 
-    this.sun = new DirectionalLight("#fff1d6", 1.8);
+    this.sun = new DirectionalLight("#ffe0b8", 1.6);
     this.sun.position.set(-100, 100, 0);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.left = -64;
-    this.sun.shadow.camera.right = 64;
-    this.sun.shadow.camera.top = 64;
-    this.sun.shadow.camera.bottom = -64;
+    this.sun.shadow.camera.left = -72;
+    this.sun.shadow.camera.right = 72;
+    this.sun.shadow.camera.top = 72;
+    this.sun.shadow.camera.bottom = -72;
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 256;
+    this.sun.shadow.bias = -0.00015;
+    this.sun.shadow.normalBias = 0.025;
+    this.sun.shadow.radius = 1.5;
     this.sun.shadow.camera.updateProjectionMatrix();
     scene.add(this.sun, this.sun.target);
 
-    this.hemisphere = new HemisphereLight("#c5e2f4", "#82785f", 0.72);
+    this.hemisphere = new HemisphereLight("#c4d9eb", "#927a5e", 0.6);
     scene.add(this.hemisphere);
-    this.fog = new FogExp2("#a9d0e8", 0.0038);
+    this.fog = new FogExp2("#97c6e2", 0.0038);
     scene.fog = this.fog;
 
     this.cloudLayers = [
@@ -190,8 +209,8 @@ export class SkyCycle {
     this.sky.material.uniforms["sunPosition"].value.copy(this.sunPosition);
     this.sun.position.copy(center).addScaledVector(this.sunPosition, 100);
     this.sun.target.position.copy(center);
-    this.sun.intensity = 2.2 * state.daylight;
-    this.hemisphere.intensity = 0.15 + 0.35 * state.daylight;
+    this.sun.intensity = 1.65 * state.daylight;
+    this.hemisphere.intensity = 0.42 + 0.35 * state.daylight;
     this.scene.environmentIntensity = 0.15 + 0.85 * state.daylight;
     this.fog.color.copy(this.currentColor);
     this.cloudLayers[0].mesh.position.x = center.x + Math.sin(timeSeconds * 0.006) * 14;
@@ -200,6 +219,10 @@ export class SkyCycle {
     this.cloudLayers[1].mesh.position.x = center.x - Math.cos(timeSeconds * 0.003) * 19;
     this.cloudLayers[1].mesh.position.z = center.z + Math.sin(timeSeconds * 0.005) * 11;
     this.cloudLayers[1].mesh.visible = state.daylight > 0.08;
+  }
+
+  getSunLight(): DirectionalLight {
+    return this.sun;
   }
 
   dispose(): void {

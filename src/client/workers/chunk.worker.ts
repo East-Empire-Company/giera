@@ -16,7 +16,7 @@ self.onmessage = (event: MessageEvent<ChunkBuildRequest>) => {
       atlas: atlasManifest.tiles,
     });
     const response: ChunkBuildResponse = { ...request, data, mesh };
-    const transfer: Transferable[] = [data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.uvs.buffer, mesh.colors.buffer, mesh.indices.buffer];
+    const transfer: Transferable[] = [data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.uvs.buffer, mesh.colors.buffer, mesh.tileIds.buffer, mesh.indices.buffer];
     self.postMessage(response, transfer);
   } catch (error) {
     const response: ChunkBuildResponse = { taskId: request.taskId, error: error instanceof Error ? error.message : "Chunk build failed" };

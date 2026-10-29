@@ -6,6 +6,7 @@ dist/
 coverage/
 public/assets/textures/pbr/
 test-results/
+.vitest/
 tests/goldens/.staging/
 playwright-report/
 server/data/

@@ -1,15 +1,19 @@
 import * as THREE from "three";
 import { makeRng } from "../../shared/rng";
 
-export type GameplayVfxKind = "mine" | "craft" | "place" | "collect" | "bounce";
+export type GameplayVfxKind = "mine" | "wood" | "leaves" | "footstep" | "pollen" | "craft" | "place" | "collect" | "bounce";
 
 export type GameplayVfxTextures = {
   dirt01: THREE.Texture;
   dirt02: THREE.Texture;
+  leaf01: THREE.Texture;
   spark01: THREE.Texture;
   smoke01: THREE.Texture;
   star01: THREE.Texture;
 };
+
+type ParticleKind = "dirt" | "spark" | "star" | "smoke" | "wood" | "leaf" | "pollen" | "dust";
+type ParticlePriority = "ambient" | "gameplay";
 
 type Particle = {
   sprite: THREE.Sprite;
@@ -20,25 +24,23 @@ type Particle = {
   gravity: number;
   velocity: THREE.Vector3;
   serial: number;
+  priority: ParticlePriority;
 };
 
-type Spec = {
-  count: number;
-  life: number;
-  gravity: number;
-  size: number;
-  speed: number;
-  lift: number;
-  tint: number;
-};
+type Spec = { gravity: number; size: number; speed: number; lift: number; tint: number };
 
 const POOL_SIZE = 64;
+const FOOTSTEP_DISTANCE = 0.9;
 
-const SPECS: Record<"dirt" | "spark" | "star" | "smoke", Spec> = {
-  dirt: { count: 0, life: 0, gravity: -9, size: 0.22, speed: 2.2, lift: 1.6, tint: 0xffffff },
-  spark: { count: 0, life: 0, gravity: 0, size: 0.3, speed: 0.9, lift: 2.2, tint: 0xffe08a },
-  star: { count: 0, life: 0, gravity: 0, size: 0.36, speed: 0.8, lift: 2.6, tint: 0xfff2a0 },
-  smoke: { count: 0, life: 0, gravity: 0, size: 0.5, speed: 0.7, lift: 1.4, tint: 0xe6e6e6 },
+const SPECS: Record<ParticleKind, Spec> = {
+  dirt: { gravity: -9, size: 0.22, speed: 2.2, lift: 1.6, tint: 0xffffff },
+  spark: { gravity: 0, size: 0.3, speed: 0.9, lift: 2.2, tint: 0xffe08a },
+  star: { gravity: 0, size: 0.36, speed: 0.8, lift: 2.6, tint: 0xfff2a0 },
+  smoke: { gravity: 0, size: 0.5, speed: 0.7, lift: 1.4, tint: 0xe6e6e6 },
+  wood: { gravity: -4.5, size: 0.14, speed: 1.8, lift: 1.35, tint: 0xb87945 },
+  leaf: { gravity: -1.2, size: 0.18, speed: 1.2, lift: 1.6, tint: 0x9bcf5a },
+  pollen: { gravity: 0, size: 0.1, speed: 0.14, lift: 0.12, tint: 0xffe6a0 },
+  dust: { gravity: -0.5, size: 0.15, speed: 0.5, lift: 0.3, tint: 0xb1a98b },
 };
 
 export class GameplayVfx {
@@ -46,6 +48,7 @@ export class GameplayVfx {
   private readonly group = new THREE.Group();
   private readonly pool: Particle[] = [];
   private serial = 0;
+  private readonly footstepStates = new Map<string, { position: THREE.Vector3; distance: number }>();
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -72,6 +75,7 @@ export class GameplayVfx {
         size: 0,
         gravity: 0,
         velocity: new THREE.Vector3(),
+        priority: "gameplay",
         serial: 0,
       });
     }
@@ -95,6 +99,18 @@ export class GameplayVfx {
       case "mine":
         this.burst("dirt", 8, 0.45, position, true);
         break;
+      case "wood":
+        this.burst("wood", 8, 0.48, position, true);
+        break;
+      case "leaves":
+        this.burst("leaf", 8, 0.72, position, true);
+        break;
+      case "footstep":
+        this.burst("dust", 4, 0.28, position, true, "ambient");
+        break;
+      case "pollen":
+        this.burst("pollen", 2, 2.8, position, false, "ambient");
+        break;
       case "place":
         this.burst("dirt", 4, 0.35, position, true);
         break;
@@ -109,6 +125,31 @@ export class GameplayVfx {
         this.burst("star", 6, 0.6, position, false);
         break;
     }
+  }
+
+  updateFootsteps(playerId: string, position: THREE.Vector3, grounded: boolean): void {
+    let state = this.footstepStates.get(playerId);
+    if (!state) {
+      state = { position: position.clone(), distance: 0 };
+      this.footstepStates.set(playerId, state);
+      return;
+    }
+    const dx = position.x - state.position.x;
+    const dz = position.z - state.position.z;
+    state.position.copy(position);
+    if (!grounded) {
+      state.distance = 0;
+      return;
+    }
+    const distance = Math.hypot(dx, dz);
+    if (distance > 1.25) {
+      state.distance = 0;
+      return;
+    }
+    state.distance += distance;
+    if (state.distance < FOOTSTEP_DISTANCE) return;
+    state.distance %= FOOTSTEP_DISTANCE;
+    this.emit("footstep", position);
   }
 
   update(deltaSeconds: number): void {
@@ -131,13 +172,19 @@ export class GameplayVfx {
     for (const p of this.pool) {
       p.material.dispose();
     }
+    this.footstepStates.clear();
   }
 
-  private texture(kind: keyof typeof SPECS, index: number): THREE.Texture {
+  private texture(kind: ParticleKind, index: number): THREE.Texture {
     switch (kind) {
+      case "wood":
+      case "dust":
       case "dirt":
         return index % 2 === 0 ? this.textures.dirt01 : this.textures.dirt02;
+      case "leaf":
+        return this.textures.leaf01;
       case "spark":
+      case "pollen":
         return this.textures.spark01;
       case "star":
         return this.textures.star01;
@@ -146,19 +193,32 @@ export class GameplayVfx {
     }
   }
 
-  private acquire(): Particle {
-    let oldest = this.pool[0];
+  private acquire(priority: ParticlePriority): Particle | null {
+    let oldestAmbient: Particle | null = null;
+    let oldestGameplay: Particle | null = null;
     for (const p of this.pool) {
       if (!p.sprite.visible) return p;
-      if (p.serial < oldest.serial) oldest = p;
+      if (p.priority === "ambient") {
+        if (!oldestAmbient || p.serial < oldestAmbient.serial) oldestAmbient = p;
+      } else if (!oldestGameplay || p.serial < oldestGameplay.serial) {
+        oldestGameplay = p;
+      }
     }
-    return oldest;
+    return priority === "ambient" ? oldestAmbient : oldestAmbient ?? oldestGameplay;
   }
 
-  private burst(kind: keyof typeof SPECS, count: number, life: number, origin: THREE.Vector3, outward: boolean): void {
+  private burst(
+    kind: ParticleKind,
+    count: number,
+    life: number,
+    origin: THREE.Vector3,
+    outward: boolean,
+    priority: ParticlePriority = "gameplay"
+  ): void {
     const spec = SPECS[kind];
     for (let i = 0; i < count; i++) {
-      const p = this.acquire();
+      const p = this.acquire(priority);
+      if (!p) continue;
       const angle = this.rng() * Math.PI * 2;
       const radial = spec.speed * (0.5 + this.rng() * 0.5);
       p.velocity.set(
@@ -171,6 +231,7 @@ export class GameplayVfx {
       p.gravity = spec.gravity;
       p.size = spec.size;
       p.serial = ++this.serial;
+      p.priority = priority;
       p.material.map = this.texture(kind, i);
       p.material.color.setHex(spec.tint);
       p.material.opacity = 1;
@@ -180,4 +241,5 @@ export class GameplayVfx {
       p.sprite.visible = true;
     }
   }
+
 }

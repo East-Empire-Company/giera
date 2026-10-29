@@ -97,6 +97,27 @@ describe("PlayerController", () => {
     expect(player.position.z).toBeLessThan(1);
     expect(player.velocity.z).toBe(0);
   });
+  it("steps onto a one-block rise instead of stopping at its edge", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
+    player.onGround = true;
+    player.yaw = Math.PI;
+    for (let i = 0; i < 90; i += 1) {
+      player.step(1 / 60, (_x, y, z) => (y < 40 && z < 5) || (y < 41 && z >= 5), { forward: 1, right: 0, jump: false, sprint: false });
+    }
+    expect(player.position.z).toBeGreaterThan(5.5);
+    expect(player.position.y).toBeCloseTo(41, 1);
+    expect(player.onGround).toBe(true);
+  });
+  it("does not step through a two-block wall", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
+    player.onGround = true;
+    player.yaw = Math.PI;
+    for (let i = 0; i < 90; i += 1) {
+      player.step(1 / 60, (_x, y, z) => (y < 40 && z < 5) || (y < 42 && z >= 5), { forward: 1, right: 0, jump: false, sprint: false });
+    }
+    expect(player.position.z).toBeLessThan(5);
+    expect(player.velocity.z).toBe(0);
+  });
 
   it("lands on a floor instead of falling through", () => {
     const player = new PlayerController({ id: "p1", spawn: [0, 41, 0] });

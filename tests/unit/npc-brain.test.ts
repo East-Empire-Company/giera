@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatterDelayMs, fallbackSay, parseBrainReply, reasonNpc } from "../../src/client/entities/npc-brain";
+import { ambientNpcChatterEnabled, chatterDelayMs, fallbackSay, parseBrainReply, reasonNpc } from "../../src/client/entities/npc-brain";
 
 describe("parseBrainReply", () => {
   it("parses a clean JSON reply with tool and args", () => {
@@ -144,5 +144,11 @@ describe("client NPC resilience", () => {
     expect(chatterDelayMs(1)).toBe(40_000);
     expect(chatterDelayMs(2)).toBe(80_000);
     expect(chatterDelayMs(9)).toBe(300_000);
+  });
+
+  it("disables ambient chatter only for the explicit capture flag", () => {
+    expect(ambientNpcChatterEnabled("?seed=424242")).toBe(true);
+    expect(ambientNpcChatterEnabled("?seed=424242&disableAmbientNpcChatter=1")).toBe(false);
+    expect(ambientNpcChatterEnabled("?seed=424242&disableAmbientNpcChatter=0")).toBe(true);
   });
 });

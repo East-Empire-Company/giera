@@ -562,10 +562,15 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     test.setTimeout(60_000);
     const errors = collectErrors(page);
     await boot(page);
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    const frameBeforeSplit = await page.evaluate(() => (window as unknown as G).__GIERA__.qa.frame);
     await page.locator(".hud-mode-btn").click();
     await expect(page.locator(".hud-mode-btn")).toHaveText(SPEC.splitLabelTwoPlayers);
     const isSplit = await page.evaluate(() => (window as unknown as G).__GIERA__.splitScreen.isSplitScreen);
     expect(isSplit).toBe(true);
+    await page.waitForFunction((frame) => (window as unknown as G).__GIERA__.qa.frame > frame + 1, frameBeforeSplit);
     expect(errors).toEqual([]);
   });
 

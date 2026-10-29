@@ -625,6 +625,35 @@ body {
   color: #f7eed9;
 }
 
+.hud-resource-gain {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 2px solid #ffde8a;
+  border-radius: 12px;
+  background: rgba(16, 28, 22, 0.96);
+  color: #ffde8a;
+  font-size: 22px;
+  font-weight: 800;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 31;
+  transform: translate(-50%, -50%) translateY(8px);
+  transition: opacity 120ms ease, transform 350ms cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+.hud-resource-gain.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) translateY(-18px);
+}
+
+.hud-resource-gain img {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+}
 .hud-npc-prompt {
   display: none;
   position: absolute;

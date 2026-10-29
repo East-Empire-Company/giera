@@ -13,6 +13,7 @@ const STAGE = process.env.GIERA_GOLDENS_STAGE === "1";
 const STAGE_DIR = resolve(GOLDENS_DIR, ".staging");
 const THRESHOLD = 0.1;
 const MAX_DIFF_RATIO = 0.001;
+const FREEZE_FRAME = 600;
 
 type Giera = {
   ready: boolean;
@@ -25,7 +26,7 @@ type Giera = {
     syncAvatar: () => void;
   };
   world: { loadedChunkCount: number };
-  qa: { frame: number };
+  qa: { frame: number; paused: boolean; pauseAt?: number };
 };
 
 async function settle(page: Page): Promise<void> {
@@ -43,8 +44,39 @@ async function settle(page: Page): Promise<void> {
   );
 }
 
+async function freeze(page: Page, frame = FREEZE_FRAME): Promise<void> {
+  const target = await page.evaluate((want) => {
+    const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
+    const at = Math.max(want, g.qa.frame + 2);
+    g.qa.pauseAt = at;
+    return at;
+  }, frame);
+  await page.waitForFunction(() => (window as unknown as { __GIERA__?: Giera }).__GIERA__?.qa.paused === true, null, {
+    timeout: 30_000,
+  });
+  const frozen = await page.evaluate(() => (window as unknown as { __GIERA__: Giera }).__GIERA__.qa.frame);
+  expect(
+    frozen,
+    `simulation froze at frame ${frozen}, not ${target}: wind, NPC wander and particles are time-driven, so a moving freeze point makes the golden flaky. Raise FREEZE_FRAME above the load cost.`
+  ).toBe(target);
+}
+
+function collectErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on("pageerror", (err) => errors.push(err.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  return errors;
+}
+
 async function capture(page: Page, name: string): Promise<void> {
-  await page.waitForTimeout(250);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      })
+  );
   const shot = await page.screenshot();
   mkdirSync(CAPTURE_DIR, { recursive: true });
   writeFileSync(resolve(CAPTURE_DIR, `${name}.png`), shot);
@@ -78,26 +110,24 @@ async function capture(page: Page, name: string): Promise<void> {
 
 test.describe("Giera graphics goldens", () => {
   test("spawn view matches golden", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (err) => errors.push(err.message));
+    const errors = collectErrors(page);
     await settle(page);
+    await freeze(page);
     await capture(page, "spawn-view");
     expect(errors).toEqual([]);
   });
 
   test("split view matches golden", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (err) => errors.push(err.message));
+    const errors = collectErrors(page);
     await settle(page);
     await page.locator(".hud-mode-btn").click();
-    await page.waitForTimeout(500);
+    await freeze(page);
     await capture(page, "split-view");
     expect(errors).toEqual([]);
   });
 
   test("tycoon view matches golden", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (err) => errors.push(err.message));
+    const errors = collectErrors(page);
     await settle(page);
     await page.evaluate(() => {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
@@ -107,7 +137,7 @@ test.describe("Giera graphics goldens", () => {
       g.player.pitch = -0.12;
       g.player.syncAvatar();
     });
-    await page.waitForTimeout(500);
+    await freeze(page);
     await capture(page, "tycoon-view");
     expect(errors).toEqual([]);
   });

@@ -14,7 +14,7 @@ Voxel sandbox browser game for two non-reading kids (Ziemek & Gniewko). Three.js
 | build | `vite build` succeeds |
 | e2e-mechanics | gameplay mechanics vs spec constants (movement, mine/place, craft, split, music, tycoon, dummy, NPC, persistence delta) |
 | goldens | 3 screenshots pixel-match `tests/goldens/*.png` (threshold 0.10) |
-| performance | fps p50 / boot / draw calls / remesh budgets (`.ai/evidence/pipeline/perf.json`) |
+| performance | solo/split FPS p50 / boot / draw calls / remesh budgets (`.ai/evidence/pipeline/perf.json`; host only) |
 | network | two browser clients join one LAN room, exchange a block edit, server persists the room |
 | quality | zero pageerrors across e2e JSON runs; dead-asset scan (warn only) |
 
@@ -26,6 +26,7 @@ Report lands in `.ai/evidence/pipeline/report.md` + `report.json`.
 
 - No `Date.now()` / `Math.random()` in simulation code. Use `makeRng(seed)` from `src/shared/rng.ts` and accumulate sim time (`this.pulseTime += delta`).
 - `?qa=1` contract: fixed 1/60 timestep, sky pinned to `elapsed = 150` (midday), `window.__GIERA__.qa.events` records audio/gameplay events, `qa.frame` counts frames. Tests wait on `qa.frame`, never on wall clock.
+- Goldens freeze the sim before capture: set `qa.pauseAt = frame`, wait for `qa.paused === true`, assert `qa.frame` equals the target. Wind, NPC wander and particles are time-driven, so a moving capture point makes split-screen goldens drift (~0.15 %).
 - Seeds: tests use `?seed=424242`. Worldgen is pure seeded hash noise.
 
 ## Test philosophy
@@ -60,9 +61,15 @@ Hardware-only checks (Xbox pads, real mic STT, touch overlay, Xbox Edge fps) liv
 Presentation only — worldgen, physics, mining, crafting, NPC logic, LAN protocol and saves stay voxel-driven.
 
 - Block faces read three atlases built by `bun run assets:atlas` (`scripts/build-atlas.ts`): `atlas.png` (albedo, sRGB), `atlas-normal.png` (NormalGL), `atlas-orm.png` (R=AO, G=roughness). Sources are AmbientCG CC0 1K-JPG maps that `bun run assets:fetch` writes to `public/assets/textures/pbr/<id>/` (git-ignored, re-downloadable); `src/shared/atlas-manifest.json` holds the UV rects.
+- Smooth-top terrain uses shared height-gradient normals across chunk borders. Terrain shaders blend grass-top and cliff-side atlas tiles by world normal; oak bark uses a warm flat palette.
 - Heroes/NPCs are KayKit CC0 GLBs in `public/assets/models/kaykit/` (Rig_Medium clip names live in `ANIM_MAP` in `src/client/entities/avatar.ts`). Decor props are Quaternius CC0 glTF in `public/assets/models/props/`.
-- Environment light comes from a Poly Haven CC0 HDR (`HDRLoader` → `PMREMGenerator` → `scene.environment`); `SkyCycle` only modulates `scene.environmentIntensity` by daylight.
-- Post stack: `src/client/render/postfx.ts` = RenderPass → GTAO → grade → SMAA → OutputPass. Split-screen renders two half-width composers and composites them.
+- Environment lighting uses a Poly Haven CC0 HDR (`HDRLoader` → `PMREMGenerator` → `scene.environment`). `SkyCycle` coordinates HDR intensity, procedural sky, hemisphere fill, daylight-driven sun, and horizon-matched fog.
+- Shadows use the official Three r186 `CSM` addon (`src/client/render/cascaded-shadows.ts`): 2 practical cascades at 1024², range capped at `MAX_SHADOW_DISTANCE` (128) via `shadowDistanceFor`, `PCFShadowMap` (r186 removed `PCFSoftShadowMap`; it warns and falls back; `tests/unit/shadow-map-type.test.ts` guards this). The `SkyCycle` sun is hidden and only supplies direction, colour and intensity. `PostFX` calls `prepareView(camera)` before each composer render so split-screen cascades follow each camera. CSM overwrites the global `lights_fragment_begin` chunk with a pre-r186 copy that lacks `material.dfg`/`multiScatteringCompensation`; `spliceStockPrelude` keeps Three's stock prelude and takes only CSM's directional tail, and `dispose()` restores both global chunks. Re-check this splice on every Three upgrade (it throws if the marker moves).
+- Terrain chunk meshes cast shadows only within `MAX_SHADOW_CASTER_RANGE` (80 blocks) of a player (`WorldRenderer.updateShadowCasters`, refreshed on chunk crossing or split toggle, both split players count). Without this, desktop radius 20 drew ~5,400 chunks into every cascade and halved the frame rate. Xbox 60 FPS remains unverified; the pipeline perf stage loads radius 8 under a fixed 1/60 timestep and is NOT representative of desktop radius 20 or of the adaptive ladder.
+- Terrain chunk meshes are bucketed by material, not by tile: all opaque tiles share one `giera-atlas-pbr-merged` material that indexes `gieraTileRects[15]` per fragment from a per-vertex `aTileId` attribute (`src/shared/terrain-materials.ts` lists the 7 buckets). Adding a tile means adding its atlas rect to the manifest, not a new material — per-tile materials survive only for the non-opaque buckets and for meshes that look a tile up by id (block preview, drops). Draw calls were 6 548 solo / 10 223 split with per-tile groups; the shadow pass is now ~73 % of the frame.
+- Meshes that borrow terrain tile materials (training dummy, item drops) need a white `color` vertex attribute (`ensureWhiteVertexColors`), because the tile materials use `vertexColors: true` and a missing attribute reads as black.
+- Post stack: `src/client/render/postfx.ts` = RenderPass → N8AO → one merged grade/SMAA/adaptive Bloom/ACES EffectPass. Split-screen uses two half-width chains and a color-space-correct composite. AO/Bloom disable below 50 FPS and restore above 55; each failed restore doubles the wait (5-second windows, capped at 24) so a marginal machine does not flicker.
+- Ground decor uses seeded instanced grass and shared-time sway. Gameplay VFX use a fixed 64-particle pool; gameplay bursts outrank footsteps and pollen. Real log gathering shows the existing icon/count cue.
 - Vite serves `public/` case-sensitively — asset filenames must match `asset-manifest.json` exactly.
 - Adding assets: place files at the documented path, then `bun scripts/fetch-assets.ts --package-only` regenerates `src/shared/asset-manifest.json` and `public/assets/NOTICES.md`.
 

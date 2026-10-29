@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { ensureWhiteVertexColors } from "../render/vertex-color";
 
 export class TrainingDummy {
   readonly position: THREE.Vector3;
@@ -13,7 +14,7 @@ export class TrainingDummy {
     this.object.position.copy(this.position);
 
     // Stand base
-    const baseGeo = new THREE.CylinderGeometry(0.35, 0.45, 0.2, 12);
+    const baseGeo = ensureWhiteVertexColors(new THREE.CylinderGeometry(0.35, 0.45, 0.2, 12));
     const woodMat = materials?.planks ?? new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
     const base = new THREE.Mesh(baseGeo, woodMat);
     base.position.y = 0.1;
@@ -26,14 +27,14 @@ export class TrainingDummy {
     this.object.add(this.pivot);
 
     // Pole
-    const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.4, 8);
+    const poleGeo = ensureWhiteVertexColors(new THREE.CylinderGeometry(0.08, 0.08, 1.4, 8));
     const pole = new THREE.Mesh(poleGeo, materials?.bark ?? woodMat);
     pole.position.y = 0.7;
     pole.castShadow = true;
     this.pivot.add(pole);
 
     // Torso (Straw / Burlap sack)
-    const torsoGeo = new THREE.CylinderGeometry(0.25, 0.22, 0.8, 12);
+    const torsoGeo = ensureWhiteVertexColors(new THREE.CylinderGeometry(0.25, 0.22, 0.8, 12));
     const torso = new THREE.Mesh(torsoGeo, woodMat);
     torso.position.y = 0.9;
     torso.castShadow = true;
@@ -48,7 +49,7 @@ export class TrainingDummy {
     this.pivot.add(target);
 
     // Head
-    const headGeo = new THREE.SphereGeometry(0.2, 12, 12);
+    const headGeo = ensureWhiteVertexColors(new THREE.SphereGeometry(0.2, 12, 12));
     const head = new THREE.Mesh(headGeo, woodMat);
     head.position.y = 1.45;
     head.castShadow = true;

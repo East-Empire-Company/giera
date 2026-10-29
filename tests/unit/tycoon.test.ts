@@ -67,4 +67,106 @@ describe("TycoonManager", () => {
     });
     expect(bounces).toBe(2);
   });
+
+  it("bounces a second player once per cooldown instead of every frame", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    let bounces = 0;
+    const onPad = { x: -5, y: 50, z: 6 };
+    for (let frame = 0; frame < 30; frame++) {
+      tycoon.updateSecondaryTrampoline(1 / 60, onPad, () => {
+        bounces++;
+      });
+    }
+    expect(bounces).toBe(1);
+    tycoon.updateSecondaryTrampoline(0.6, onPad, () => {
+      bounces++;
+    });
+    expect(bounces).toBe(2);
+  });
+
+  it("keeps each player's trampoline cooldown independent", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    const onPad = { x: -5, y: 50, z: 6 };
+    let primary = 0;
+    let secondary = 0;
+    tycoon.update(0.1, onPad, undefined, undefined, () => {
+      primary++;
+    });
+    tycoon.updateSecondaryTrampoline(0.1, onPad, () => {
+      secondary++;
+    });
+    expect([primary, secondary]).toEqual([1, 1]);
+  });
+
+  it("does not bounce a second player who is off the pad", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    let bounces = 0;
+    tycoon.updateSecondaryTrampoline(0.1, { x: 10, y: 50, z: 10 }, () => {
+      bounces++;
+    });
+    expect(bounces).toBe(0);
+  });
+
+  it("does not advance the shared economy when the second player is processed", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    for (let i = 0; i < 100; i++) tycoon.updateSecondaryTrampoline(0.1, { x: 10, y: 50, z: 10 }, () => {});
+    expect(tycoon.vaultCoins).toBe(0);
+  });
+
+  it("does not re-launch a player who is still rising from the previous bounce", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    let bounces = 0;
+    const onPad = { x: -5, y: 50, z: 6 };
+    tycoon.update(0.1, onPad, undefined, undefined, () => {
+      bounces++;
+    });
+    tycoon.update(0.7, onPad, undefined, undefined, () => {
+      bounces++;
+    }, 2.8);
+    expect(bounces).toBe(1);
+  });
+
+  it("applies the same rising-player gate to the second player", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    let bounces = 0;
+    const onPad = { x: -5, y: 50, z: 6 };
+    tycoon.updateSecondaryTrampoline(0.1, onPad, () => {
+      bounces++;
+    });
+    tycoon.updateSecondaryTrampoline(0.7, onPad, () => {
+      bounces++;
+    }, 2.8);
+    expect(bounces).toBe(1);
+  });
+
+  it("bounces again once the player is descending back onto the pad", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    let bounces = 0;
+    const onPad = { x: -5, y: 50, z: 6 };
+    tycoon.update(0.1, onPad, undefined, undefined, () => {
+      bounces++;
+    });
+    tycoon.update(0.7, onPad, undefined, undefined, () => {
+      bounces++;
+    }, -6);
+    expect(bounces).toBe(2);
+  });
+
+  it("is independent of the pad's recorded height, which is sampled at a different column", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    let bounces = 0;
+    tycoon.update(0.1, { x: -5, y: 57, z: 6 }, undefined, undefined, () => {
+      bounces++;
+    });
+    expect(bounces).toBe(1);
+  });
+
+  it("still bounces a grounded player standing on the pad", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    let bounces = 0;
+    tycoon.update(0.1, { x: -5, y: 50.4, z: 6 }, undefined, undefined, () => {
+      bounces++;
+    }, 0);
+    expect(bounces).toBe(1);
+  });
 });

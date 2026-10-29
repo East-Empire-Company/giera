@@ -124,4 +124,14 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(bubble.querySelector(".hud-npc-speech-text")?.textContent).toBe("Nowa wiadomość");
     expect(document.querySelectorAll(".hud-npc-speech").length).toBe(1);
   });
+  it("shows an icon-first wood pickup cue at its projected world position", () => {
+    const hud = new GameHUD({ inventory: new GameInventory(), objectives: new ObjectiveManager() });
+    hud.showResourceGain("oak_log", 1, { x: 120, y: 80 });
+    const cue = document.querySelector<HTMLElement>(".hud-resource-gain")!;
+    expect(cue.classList.contains("visible")).toBe(true);
+    expect(cue.querySelector("img")?.src).toContain("oak_log_side.png");
+    expect(cue.querySelector(".hud-resource-count")?.textContent).toBe("+1");
+    expect(cue.style.left).toBe("120px");
+    expect(cue.style.top).toBe("80px");
+  });
 });

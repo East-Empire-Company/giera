@@ -36,7 +36,7 @@ Software-covered items are regression-tested by `bun run pipeline` — manual pa
 
 | # | area | spot-check |
 |---|---|---|
-| 1 | movement | W walks ~2.4 b/s, no drift when stopping |
+| 1 | movement | W walks ~2.4 b/s, clears one-block rises without dead-stopping, no drift when stopping |
 | 2 | jump | single jump feels right, no double-jump |
 | 3 | mine | block breaks with progress bar, drops item |
 | 4 | place | block places on aimed face, can't bury yourself |

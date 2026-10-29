@@ -139,11 +139,33 @@ export class PlayerController {
     }
 
     const box = this.getBoundingBox();
-    const result = sweepAABB(world, box, {
+    const movement = {
       x: this.velocity.x * delta,
       y: this.velocity.y * delta,
       z: this.velocity.z * delta,
-    });
+    };
+    let result = sweepAABB(world, box, movement);
+    if (this.onGround && (result.hitAxis === "x" || result.hitAxis === "z")) {
+      const stepBox = { ...box, minY: box.minY + 1, maxY: box.maxY + 1 };
+      movement.y = 0;
+      const stepped = sweepAABB(world, stepBox, movement);
+      const directX = result.position.x - box.minX;
+      const directZ = result.position.z - box.minZ;
+      const steppedX = stepped.position.x - box.minX;
+      const steppedZ = stepped.position.z - box.minZ;
+      if (steppedX * steppedX + steppedZ * steppedZ > directX * directX + directZ * directZ + 1e-4) {
+        const offsetX = stepped.position.x - stepBox.minX;
+        const offsetZ = stepped.position.z - stepBox.minZ;
+        stepBox.minX += offsetX;
+        stepBox.maxX += offsetX;
+        stepBox.minZ += offsetZ;
+        stepBox.maxZ += offsetZ;
+        movement.x = 0;
+        movement.y = -1;
+        movement.z = 0;
+        result = sweepAABB(world, stepBox, movement);
+      }
+    }
 
     this.position.x = result.position.x + 0.3;
     this.position.y = result.position.y;

@@ -1,19 +1,21 @@
 import { getBlockDef } from "./blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, getBlockIndex } from "./chunk";
+import { terrainMaterialFor } from "./terrain-materials";
 
 export type TileUV = readonly number[];
 export type AtlasTile = { id: number; uv: TileUV };
-export type MeshGroup = { tile: number; start: number; count: number };
+export type MeshGroup = { tile: number; material: number; start: number; count: number };
 export type ChunkMesh = {
   positions: Float32Array;
   normals: Float32Array;
   uvs: Float32Array;
   colors: Float32Array;
+  tileIds: Float32Array;
   indices: Uint32Array;
   groups: MeshGroup[];
 };
 type Face = { tile: AtlasTile; sign: number; ao0: number; ao1: number; ao2: number; ao3: number; key: string; smooth: boolean; leaf: boolean };
-type TileMesh = { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; indices: number[] };
+type TileMesh = { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; tileIds: number[]; indices: number[] };
 
 const AXES = [
   { normal: 0, u: 1, v: 2 },
@@ -116,6 +118,8 @@ export function meshChunk(input: {
 }): ChunkMesh {
   if (input.data.length !== CHUNK_VOLUME) throw new RangeError(`Expected ${CHUNK_VOLUME} block IDs`);
   const origin = [input.cx * CHUNK_SIZE, input.cy * CHUNK_SIZE, input.cz * CHUNK_SIZE];
+  const materialByTile = new Map<number, number>();
+  for (const [name, tile] of Object.entries(input.atlas)) materialByTile.set(tile.id, terrainMaterialFor(name));
   const meshes = new Map<number, TileMesh>();
   const localBlock = (x: number, y: number, z: number): number => {
     if (x >= 0 && y >= 0 && z >= 0 && x < CHUNK_SIZE && y < CHUNK_SIZE && z < CHUNK_SIZE) {
@@ -127,7 +131,7 @@ export function meshChunk(input: {
   const addFace = (face: Face, axis: typeof AXES[number], slice: number, u: number, v: number, width: number, height: number): void => {
     let mesh = meshes.get(face.tile.id);
     if (!mesh) {
-      mesh = { positions: [], normals: [], uvs: [], colors: [], indices: [] };
+      mesh = { positions: [], normals: [], uvs: [], colors: [], tileIds: [], indices: [] };
       meshes.set(face.tile.id, mesh);
     }
     const plane = slice + (face.sign > 0 ? 1 : 0);
@@ -149,6 +153,15 @@ export function meshChunk(input: {
       let vnx = axis.normal === 0 ? face.sign : 0;
       let vny = axis.normal === 1 ? face.sign : 0;
       let vnz = axis.normal === 2 ? face.sign : 0;
+      if (face.smooth && axis.normal === 1 && face.sign > 0) {
+        const sampleY = Math.round(vy);
+        const gradientX = smoothHeight(x + 1, sampleY, z) - smoothHeight(x - 1, sampleY, z);
+        const gradientZ = smoothHeight(x, sampleY, z + 1) - smoothHeight(x, sampleY, z - 1);
+        const normalLength = Math.hypot(gradientX, 2, gradientZ) || 1;
+        vnx = -gradientX / normalLength;
+        vny = 2 / normalLength;
+        vnz = -gradientZ / normalLength;
+      }
       if (face.leaf) {
         const r = roundLeafVertex(localBlock, x, y, z, vnx, vny, vnz, origin);
         vpx = r.x; vpy = r.y; vpz = r.z; vnx = r.nx; vny = r.ny; vnz = r.nz;
@@ -167,27 +180,7 @@ export function meshChunk(input: {
         else if (i === 3) shade = face.ao1;
       }
       mesh.colors.push(shade, shade, shade);
-    }
-    if (face.smooth && axis.normal === 1 && face.sign > 0) {
-      const p = mesh.positions;
-      const o = vertexStart * 3;
-      const sx = p[o + 3 * 2] - p[o];
-      const sy = p[o + 3 * 2 + 1] - p[o + 1];
-      const sz = p[o + 3 * 2 + 2] - p[o + 2];
-      const tx = p[o + 3 * 3] - p[o + 3];
-      const ty = p[o + 3 * 3 + 1] - p[o + 3 + 1];
-      const tz = p[o + 3 * 3 + 2] - p[o + 3 + 2];
-      let nx = sy * tz - sz * ty;
-      let ny = sz * tx - sx * tz;
-      let nz = sx * ty - sy * tx;
-      const nl = Math.hypot(nx, ny, nz) || 1;
-      nx /= nl; ny /= nl; nz /= nl;
-      if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
-      for (let i = 0; i < 4; i++) {
-        mesh.normals[(vertexStart + i) * 3] = nx;
-        mesh.normals[(vertexStart + i) * 3 + 1] = ny;
-        mesh.normals[(vertexStart + i) * 3 + 2] = nz;
-      }
+      mesh.tileIds.push(face.tile.id);
     }
     mesh.indices.push(vertexStart, vertexStart + 1, vertexStart + 2, vertexStart, vertexStart + 2, vertexStart + 3);
   };
@@ -268,11 +261,12 @@ export function meshChunk(input: {
     }
   }
 
-  const tileIds = [...meshes.keys()].sort((a, b) => a - b);
+  const tileIds = [...meshes.keys()].sort((a, b) => (materialByTile.get(a)! - materialByTile.get(b)!) || a - b);
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
   const colors: number[] = [];
+  const tileIdsOut: number[] = [];
   const indices: number[] = [];
   const groups: MeshGroup[] = [];
   for (const tile of tileIds) {
@@ -283,14 +277,16 @@ export function meshChunk(input: {
     normals.push(...mesh.normals);
     uvs.push(...mesh.uvs);
     colors.push(...mesh.colors);
+    tileIdsOut.push(...mesh.tileIds);
     for (const index of mesh.indices) indices.push(index + vertexOffset);
-    groups.push({ tile, start, count: mesh.indices.length });
+    groups.push({ tile, material: materialByTile.get(tile)!, start, count: mesh.indices.length });
   }
   return {
     positions: new Float32Array(positions),
     normals: new Float32Array(normals),
     uvs: new Float32Array(uvs),
     colors: new Float32Array(colors),
+    tileIds: new Float32Array(tileIdsOut),
     indices: new Uint32Array(indices),
     groups,
   };

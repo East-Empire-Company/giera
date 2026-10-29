@@ -6,6 +6,7 @@ function makeVfx(seed = 424242): GameplayVfx {
   const textures: GameplayVfxTextures = {
     dirt01: new THREE.Texture(),
     dirt02: new THREE.Texture(),
+    leaf01: new THREE.Texture(),
     spark01: new THREE.Texture(),
     smoke01: new THREE.Texture(),
     star01: new THREE.Texture(),
@@ -64,6 +65,45 @@ describe("GameplayVfx bursts", () => {
     expect(vfx.activeCount).toBe(64);
     const fresh = vfx.snapshot().filter((p) => p.opacity === 1);
     expect(fresh).toHaveLength(8);
+  });
+  it("emits distinct wood and leaf debris", () => {
+    const wood = makeVfx();
+    const leaves = makeVfx();
+    const emit = (vfx: GameplayVfx, kind: GameplayVfxKind): void => vfx.emit(kind, origin);
+    emit(wood, "wood");
+    emit(leaves, "leaves");
+    expect(wood.activeCount).toBeGreaterThan(0);
+    expect(leaves.activeCount).toBeGreaterThan(0);
+    wood.update(0.15);
+    leaves.update(0.15);
+    expect(wood.snapshot()).not.toEqual(leaves.snapshot());
+  });
+
+  it("spawns pollen when space exists but never replaces gameplay bursts", () => {
+    const vfx = makeVfx();
+    const emit = (kind: GameplayVfxKind, position: THREE.Vector3): void => vfx.emit(kind, position);
+    emit("pollen", origin);
+    expect(vfx.activeCount).toBeGreaterThan(0);
+
+    const full = makeVfx();
+    for (let i = 0; i < 8; i++) full.emit("collect", origin);
+    const gameplay = full.snapshot();
+    full.emit("pollen", new THREE.Vector3(0, 0, 0));
+    expect(full.snapshot()).toEqual(gameplay);
+  });
+
+  it("emits dust after grounded travel, not while airborne", () => {
+    const vfx = makeVfx();
+    vfx.updateFootsteps("p1", new THREE.Vector3(0, 0, 0), true);
+    vfx.updateFootsteps("p1", new THREE.Vector3(0.4, 0, 0), true);
+    expect(vfx.activeCount).toBe(0);
+    vfx.updateFootsteps("p1", new THREE.Vector3(0.9, 0, 0), true);
+    expect(vfx.activeCount).toBeGreaterThan(0);
+
+    const airborne = makeVfx();
+    airborne.updateFootsteps("p1", new THREE.Vector3(0, 0, 0), false);
+    airborne.updateFootsteps("p1", new THREE.Vector3(1, 0, 0), false);
+    expect(airborne.activeCount).toBe(0);
   });
 
   it("is deterministic for the same seed and differs for another seed", () => {

@@ -6,6 +6,8 @@ export type TycoonUpgrade = {
   name: string;
 };
 
+const RISING_VELOCITY_LIMIT = 1;
+
 export class TycoonManager {
   readonly origin: THREE.Vector3;
   readonly collectorPadPos: THREE.Vector3;
@@ -17,6 +19,7 @@ export class TycoonManager {
   dropperTier = 1;
   private dropTimer = 0;
   private trampolineCooldown = 0;
+  private secondaryTrampolineCooldown = 0;
   private pulseTime = 0;
 
   readonly object?: THREE.Group;
@@ -111,7 +114,8 @@ export class TycoonManager {
     playerPos: { x: number; y: number; z: number },
     onCollect?: (coins: number) => void,
     onUpgrade?: () => void,
-    onBounce?: () => void
+    onBounce?: () => void,
+    verticalVelocity = 0
   ): void {
     // 1. Dropper interval
     this.dropTimer += delta;
@@ -143,8 +147,7 @@ export class TycoonManager {
     }
 
     // 4. Trampoline Check
-    const distToTrampoline = Math.hypot(playerPos.x - this.trampolinePos.x, playerPos.z - this.trampolinePos.z);
-    if (distToTrampoline < 1.1 && this.trampolineCooldown <= 0) {
+    if (this.onTrampoline(playerPos, verticalVelocity) && this.trampolineCooldown <= 0) {
       this.trampolineCooldown = 0.6;
       onBounce?.();
     }
@@ -156,6 +159,25 @@ export class TycoonManager {
       this.collectorMesh.scale.set(pulse, 1, pulse);
       this.upgradeMesh.scale.set(pulse, 1, pulse);
     }
+  }
+
+  updateSecondaryTrampoline(
+    delta: number,
+    playerPos: { x: number; y: number; z: number },
+    onBounce?: () => void,
+    verticalVelocity = 0
+  ): void {
+    if (this.secondaryTrampolineCooldown > 0) this.secondaryTrampolineCooldown -= delta;
+    if (this.onTrampoline(playerPos, verticalVelocity) && this.secondaryTrampolineCooldown <= 0) {
+      this.secondaryTrampolineCooldown = 0.6;
+      onBounce?.();
+    }
+  }
+
+  /** Over the pad horizontally and not still climbing from the last bounce. Pad height is not used: it is sampled at a different column than the pad. */
+  private onTrampoline(playerPos: { x: number; z: number }, verticalVelocity: number): boolean {
+    const horizontal = Math.hypot(playerPos.x - this.trampolinePos.x, playerPos.z - this.trampolinePos.z);
+    return horizontal < 1.1 && verticalVelocity <= RISING_VELOCITY_LIMIT;
   }
 
   dispose(): void {

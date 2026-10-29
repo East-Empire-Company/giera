@@ -52,6 +52,10 @@ export class GameHUD {
     string,
     { el: HTMLElement; nameEl: HTMLElement; textEl: HTMLElement; until: number }
   >();
+  private readonly resourceGain: HTMLElement;
+  private readonly resourceGainIcon: HTMLImageElement;
+  private readonly resourceGainCount: HTMLElement;
+  private resourceGainUntil = 0;
   private npcDialogOpen = false;
   private lanModalOpen = false;
   private controlsModalOpen = false;
@@ -110,6 +114,16 @@ export class GameHUD {
     this.speechLayer = document.createElement("div");
     this.speechLayer.className = "hud-npc-speech-layer";
     this.container.appendChild(this.speechLayer);
+    this.resourceGain = document.createElement("div");
+    this.resourceGain.className = "hud-resource-gain";
+    this.resourceGain.setAttribute("role", "status");
+    this.resourceGain.setAttribute("aria-live", "polite");
+    this.resourceGainIcon = document.createElement("img");
+    this.resourceGainIcon.alt = "";
+    this.resourceGainCount = document.createElement("span");
+    this.resourceGainCount.className = "hud-resource-count";
+    this.resourceGain.append(this.resourceGainIcon, this.resourceGainCount);
+    this.container.appendChild(this.resourceGain);
 
     // Hotbar
     this.hotbar = document.createElement("div");
@@ -584,6 +598,24 @@ export class GameHUD {
       bubble.el.style.left = `${pos.x}px`;
       bubble.el.style.top = `${pos.y}px`;
       bubble.el.classList.add("visible");
+    }
+  }
+  showResourceGain(itemKey: string, count: number, position: { x: number; y: number }, durationSec = 1.2): void {
+    if (!Number.isInteger(count) || count <= 0) return;
+    this.resourceGainIcon.src = getItemIcon(itemKey);
+    this.resourceGainCount.textContent = `+${count}`;
+    this.resourceGain.style.left = `${position.x}px`;
+    this.resourceGain.style.top = `${position.y}px`;
+    this.resourceGainUntil = performance.now() / 1000 + durationSec;
+    this.resourceGain.classList.remove("visible");
+    void this.resourceGain.offsetWidth;
+    this.resourceGain.classList.add("visible");
+  }
+
+  updateResourceGain(): void {
+    if (this.resourceGainUntil && performance.now() / 1000 >= this.resourceGainUntil) {
+      this.resourceGainUntil = 0;
+      this.resourceGain.classList.remove("visible");
     }
   }
 }

@@ -41,9 +41,9 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const devServer = await ensureDevServer();
 const browser = await chromium.launch({
   headless: false,
-  args: ["--use-gl=angle", "--use-angle=metal", "--window-size=1280,760", "--window-position=40,40"],
+  args: ["--use-gl=angle", "--use-angle=metal", "--window-size=1280,760", "--window-position=40,40", "--disable-features=Translate,TranslateUI"],
 });
-const context = await browser.newContext({ viewport: null });
+const context = await browser.newContext({ viewport: null, locale: "pl-PL" });
 const page = await context.newPage();
 const pageErrors = [];
 page.on("pageerror", (e) => pageErrors.push(String(e)));
@@ -359,26 +359,64 @@ const npc = await page.evaluate(() => {
   return mina ? mina.position.toArray() : null;
 });
 if (npc) {
-  await page.evaluate((pos) => {
+  await pause(1200);
+  await page.evaluate(() => {
     const g = window.__GIERA__;
-    g.player.position.set(pos[0] + 1.3, g.player.position.y, pos[2]);
+    const mina = g.npcManager?.npcs?.find((n) => n.def?.id === "mina");
+    if (!mina) return;
+    g.player.position.set(mina.position.x + 0.5, mina.position.y, mina.position.z);
+    g.player.velocity.set(0, 0, 0);
     g.player.yaw = -Math.PI / 2;
     g.player.syncAvatar();
-  }, npc);
-  await pause(1200);
+  });
+  await pause(100);
   const prompt = await page.evaluate(() => document.querySelector(".hud-npc-prompt, .hud-prompt, #npc-prompt")?.textContent?.trim() ?? null);
   check("NPC prompt", !!prompt, String(prompt));
+  await page.evaluate(() => {
+    window.__qaNpcKeyEvents = [];
+    const g = window.__GIERA__;
+    window.addEventListener("keydown", (event) => {
+      if (event.code !== "KeyE") return;
+      const p = g.player.position;
+      const npcs = g.npcManager.npcs.map((n) => ({
+        id: n.def.id,
+        pos: n.position.toArray(),
+        distance: Math.hypot(n.position.x - p.x, n.position.y - p.y, n.position.z - p.z),
+      }));
+      const nearest = g.npcManager.getNearestNPC(p.x, p.y, p.z, 3);
+      window.__qaNpcKeyEvents.push({
+        phase: "capture",
+        nearest: nearest?.def?.id ?? null,
+        player: p.toArray(),
+        velocity: g.player.velocity.toArray(),
+        npcs,
+        prompt: document.querySelector(".hud-npc-prompt")?.textContent ?? "",
+        active: document.activeElement?.tagName,
+      });
+    }, true);
+    window.addEventListener("keydown", (event) => {
+      if (event.code === "KeyE") window.__qaNpcKeyEvents.push({ phase: "bubble", defaultPrevented: event.defaultPrevented });
+    });
+  });
   await page.keyboard.press("e");
   await pause(1000);
   await page.screenshot({ path: resolve(EVIDENCE, "visible-09-npc.png") });
-  const quick = await page.evaluate(() => document.querySelectorAll(".hud-quick-btn").length);
-  if (quick > 0) {
+  const npcState = await page.evaluate(() => ({
+    buttons: document.querySelectorAll(".hud-quick-btn").length,
+    reply: document.querySelector("#npc-reply-bubble")?.textContent ?? "",
+    dialogOpen: document.querySelector(".hud-npc-modal")?.classList.contains("hud-modal-open") ?? false,
+    active: document.activeElement?.tagName,
+    keys: window.__qaNpcKeyEvents,
+  }));
+  if (npcState.buttons > 0) {
     await page.click(".hud-quick-btn");
     await pause(1200);
   }
   const reply = await page.evaluate(() => document.querySelector("#npc-reply-bubble")?.textContent ?? "");
   await page.screenshot({ path: resolve(EVIDENCE, "visible-10-npc-reply.png") });
-  check("NPC conversation", quick > 0 && reply.length > 0, `buttons=${quick} reply="${reply.slice(0, 50)}"`);
+  const replied = reply.length > 0 && reply !== npcState.reply;
+  const detail = `buttons=${npcState.buttons} reply="${reply.slice(0, 50)}"${replied ? "" : ` state=${JSON.stringify(npcState)}`}`;
+  check("NPC conversation", npcState.buttons > 0 && replied, detail);
   await page.keyboard.press("Escape");
   await pause(400);
 }

@@ -26,6 +26,10 @@ export function chatterDelayMs(consecutiveFailures: number, baseMs = 20_000, max
   return Math.min(maxMs, baseMs * 2 ** Math.max(0, consecutiveFailures));
 }
 
+export function ambientNpcChatterEnabled(search: string): boolean {
+  return new URLSearchParams(search).get("disableAmbientNpcChatter") !== "1";
+}
+
 function clientBackoffMs(attempt: number, options: ReasonNpcOptions, retryAfter: string | null): number {
   const base = options.baseMs ?? 300;
   const max = options.maxMs ?? 2000;

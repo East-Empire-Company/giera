@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { ItemDropManager } from "../../src/client/entities/drops";
 import { makeRng } from "../../src/shared/rng";
@@ -37,6 +38,15 @@ describe("ItemDropManager", () => {
     drop.velocity.set(0, 0, 0);
     manager.update(0.2, { x: 10, y: 40, z: 10 });
     expect(drop.position.x).toBeLessThan(drifted - 1);
+  });
+
+  it("gives a drop mesh a colour attribute when it uses a vertex-coloured tile material", () => {
+    const scene = new THREE.Scene();
+    const manager = new ItemDropManager({ scene });
+    const tileMaterial = new THREE.MeshStandardMaterial({ vertexColors: true });
+    const drop = manager.spawn(0, 0, 0, 3, tileMaterial);
+    expect(drop.mesh).toBeDefined();
+    expect(drop.mesh!.geometry.getAttribute("color")).toBeDefined();
   });
 
   it("despawns drops older than 60 seconds", () => {

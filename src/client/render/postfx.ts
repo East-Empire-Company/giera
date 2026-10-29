@@ -1,73 +1,172 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
-import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
+import {
+  BloomEffect,
+  BlendFunction,
+  Effect,
+  EffectComposer,
+  EffectPass,
+  RenderPass,
+  SMAAEffect,
+  SMAAPreset,
+  ToneMappingEffect,
+  ToneMappingMode,
+  type Pass,
+} from "postprocessing";
+// @ts-expect-error n8ao does not publish TypeScript declarations.
+import { N8AOPostPass as UncheckedN8AOPostPass } from "n8ao";
 
-const GradeShader = {
-  uniforms: { tDiffuse: { value: null as THREE.Texture | null } },
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-    }`,
-  fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse;
-    varying vec2 vUv;
-    void main() {
-      vec4 color = texture2D( tDiffuse, vUv );
-      float vig = smoothstep( 0.92, 0.38, distance( vUv, vec2( 0.5 ) ) );
-      color.rgb *= mix( 0.68, 1.0, vig );
-      color.rgb *= vec3( 1.04, 1.0, 0.96 );
-      gl_FragColor = color;
-    }`,
+type N8AOPass = Pass & {
+  configuration: {
+    aoRadius: number;
+    distanceFalloff: number;
+    halfRes: boolean;
+    intensity: number;
+  };
+  setQualityMode(mode: "Performance"): void;
 };
+
+type N8AOPassConstructor = new (
+  scene: THREE.Scene,
+  camera: THREE.PerspectiveCamera,
+  width: number,
+  height: number
+) => N8AOPass;
+
+const N8AOPostPass = UncheckedN8AOPostPass as unknown as N8AOPassConstructor;
+
+export class AdaptiveBloomEffect extends BloomEffect {
+  private active = true;
+
+  setActive(active: boolean): void {
+    this.active = active;
+    this.blendMode.opacity.value = active ? 1 : 0;
+  }
+
+  override update(
+    renderer: THREE.WebGLRenderer,
+    inputBuffer: THREE.WebGLRenderTarget,
+    deltaTime?: number
+  ): void {
+    if (this.active) super.update(renderer, inputBuffer, deltaTime);
+  }
+}
+
+const gradeShader = /* glsl */ `
+  void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+    float vignette = 1.0 - smoothstep(0.38, 0.92, distance(uv, vec2(0.5)));
+    vec3 tint = 1.05 * vec3(1.04, 1.0, 0.96);
+    outputColor = vec4(inputColor.rgb * mix(0.68, 1.0, vignette) * tint, inputColor.a);
+  }
+`;
 
 const SplitShader = {
   uniforms: {
     tLeft: { value: null as THREE.Texture | null },
     tRight: { value: null as THREE.Texture | null },
   },
-  vertexShader: GradeShader.vertexShader,
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
   fragmentShader: /* glsl */ `
     uniform sampler2D tLeft;
     uniform sampler2D tRight;
     varying vec2 vUv;
     void main() {
-      vec2 uvL = vec2( vUv.x * 2.0, vUv.y );
-      vec2 uvR = vec2( vUv.x * 2.0 - 1.0, vUv.y );
-      gl_FragColor = vUv.x < 0.5 ? texture2D( tLeft, uvL ) : texture2D( tRight, uvR );
-    }`,
+      vec2 uvLeft = vec2(vUv.x * 2.0, vUv.y);
+      vec2 uvRight = vec2(vUv.x * 2.0 - 1.0, vUv.y);
+      gl_FragColor = vUv.x < 0.5 ? texture2D(tLeft, uvLeft) : texture2D(tRight, uvRight);
+      #include <colorspace_fragment>
+    }
+  `,
 };
 
-type ComposerChain = { composer: EffectComposer; gtao: GTAOPass };
+type ComposerChain = { composer: EffectComposer; ao: N8AOPass; bloom: AdaptiveBloomEffect };
 
 function buildChain(
   renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
   width: number,
-  height: number
+  height: number,
+  autoRenderToScreen = true
 ): ComposerChain {
-  const composer = new EffectComposer(renderer);
-  const gtao = new GTAOPass(scene, camera, width, height);
-  const grade = new ShaderPass(GradeShader);
-  const smaa = new SMAAPass();
-  composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(gtao);
-  composer.addPass(grade);
-  composer.addPass(smaa);
-  composer.addPass(new OutputPass());
-  return { composer, gtao };
+  const composer = new EffectComposer(renderer, {
+    depthBuffer: true,
+    stencilBuffer: true,
+    frameBufferType: THREE.HalfFloatType,
+  });
+  composer.autoRenderToScreen = autoRenderToScreen;
+  const renderPass = new RenderPass(scene, camera);
+  renderPass.clearPass.setClearFlags(true, true, true);
+  composer.addPass(renderPass);
+
+  const ao = new N8AOPostPass(scene, camera, width, height);
+  ao.setQualityMode("Performance");
+  ao.configuration.aoRadius = 2.5;
+  ao.configuration.distanceFalloff = 0.65;
+  ao.configuration.halfRes = true;
+  ao.configuration.intensity = 2.2;
+  composer.addPass(ao);
+
+  const grade = new Effect("Grade", gradeShader, { blendFunction: BlendFunction.NORMAL });
+  const bloom = new AdaptiveBloomEffect({
+    intensity: 0.14,
+    levels: 4,
+    luminanceSmoothing: 0.12,
+    luminanceThreshold: 0.84,
+    mipmapBlur: true,
+    radius: 0.35,
+  });
+  composer.addPass(
+    new EffectPass(
+      camera,
+      grade,
+      new SMAAEffect({ preset: SMAAPreset.HIGH }),
+      bloom,
+      new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC })
+    )
+  );
+
+  return { composer, ao, bloom };
 }
 
-export type QualityState = { gtao: boolean };
+function outputTexture(chain: ComposerChain): THREE.Texture {
+  let input = chain.composer.inputBuffer;
+  let output = chain.composer.outputBuffer;
+  for (const pass of chain.composer.passes) {
+    if (!pass.enabled || !pass.needsSwap) continue;
+    const previous = input;
+    input = output;
+    output = previous;
+  }
+  return input.texture;
+}
 
-export function evaluatePostQuality(state: QualityState, avgFps: number): QualityState {
-  return { gtao: state.gtao && avgFps >= 50 };
+export type QualityState = { ao: boolean; bloom: boolean };
+
+export type LadderState = { quality: QualityState; restoreCooldown: number; failedRestores: number };
+
+const MAX_RESTORE_COOLDOWN_WINDOWS = 24;
+
+function cooldownAfterFailures(failures: number): number {
+  return Math.min(MAX_RESTORE_COOLDOWN_WINDOWS, 2 ** failures);
+}
+
+export function nextLadderState(state: LadderState, avgFps: number): LadderState {
+  const effectsOn = state.quality.ao || state.quality.bloom;
+  if (effectsOn && avgFps < 50) {
+    const failedRestores = state.failedRestores + 1;
+    return { quality: { ao: false, bloom: false }, restoreCooldown: cooldownAfterFailures(failedRestores), failedRestores };
+  }
+  if (!effectsOn) {
+    if (state.restoreCooldown > 0) return { ...state, restoreCooldown: state.restoreCooldown - 1 };
+    if (avgFps > 55) return { ...state, quality: { ao: true, bloom: true } };
+  }
+  return state;
 }
 
 export function postWindowAdvance(windowSeconds: number, deltaSeconds: number): { total: number; due: boolean } {
@@ -77,20 +176,39 @@ export function postWindowAdvance(windowSeconds: number, deltaSeconds: number): 
 
 export class PostFX {
   private readonly renderer: THREE.WebGLRenderer;
+  private readonly scene: THREE.Scene;
+  private readonly soloCamera: THREE.PerspectiveCamera;
+  private readonly prepareView: (camera: THREE.PerspectiveCamera) => void;
   private solo: ComposerChain;
   private split: [ComposerChain, ComposerChain] | null = null;
-  private readonly composite: { scene: THREE.Scene; camera: THREE.OrthographicCamera; material: THREE.ShaderMaterial; quad: THREE.Mesh };
+  private readonly composite: {
+    scene: THREE.Scene;
+    camera: THREE.OrthographicCamera;
+    material: THREE.ShaderMaterial;
+    quad: THREE.Mesh;
+  };
   private width: number;
   private height: number;
   private windowFrames = 0;
   private windowSeconds = 0;
-  private gtaoEnabled = true;
+  private ladder: LadderState = { quality: { ao: true, bloom: true }, restoreCooldown: 0, failedRestores: 0 };
 
-  constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, width: number, height: number) {
+  constructor(
+    renderer: THREE.WebGLRenderer,
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+    width: number,
+    height: number,
+    prepareView: (camera: THREE.PerspectiveCamera) => void
+  ) {
     this.renderer = renderer;
+    this.scene = scene;
+    this.soloCamera = camera;
+    this.prepareView = prepareView;
     this.width = width;
     this.height = height;
     this.solo = buildChain(renderer, scene, camera, width, height);
+    this.resizeChain(this.solo, width, height);
     this.composite = {
       scene: new THREE.Scene(),
       camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
@@ -102,27 +220,29 @@ export class PostFX {
   }
 
   renderSolo(): void {
+    this.prepareView(this.soloCamera);
     this.solo.composer.render();
   }
 
   renderSplit(camera: THREE.PerspectiveCamera, camera2: THREE.PerspectiveCamera): void {
     if (!this.split) {
-      const scene = (this.solo.composer.passes[0] as RenderPass).scene;
       const halfWidth = Math.max(1, Math.floor(this.width / 2));
       this.split = [
-        buildChain(this.renderer, scene, camera, halfWidth, this.height),
-        buildChain(this.renderer, scene, camera2, halfWidth, this.height),
+        buildChain(this.renderer, this.scene, camera, halfWidth, this.height, false),
+        buildChain(this.renderer, this.scene, camera2, halfWidth, this.height, false),
       ];
       this.split.forEach((chain) => {
-        chain.composer.renderToScreen = false;
+        this.resizeChain(chain, halfWidth, this.height);
         this.applyQuality(chain);
       });
     }
     const [left, right] = this.split;
+    this.prepareView(camera);
     left.composer.render();
+    this.prepareView(camera2);
     right.composer.render();
-    this.composite.material.uniforms.tLeft.value = left.composer.readBuffer?.texture ?? null;
-    this.composite.material.uniforms.tRight.value = right.composer.readBuffer?.texture ?? null;
+    this.composite.material.uniforms.tLeft.value = outputTexture(left);
+    this.composite.material.uniforms.tRight.value = outputTexture(right);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.composite.scene, this.composite.camera);
   }
@@ -130,11 +250,10 @@ export class PostFX {
   setSize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    this.solo.composer.setSize(width, height);
+    this.resizeChain(this.solo, width, height);
     if (this.split) {
       const halfWidth = Math.max(1, Math.floor(width / 2));
-      this.split[0].composer.setSize(halfWidth, height);
-      this.split[1].composer.setSize(halfWidth, height);
+      this.split.forEach((chain) => this.resizeChain(chain, halfWidth, height));
     }
   }
 
@@ -143,24 +262,29 @@ export class PostFX {
     const window = postWindowAdvance(this.windowSeconds, deltaSeconds);
     this.windowSeconds = window.total;
     if (!window.due) return;
-    const avgFps = this.windowFrames / 5;
+    const avgFps = this.windowFrames / window.total;
     this.windowFrames = 0;
     this.windowSeconds = 0;
-    if (this.gtaoEnabled && avgFps < 50) console.info(`[postfx] GTAO disabled (avg fps ${avgFps.toFixed(1)})`);
-    const after = evaluatePostQuality({ gtao: this.gtaoEnabled }, avgFps);
-    this.gtaoEnabled = after.gtao;
-    this.solo.gtao.enabled = this.gtaoEnabled;
-    if (this.split) this.split.forEach((chain) => (chain.gtao.enabled = this.gtaoEnabled));
+    const after = nextLadderState(this.ladder, avgFps);
+    const changed = after.quality.ao !== this.ladder.quality.ao || after.quality.bloom !== this.ladder.quality.bloom;
+    this.ladder = after;
+    if (!changed) return;
+    const backoff = after.quality.ao ? "" : `, retry in ${after.restoreCooldown} windows`;
+    console.info(`[postfx] AO and bloom ${after.quality.ao ? "restored" : "disabled"} (avg fps ${avgFps.toFixed(1)}${backoff})`);
+    this.applyQuality(this.solo);
+    this.split?.forEach((chain) => this.applyQuality(chain));
+  }
+
+  private resizeChain(chain: ComposerChain, width: number, height: number): void {
+    chain.composer.setSize(width, height, false);
+    if (width !== this.width || height !== this.height) {
+      this.renderer.setSize(this.width, this.height, false);
+    }
   }
 
   private applyQuality(chain: ComposerChain): void {
-    chain.gtao.enabled = this.gtaoEnabled;
-  }
-
-  setPassEnabled(pass: "gtao", enabled: boolean): void {
-    this.gtaoEnabled = enabled;
-    this.solo.gtao.enabled = enabled;
-    this.split?.forEach((chain) => (chain.gtao.enabled = enabled));
+    chain.ao.enabled = this.ladder.quality.ao;
+    chain.bloom.setActive(this.ladder.quality.bloom);
   }
 
   dispose(): void {

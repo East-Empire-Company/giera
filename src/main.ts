@@ -5,7 +5,7 @@ import { MicController } from "./client/audio/mic";
 import { LanClient } from "./client/net/client";
 import { PlayerController } from "./client/entities/player";
 import { NPCManager } from "./client/entities/npc";
-import { chatterDelayMs, fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
+import { ambientNpcChatterEnabled, chatterDelayMs, fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
 import { fallbackLine } from "./shared/npc-fallbacks";
 import { executeNpcClientTool } from "../server/npc-bridge";
 import { ItemDropManager } from "./client/entities/drops";
@@ -22,14 +22,16 @@ import { collideCamera } from "./shared/camera-collision";
 import { pickViewRadius } from "./shared/view-radius";
 import { lookGain } from "./shared/look-sensitivity";
 import { GameplayVfx } from "./client/effects/gameplay-vfx";
+import { hitPulseScale } from "./client/effects/hit-pulse";
 import { createRenderer, loadRenderAssets, SkyCycle } from "./client/render/renderer";
+import { CascadedShadows, MAX_SHADOW_CASTER_RANGE, shadowDistanceFor } from "./client/render/cascaded-shadows";
 import { getSplitViewports, SplitScreenManager } from "./client/render/split-screen";
 import { PostFX } from "./client/render/postfx";
 import { WorldRenderer } from "./client/render/worldRenderer";
 import { resolveWorldSeed } from "./client/startup/world-seed";
 import { WORLDGEN_VERSION } from "./shared/worldgen";
 import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "./shared/blocks";
-import { chunkKey } from "./shared/chunk";
+import { CHUNK_SIZE, chunkKey } from "./shared/chunk";
 import { raycastInteract } from "./shared/raycast";
 import { makeRng } from "./shared/rng";
 import { surfaceHeight } from "./shared/worldgen";
@@ -55,7 +57,13 @@ type GameBridge = {
   stats: GameStats;
   tycoon: TycoonManager;
   postfx: PostFX;
-  qa?: { simTime: number; frame: number; events: { ev: string; id?: string; t: number }[] };
+  qa?: {
+    simTime: number;
+    frame: number;
+    paused: boolean;
+    pauseAt?: number;
+    events: { ev: string; id?: string; t: number }[];
+  };
 };
 declare global {
   interface Window {
@@ -75,6 +83,7 @@ const status: HTMLElement = statusElement;
 const message: HTMLElement = messageElement;
 const progress: HTMLElement = progressElement;
 const qa = new URLSearchParams(window.location.search).get("qa") === "1";
+const ambientChatterEnabled = ambientNpcChatterEnabled(window.location.search);
 const INTERACT_REACH = 12;
 const VIEW_RADIUS = pickViewRadius(navigator.userAgent, (navigator as Navigator & { deviceMemory?: number }).deviceMemory);
 
@@ -262,8 +271,29 @@ async function boot(): Promise<void> {
   scene.add(trainingDummy.object);
 
   const sky = new SkyCycle(scene, assets);
-  const postfx = new PostFX(renderer, scene, camera, window.innerWidth, window.innerHeight);
-  const qaState = { simTime: 0, frame: 0, events: [] as { ev: string; id?: string; t: number }[] };
+  const cascadedShadows = new CascadedShadows(
+    scene,
+    camera,
+    sky.getSunLight(),
+    shadowDistanceFor(camera.far, CHUNK_SIZE * VIEW_RADIUS)
+  );
+  world.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
+  cascadedShadows.registerObject(scene);
+  const postfx = new PostFX(
+    renderer,
+    scene,
+    camera,
+    window.innerWidth,
+    window.innerHeight,
+    (viewCamera) => cascadedShadows.prepareView(viewCamera)
+  );
+  const qaState = {
+    simTime: 0,
+    frame: 0,
+    paused: false,
+    pauseAt: undefined as number | undefined,
+    events: [] as { ev: string; id?: string; t: number }[],
+  };
   if (qa) {
     const origPlay = audio.play.bind(audio);
     const origPlayMusic = audio.playMusic.bind(audio);
@@ -352,6 +382,12 @@ async function boot(): Promise<void> {
     npcManager.npcs.map((n) => [n.def.id, 15 + npcThinkRng() * 20])
   );
   const speechProjector = new THREE.Vector3();
+  const pickupProjector = new THREE.Vector3();
+  const pollenRng = makeRng(seed ^ 0x3b79f2d1);
+  let pollenTimer = 0;
+  let woodHitEffectTimer = 0;
+  let shadowCasterKey = "";
+  const shadowCasterRange = MAX_SHADOW_CASTER_RANGE;
 
   const applyNpcTool = (
     npcId: string,
@@ -422,6 +458,25 @@ async function boot(): Promise<void> {
   let isMining = false;
   let miningBlock: { x: number; y: number; z: number; id: number } | null = null;
   let miningProgress = 0;
+  const resetMiningFeedback = (): void => {
+    const hasFeedback =
+      miningBlock !== null ||
+      miningProgress !== 0 ||
+      woodHitEffectTimer !== 0 ||
+      crackMesh.visible ||
+      crackMaterial.opacity !== 0 ||
+      crackMesh.scale.x !== 1 ||
+      crackMesh.scale.y !== 1 ||
+      crackMesh.scale.z !== 1;
+    if (!hasFeedback) return;
+    miningBlock = null;
+    miningProgress = 0;
+    woodHitEffectTimer = 0;
+    crackMesh.visible = false;
+    crackMaterial.opacity = 0;
+    crackMesh.scale.setScalar(1);
+    hud.updateBreakProgress(0);
+  };
 
   window.addEventListener("keydown", (e) => {
     keys.add(e.code);
@@ -537,9 +592,7 @@ async function boot(): Promise<void> {
   window.addEventListener("mouseup", (e) => {
     if (e.button === 0) {
       isMining = false;
-      miningBlock = null;
-      miningProgress = 0;
-      hud.updateBreakProgress(0);
+      resetMiningFeedback();
     }
   });
 
@@ -558,9 +611,11 @@ async function boot(): Promise<void> {
   };
 
   renderer.setAnimationLoop((now) => {
-    const delta = qa ? 1 / 60 : Math.min(0.05, Math.max(0, (now - previous) / 1000));
+    renderer.info.reset();
+    if (qa && qaState.pauseAt !== undefined && qaState.frame >= qaState.pauseAt) qaState.paused = true;
+    const delta = qa ? (qaState.paused ? 0 : 1 / 60) : Math.min(0.05, Math.max(0, (now - previous) / 1000));
     previous = now;
-    if (qa) {
+    if (qa && !qaState.paused) {
       qaState.simTime += delta;
       qaState.frame++;
     }
@@ -731,6 +786,8 @@ async function boot(): Promise<void> {
     }
     player.avatar?.update(delta);
     if (!splitScreen.isSplitScreen) player2.avatar?.update(delta);
+    gameplayVfx.updateFootsteps("p1", player.position, player.onGround);
+    gameplayVfx.updateFootsteps("p2", player2.position, splitScreen.isSplitScreen && player2.onGround);
     if (qa) {
       player.avatar?.freezePose(0.5);
       player2.avatar?.freezePose(0.5);
@@ -747,6 +804,17 @@ async function boot(): Promise<void> {
           .loadArea(player.position.x, player.position.z, VIEW_RADIUS, splitScreen.isSplitScreen ? [{ worldX: player2.position.x, worldZ: player2.position.z }] : undefined)
           .catch(() => {})
           .finally(() => { streamBusy = false; });
+      }
+    }
+    {
+      const split = splitScreen.isSplitScreen;
+      const key = `${Math.floor(player.position.x / 16)},${Math.floor(player.position.z / 16)}|${split ? `${Math.floor(player2.position.x / 16)},${Math.floor(player2.position.z / 16)}` : "-"}`;
+      if (key !== shadowCasterKey) {
+        shadowCasterKey = key;
+        world.updateShadowCasters(
+          split ? [player.position, player2.position] : [player.position],
+          shadowCasterRange
+        );
       }
     }
     sky.update(elapsed, player.position);
@@ -803,7 +871,8 @@ async function boot(): Promise<void> {
         visible: true,
       };
     });
-    if (!qa && !hud.isNpcDialogOpen()) {
+    hud.updateResourceGain();
+    if (!qa && ambientChatterEnabled && !hud.isNpcDialogOpen()) {
       for (const n of npcManager.npcs) {
         if (npcThinkPending.has(n.def.id)) continue;
         const t = (npcThinkTimers.get(n.def.id) ?? 0) + delta;
@@ -833,6 +902,25 @@ async function boot(): Promise<void> {
       }
     }
     trainingDummy.update(delta);
+    const footX = Math.floor(player.position.x);
+    const footY = Math.floor(player.position.y - 0.05);
+    const footZ = Math.floor(player.position.z);
+    if (world.getBlock(footX, footY, footZ) === BLOCK_ID.grass) {
+      pollenTimer += delta;
+      if (pollenTimer >= 1.4) {
+        pollenTimer %= 1.4;
+        gameplayVfx.emit(
+          "pollen",
+          new THREE.Vector3(
+            player.position.x + (pollenRng() - 0.5) * 6,
+            player.position.y + 0.8 + pollenRng() * 1.8,
+            player.position.z + (pollenRng() - 0.5) * 6
+          )
+        );
+      }
+    } else {
+      pollenTimer = 0;
+    }
     gameplayVfx.update(delta);
     itemDrops.update(delta, player.position, () => {
       audio.play("craft_ok");
@@ -855,19 +943,22 @@ async function boot(): Promise<void> {
         gameplayVfx.emit("bounce", new THREE.Vector3(player.position.x, player.position.y + 0.2, player.position.z));
         player.onGround = false;
         audio.play("jump", { rate: 1.5, volume: 1.0 });
-      }
+      },
+      player.velocity.y
     );
 
     if (splitScreen.isSplitScreen) {
-      const distP2Tramp = Math.hypot(player2.position.x - tycoon.trampolinePos.x, player2.position.z - tycoon.trampolinePos.z);
-      if (distP2Tramp < 1.1) {
-        if (player2.velocity.y < 20) {
+      tycoon.updateSecondaryTrampoline(
+        delta,
+        player2.position,
+        () => {
           gameplayVfx.emit("bounce", new THREE.Vector3(player2.position.x, player2.position.y + 0.2, player2.position.z));
-        }
-        player2.velocity.y = 22.0;
-        player2.onGround = false;
-        audio.play("jump", { rate: 1.5, volume: 1.0 });
-      }
+          player2.velocity.y = 22.0;
+          player2.onGround = false;
+          audio.play("jump", { rate: 1.5, volume: 1.0 });
+        },
+        player2.velocity.y
+      );
     }
 
     if (isMining && trainingDummy.isHit(player.position, 3.5)) {
@@ -892,6 +983,7 @@ async function boot(): Promise<void> {
           if (!miningBlock || miningBlock.x !== hit.hit.x || miningBlock.y !== hit.hit.y || miningBlock.z !== hit.hit.z) {
             miningBlock = { ...hit.hit, id: bId };
             miningProgress = 0;
+            woodHitEffectTimer = 0;
           }
 
           const def = BLOCK_BY_ID[bId as BlockId];
@@ -909,6 +1001,21 @@ async function boot(): Promise<void> {
           crackMesh.position.set(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5);
           crackMesh.visible = true;
           crackMaterial.opacity = Math.min(1, miningProgress);
+          if (bId === BLOCK_ID.oak_log || bId === BLOCK_ID.oak_leaves) {
+            const pulse = hitPulseScale(elapsed, miningProgress);
+            crackMesh.scale.set(pulse.x, pulse.y, pulse.z);
+            woodHitEffectTimer += delta;
+            if (woodHitEffectTimer >= 0.28) {
+              woodHitEffectTimer %= 0.28;
+              gameplayVfx.emit(
+                bId === BLOCK_ID.oak_log ? "wood" : "leaves",
+                new THREE.Vector3(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5)
+              );
+            }
+          } else {
+            woodHitEffectTimer = 0;
+            crackMesh.scale.setScalar(1);
+          }
 
           if (miningProgress >= 1) {
             world.setBlock(hit.hit.x, hit.hit.y, hit.hit.z, BLOCK_ID.air);
@@ -917,8 +1024,19 @@ async function boot(): Promise<void> {
             crackMaterial.opacity = 0;
             const blockName = def ? Object.keys(BLOCK_ID).find((k) => (BLOCK_ID as Record<string, number>)[k] === bId) ?? "stone" : "stone";
             inventory.addMinedBlock(blockName, 1);
-            itemDrops.spawn(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5, bId, world.getTileMaterial(def?.tiles.side ?? "stone"));
-            gameplayVfx.emit("mine", new THREE.Vector3(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5));
+            const minedPosition = new THREE.Vector3(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5);
+            itemDrops.spawn(minedPosition.x, minedPosition.y, minedPosition.z, bId, world.getTileMaterial(def?.tiles.side ?? "stone"));
+            gameplayVfx.emit(bId === BLOCK_ID.oak_log ? "wood" : bId === BLOCK_ID.oak_leaves ? "leaves" : "mine", minedPosition);
+            if (bId === BLOCK_ID.oak_log) {
+              pickupProjector.copy(minedPosition).project(camera);
+              if (pickupProjector.z >= -1 && pickupProjector.z <= 1 && Math.abs(pickupProjector.x) <= 1 && Math.abs(pickupProjector.y) <= 1) {
+                const viewport = getSplitViewports(window.innerWidth, window.innerHeight, splitScreen.isSplitScreen)[0];
+                hud.showResourceGain("oak_log", 1, {
+                  x: viewport.x + (pickupProjector.x * 0.5 + 0.5) * viewport.width,
+                  y: viewport.y + (-pickupProjector.y * 0.5 + 0.5) * viewport.height,
+                });
+              }
+            }
             if (bId === BLOCK_ID.oak_log) {
               audio.play("dig_wood");
               if (objectives.recordAction("gather_wood", 1)) {
@@ -940,12 +1058,14 @@ async function boot(): Promise<void> {
             miningProgress = 0;
             hud.updateBreakProgress(0);
           }
+        } else {
+          resetMiningFeedback();
         }
       } else {
-        miningBlock = null;
-        miningProgress = 0;
-        hud.updateBreakProgress(0);
+        resetMiningFeedback();
       }
+    } else {
+      resetMiningFeedback();
     }
 
     postfx.noteFrame(delta);
