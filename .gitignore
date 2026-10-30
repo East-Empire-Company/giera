@@ -18,4 +18,7 @@ server/cache/tts/
 !.env.example
 .serena/
 .superpowers/
+.21st/
+__pycache__/
+platform/xbox-uwp-giera/.stub-www/
 <project>/

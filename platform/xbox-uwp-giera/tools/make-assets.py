@@ -94,7 +94,7 @@ def wide(width, height):
 def main():
     os.makedirs(ASSETS, exist_ok=True)
     outputs = {
-        "SplashScreen.png": splash(1240, 600),
+        "SplashScreen.png": splash(620, 300),
         "Wide310x150Logo.png": wide(310, 150),
         "Square150x150Logo.png": tile(150, "G", 0.6),
         "Square44x44Logo.png": tile(44, "G", 0.66),

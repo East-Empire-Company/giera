@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using Windows.ApplicationModel;
 using Windows.Storage;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -11,8 +10,7 @@ namespace Giera.Uwp
 {
     public sealed partial class MainPage : Page
     {
-        const string Host = "giera.local";
-        const string StartUrl = "https://" + Host + "/index.html";
+        const string StartUrl = "https://giera.tail5d39b4.ts.net/index.html";
         const string BootToken = "boot-ready";
         const string LogFile = "boot-log.txt";
 
@@ -28,20 +26,19 @@ namespace Giera.Uwp
             NavigationCacheMode = NavigationCacheMode.Required;
         }
 
-        static MainPage()
-        {
-            Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0B1020");
-            Environment.SetEnvironmentVariable(
-                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-                "--autoplay-policy=no-user-gesture-required");
-        }
-
         async void OnLoaded(object sender, RoutedEventArgs e)
         {
             splashTimeout.Start();
+            await LogAsync("page loaded");
             try
             {
+                Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0B1020");
+                Environment.SetEnvironmentVariable(
+                    "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+                    "--autoplay-policy=no-user-gesture-required");
+                await LogAsync("env set");
                 await GameView.EnsureCoreWebView2Async();
+                await LogAsync("webview2 ensured");
             }
             catch (Exception ex)
             {
@@ -58,11 +55,6 @@ namespace Giera.Uwp
             core.Settings.AreDevToolsEnabled = true;
             core.Settings.IsZoomControlEnabled = false;
             core.Settings.IsSwipeNavigationEnabled = false;
-
-            core.SetVirtualHostNameToFolderMapping(
-                Host,
-                Package.Current.InstalledLocation.Path + "\\Assets\\www",
-                Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
 
             core.WebMessageReceived += OnWebMessageReceived;
             GameView.NavigationCompleted += OnNavigationCompleted;
@@ -82,7 +74,7 @@ namespace Giera.Uwp
             HideSplash();
         }
 
-        async void OnNavigationCompleted(WebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs args)
+        async void OnNavigationCompleted(Microsoft.UI.Xaml.Controls.WebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs args)
         {
             if (!args.IsSuccess)
             {
@@ -100,7 +92,7 @@ namespace Giera.Uwp
                 "ua:navigator.userAgent})"));
         }
 
-        async void OnWebMessageReceived(WebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs args)
+        async void OnWebMessageReceived(Microsoft.Web.WebView2.Core.CoreWebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs args)
         {
             string message;
             try

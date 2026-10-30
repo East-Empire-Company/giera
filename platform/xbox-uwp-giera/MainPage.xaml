@@ -15,7 +15,8 @@
                            VerticalAlignment="Stretch" />
 
         <Grid x:Name="SplashLayer" Background="#0b1020">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            
+            <StackPanel x:Name="SplashFallback" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <Image x:Name="SplashArt"
                        Source="ms-appx:///Assets/SplashLogo.png"
                        Width="620"

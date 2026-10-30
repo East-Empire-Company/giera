@@ -17,6 +17,7 @@ import { TycoonManager } from "./client/game/tycoon";
 import { tycoonSlotOrigin, tycoonTheme } from "./shared/tycoon-slots";
 import { TouchController } from "./client/input/touch";
 import { loadGameState, saveGameState } from "./client/persist/db";
+import { attachSplashVideo, type SplashVideoHandle } from "./client/startup/splash-video";
 import { pushOutOfCylinders } from "./shared/entity-collision";
 import { smoothGroundOffset } from "./shared/mesher";
 import { collideCamera } from "./shared/camera-collision";
@@ -88,6 +89,9 @@ const status: HTMLElement = statusElement;
 const message: HTMLElement = messageElement;
 const progress: HTMLElement = progressElement;
 const qa = new URLSearchParams(window.location.search).get("qa") === "1";
+const splashVideo: SplashVideoHandle = qa
+  ? { settle: async () => {}, stop: () => {} }
+  : attachSplashVideo(status);
 if (!qa) canvas.inert = true;
 const ambientChatterEnabled = ambientNpcChatterEnabled(window.location.search);
 const INTERACT_REACH = 12;
@@ -637,6 +641,8 @@ async function boot(): Promise<void> {
   };
 
   await world.loadArea(0, 0, 2);
+  await splashVideo.settle();
+  splashVideo.stop();
   status.classList.add("boot-ready");
   const notifyHost = (): void => {
     try {

@@ -75,6 +75,23 @@
         pointer-events: none;
       }
 
+      .boot-video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        background: #0d2320;
+      }
+
+      .boot-status.boot-video-ready {
+        background: #0d2320;
+      }
+
+      .boot-status.boot-video-ready .boot-card {
+        display: none;
+      }
+
       .boot-card {
         display: grid;
         justify-items: center;
@@ -242,6 +259,10 @@
         <p id="concierge-status" class="concierge-status" role="status" aria-live="polite"></p>
       </div>
       <section id="boot-status" class="boot-status" role="status" aria-live="polite">
+        <video id="boot-video" class="boot-video" muted playsinline preload="auto" aria-hidden="true" hidden>
+          <source src="/assets/video/splash.webm" type="video/webm" />
+          <source src="/assets/video/splash.mp4" type="video/mp4" />
+        </video>
         <div class="boot-card">
           <div class="boot-mark" aria-hidden="true">G</div>
           <div class="boot-copy">
