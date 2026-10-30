@@ -1,0 +1,6 @@
+Assets/www/
+AppPackages/
+bin/
+obj/
+*.pfx
+*.appxupload

@@ -3,16 +3,26 @@ set -euo pipefail
 
 # Installs the probe package on an Xbox in Developer Mode and prints the probe result.
 #
-#   CONSOLE=192.168.1.50 PORTAL_USER=jakub PORTAL_PASS=secret ./deploy-xbox.sh install
-#   CONSOLE=192.168.1.50 PORTAL_USER=jakub PORTAL_PASS=secret ./deploy-xbox.sh result
+# Credentials come from PORTAL_USER / PORTAL_PASS, or from the file named by
+# PORTAL_ENV (default ~/.config/giera/xbox-portal.env, chmod 600).
+#
+#   ./deploy-xbox.sh install
+#   ./deploy-xbox.sh result
 #
 # Dev Home on the console shows both the address and the portal credentials.
 
-CONSOLE="${CONSOLE:?set CONSOLE to the console address shown in Dev Home}"
-PORTAL_USER="${PORTAL_USER:?set PORTAL_USER}"
-PORTAL_PASS="${PORTAL_PASS:?set PORTAL_PASS}"
+PORTAL_ENV="${PORTAL_ENV:-$HOME/.config/giera/xbox-portal.env}"
+if [ -f "$PORTAL_ENV" ]; then
+  set -a
+  . "$PORTAL_ENV"
+  set +a
+fi
+
+CONSOLE="${CONSOLE:-192.168.50.105}"
+PORTAL_USER="${PORTAL_USER:?set PORTAL_USER or write $PORTAL_ENV}"
+PORTAL_PASS="${PORTAL_PASS:?set PORTAL_PASS or write $PORTAL_ENV}"
 BASE="https://${CONSOLE}:11443"
-APPX="${APPX:-.ai/tmp/appx/Giera.XboxProbe_1.0.0.0_x64.appx}"
+APPX="${APPX:-$(cd "$(dirname "$0")" && pwd)/dist/Giera.XboxProbe_1.0.0.0_x64.appx}"
 PFN_PREFIX="Giera.XboxProbe_1.0.0.0_x64__"
 
 portal() {
@@ -23,22 +33,29 @@ packages() {
   portal "${BASE}/api/app/packagemanager/packages"
 }
 
+full_package() {
+  packages | jq -r --arg p "$PFN_PREFIX" '.InstalledPackages[]|select(.PackageFullName|startswith($p))|.PackageFullName' | head -1
+}
+
 case "${1:-install}" in
   install)
     [ -f "$APPX" ] || { echo "missing package: $APPX" >&2; exit 1; }
     portal -F "file=@${APPX}" \
-      "${BASE}/api/app/packagemanager/package?package=$(basename "$APPX")"
-    echo
-    packages | tr ',' '\n' | grep -E 'PackageFullName|Name' || true
+      "${BASE}/api/app/packagemanager/package?package=$(basename "$APPX")" -o /dev/null
+    echo "installed $(full_package)"
     ;;
   result)
-    full="$(packages | tr ',' '\n' | grep -o "${PFN_PREFIX}[a-z0-9]*" | head -1)"
+    full="$(full_package)"
     [ -n "$full" ] || { echo "probe package is not installed on the console" >&2; exit 1; }
     portal -G "${BASE}/api/filesystem/apps/file" \
       --data-urlencode "knownfolderid=LocalAppData" \
       --data-urlencode "packagefullname=${full}" \
-      --data-urlencode "path=probe-result.json"
+      --data-urlencode 'filename=LocalState\probe-result.json'
     echo
+    ;;
+  launch)
+    echo "start the app from Dev Home on the console; the portal has no app-launch API on Xbox" >&2
+    exit 2
     ;;
   *)
     echo "usage: $0 [install|result]" >&2

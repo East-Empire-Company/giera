@@ -20,11 +20,26 @@ namespace Giera.XboxProbe
             ProbeView.ScriptNotify += OnScriptNotify;
             ProbeView.NavigationCompleted += OnNavigationCompleted;
             Loaded += (s, e) =>
+            {
                 ProbeView.NavigateToLocalStreamUri(new Uri(StreamRoot, "Assets/probe.html"), new PackagedAssetResolver());
+                _ = ReportTimeoutAsync();
+            };
         }
+
+        static async Task ReportTimeoutAsync()
+        {
+            await Task.Delay(TimeSpan.FromSeconds(45));
+            if (!s_reported)
+            {
+                await WriteResultAsync("{\"probe\":\"no-scriptnotify\",\"note\":\"page loaded but never posted a result\"}");
+            }
+        }
+
+        static bool s_reported;
 
         void OnScriptNotify(object sender, NotifyEventArgs e)
         {
+            s_reported = true;
             Status.Text = e.Value;
             _ = WriteResultAsync(e.Value);
         }
@@ -46,7 +61,10 @@ namespace Giera.XboxProbe
         {
             if (!e.IsSuccess)
             {
-                Status.Text = "navigation failed: " + e.WebErrorStatus + " " + e.Uri;
+                s_reported = true;
+                var detail = "navigation failed: " + e.WebErrorStatus + " " + e.Uri;
+                Status.Text = detail;
+                _ = WriteResultAsync("{\"probe\":\"navigation-failed\",\"detail\":\"" + e.WebErrorStatus + "\",\"uri\":\"" + e.Uri + "\"}");
             }
         }
     }
