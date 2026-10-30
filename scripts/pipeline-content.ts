@@ -43,6 +43,12 @@ const iconsBlock = hudSrc.slice(hudSrc.indexOf("const icons: Record<string, stri
 const iconKeys = [...iconsBlock.matchAll(/^\s{4}([a-z_]+):/gm)].map((m) => m[1]);
 for (const key of iconKeys) checkPublic(getItemIcon(key), `getItemIcon.${key}`);
 
+const indexHtml = readFileSync(resolve(ROOT, "index.html"), "utf-8");
+const splashBlock = indexHtml.slice(indexHtml.indexOf('id="boot-video"'), indexHtml.indexOf("</video>", indexHtml.indexOf('id="boot-video"')));
+const splashSources = [...splashBlock.matchAll(/src="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+if (splashSources.length === 0) missing.push("index.html boot-video has no <source> for the splash video");
+for (const s of splashSources) checkPublic(s, "index.html boot-video");
+
 for (const manifest of ["src/shared/asset-manifest.json", "src/shared/atlas-manifest.json"]) {
   const data = JSON.parse(readFileSync(resolve(ROOT, manifest), "utf-8"));
   for (const s of collectAssetStrings(data)) checkPublic(s, manifest);
