@@ -85,13 +85,13 @@ export async function loadRenderAssets(renderer: WebGLRenderer, onProgress?: (do
     star01,
     leaf01,
   ] = await Promise.all([
-    tex("/assets/textures/atlas.png"),
-    tex("/assets/textures/atlas-normal.png"),
-    tex("/assets/textures/atlas-orm.png"),
+    tex("/assets/textures/atlas.webp"),
+    tex("/assets/textures/atlas-normal.webp"),
+    tex("/assets/textures/atlas-orm.webp"),
     tex("/assets/textures/water-normal.jpg"),
     tex("/assets/sky/clouds.png"),
     tex("/assets/sky/skybox_sideClouds.png"),
-    tracked(() => new HDRLoader().loadAsync("/assets/sky/kloofendal_48d_partly_cloudy_2k.hdr")).catch((error) => {
+    tracked(() => new HDRLoader().loadAsync("/assets/sky/kloofendal_48d_partly_cloudy_1k.hdr")).catch((error) => {
       console.warn("HDR environment unavailable; continuing without image-based lighting", error);
       onProgress?.(++done, total);
       return null;

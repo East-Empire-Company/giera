@@ -31,7 +31,7 @@ type Harness = {
 function harness(maxRooms = 64): Harness {
   const clock = { now: 1_000_000 };
   const published: { topic: string; msg: any }[] = [];
-  const rooms = createRoomRegistry(maxRooms, (code) => new RoomState(code, 777, 2));
+  const rooms = createRoomRegistry(maxRooms, (code) => new RoomState(code, 777));
   const deps: WsDeps = {
     rooms,
     publish: (topic, payload) => published.push({ topic, msg: JSON.parse(payload) }),
@@ -77,10 +77,22 @@ describe("ws hello", () => {
 
     expect(ws.subscriptions).toEqual(["room:K7QX"]);
     const welcome = JSON.parse(ws.sent[0] as string);
-    expect(welcome).toMatchObject({ t: "welcome", id: "p1", seed: 777, players: [] });
+    expect(welcome).toMatchObject({ t: "welcome", id: "p1", seed: 777, slot: 0, players: [] });
     expect(welcome.spawn).toHaveLength(3);
-    expect(h.published).toEqual([{ topic: "room:K7QX", msg: { t: "join", id: "p1", name: "Ziemek" } }]);
+    expect(h.published).toEqual([{ topic: "room:K7QX", msg: { t: "join", id: "p1", name: "Ziemek", slot: 0 } }]);
     expect(h.room("K7QX").getPlayerCount()).toBe(1);
+  });
+
+  it("gives a second player a different tycoon slot in the welcome and the join broadcast", () => {
+    const h = harness();
+    join(h, "p1");
+    const ws = h.connect("p2");
+    send(ws, h.deps, hello("DOM1", "Gniewko"));
+
+    const welcome = JSON.parse(ws.sent[0] as string);
+    expect(welcome.slot).toBe(1);
+    expect(welcome.players.map((p: { slot: number }) => p.slot)).toEqual([0]);
+    expect(h.published).toEqual([{ topic: "room:DOM1", msg: { t: "join", id: "p2", name: "Gniewko", slot: 1 } }]);
   });
 
   it("falls back to room DOM1 and name Gracz when both are blank", () => {
@@ -161,7 +173,7 @@ describe("ws hello", () => {
 
   it("subscribes the joining socket only after publishing its join so it never receives its own join", () => {
     const order: string[] = [];
-    const rooms = createRoomRegistry(4, (code) => new RoomState(code, 1, 2));
+    const rooms = createRoomRegistry(4, (code) => new RoomState(code, 1));
     const deps: WsDeps = { rooms, publish: (_t, p) => order.push(`publish:${JSON.parse(p).t}`), now: () => 0 };
     const ws: WsSocket = {
       data: createWsConnection("p1", 0),
@@ -174,7 +186,7 @@ describe("ws hello", () => {
 
   it("keeps an idle room in memory and refuses the newcomer when saving it before eviction fails", () => {
     let allowSave = false;
-    const rooms = createRoomRegistry(1, (code) => new RoomState(code, 1, 2), () => allowSave);
+    const rooms = createRoomRegistry(1, (code) => new RoomState(code, 1), () => allowSave);
     const h = harness();
     const deps: WsDeps = { ...h.deps, rooms };
     const a = h.connect("a");
@@ -196,7 +208,7 @@ describe("ws hello", () => {
 
   it("evicts an empty room (saving it first) to make space, but never a room with players", () => {
     const evicted: string[] = [];
-    const rooms = createRoomRegistry(2, (code) => new RoomState(code, 1, 2), (code, room) => {
+    const rooms = createRoomRegistry(2, (code) => new RoomState(code, 1), (code, room) => {
       expect(room.getPlayerCount()).toBe(0);
       evicted.push(code);
       return true;
@@ -443,7 +455,7 @@ describe("ws need", () => {
     expect(ws.sent).toHaveLength(1);
     const [packet] = decodeBinaryChunkFrame(ws.sent[0] as Uint8Array);
     expect(packet).toMatchObject({ cx: 0, cy: 2, cz: 0 });
-    const expected = generateChunk(0, 2, 0, 777, 2);
+    const expected = generateChunk(0, 2, 0, 777);
     expected[getBlockIndex(1, 8, 2)] = BLOCK_ID.planks;
     expect(Array.from(decodeRLE(packet.rleData))).toEqual(Array.from(expected));
   });

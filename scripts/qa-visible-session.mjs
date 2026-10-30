@@ -61,6 +61,8 @@ await page.waitForFunction(
   undefined,
   { timeout: 60000 }
 );
+await page.screenshot({ path: resolve(EVIDENCE, "visible-00-launch-menu.png") });
+await page.getByRole("button", { name: "Rozpocznij grę" }).click();
 await page.evaluate(() => {
   const A = window.__GIERA__.audio;
   const orig = A.play.bind(A);

@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import type { ChunkMesh } from "../../src/shared/mesher";
-import { createChunkMeshObject, createMergedTileMaterial, shadowCastsFrom, topSolidY, WorldRenderer } from "../../src/client/render/worldRenderer";
+import { createChunkMeshObject, createMergedTileMaterial, createTileMaterials, shadowCastsFrom, topSolidY, WorldRenderer } from "../../src/client/render/worldRenderer";
 import atlasManifest from "../../src/shared/atlas-manifest.json";
 import { BLOCK_ID } from "../../src/shared/blocks";
 import { TERRAIN_MATERIAL } from "../../src/shared/terrain-materials";
-import { surfaceHeight } from "../../src/shared/worldgen";
+import { MAX_GENERATED_BLOCK_Y, surfaceHeight } from "../../src/shared/worldgen";
 
 describe("merged atlas shader", () => {
   it("binds every atlas rectangle before shader compilation", () => {
@@ -25,7 +25,33 @@ describe("merged atlas shader", () => {
     expect(shader.vertexShader).toContain("attribute float aTileId");
     expect(shader.fragmentShader).toContain(`uniform vec4 gieraTileRects[${rects.length}]`);
   });
+  it("samples terrain and foliage normal maps from their atlas tiles", () => {
+    const materials = [
+      createMergedTileMaterial(new THREE.Texture(), new THREE.Texture(), new THREE.Texture()),
+      createTileMaterials(new THREE.Texture(), new THREE.Texture(), new THREE.Texture(), new THREE.Texture())[atlasManifest.tiles.ginkgo_leaves.id],
+    ];
+
+    for (const material of materials) {
+      const shader = {
+        uniforms: {} as Record<string, { value: unknown }>,
+        vertexShader: "#include <common>\n#include <begin_vertex>",
+        fragmentShader: "#include <common>\n#include <map_fragment>\n#include <normal_fragment_maps>\n#include <roughnessmap_fragment>\n#include <aomap_fragment>",
+      } as Parameters<THREE.Material["onBeforeCompile"]>[0];
+      material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+
+      expect(shader.fragmentShader).toContain("textureGrad( normalMap, gieraTileUv, gieraDx, gieraDy )");
+      expect(shader.fragmentShader).not.toContain("texture2D( normalMap, vNormalMapUv )");
+    }
+  });
+
 });
+describe("leaf atlas material", () => {
+  it("discards transparent leaf texels", () => {
+    const leaves = createTileMaterials(new THREE.Texture(), new THREE.Texture(), new THREE.Texture(), new THREE.Texture())[atlasManifest.tiles.ginkgo_leaves.id] as THREE.MeshStandardMaterial;
+    expect(leaves.alphaTest).toBeGreaterThan(0);
+  });
+});
+
 describe("chunk render objects", () => {
   const quad = (base: number): number[] => [base, base + 1, base + 2, base, base + 2, base + 3];
   const tileIds = (id: number): number[] => Array.from({ length: 4 }, () => id);
@@ -192,14 +218,14 @@ describe("topSolidY", () => {
     expect(topSolidY(column({ 20: BLOCK_ID.stone }))).toBeNaN();
   });
 
-  it("never reads below y=31 or above y=70", () => {
+  it("never reads below y=31 or above generated block height", () => {
     const seen: number[] = [];
     topSolidY((_x, y) => {
       seen.push(y);
       return 0;
     });
     expect(Math.min(...seen)).toBe(31);
-    expect(Math.max(...seen)).toBe(70);
+    expect(Math.max(...seen)).toBe(MAX_GENERATED_BLOCK_Y);
   });
 });
 
@@ -235,6 +261,13 @@ describe("WorldRenderer.surfaceColumnTop", () => {
     expect(world.surfaceColumnTop(5, 5)).toBeLessThan(before);
     world.setBlock(5, before, 5, BLOCK_ID.planks);
     expect(world.surfaceColumnTop(5, 5)).toBe(before);
+    world.dispose();
+  });
+
+  it("finds high blocks beyond the previous y=70 decor scan", () => {
+    const world = build();
+    world.setBlock(5, 80, 5, BLOCK_ID.planks);
+    expect(world.surfaceColumnTop(5, 5)).toBe(80);
     world.dispose();
   });
 

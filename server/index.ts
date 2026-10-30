@@ -1,7 +1,6 @@
 import { networkInterfaces } from "os";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
-import { WORLDGEN_VERSION } from "../src/shared/worldgen";
 import { RoomState, type WorldSnapshot } from "./room";
 import {
   MAX_ROOMS,
@@ -15,6 +14,7 @@ import {
 import { NPC_ALLOWED_TOOLS as NPC_TOOLS } from "./npc-bridge";
 import { handleNpcReason } from "./npc-reason";
 import { handleNpcTts } from "./npc-tts";
+import { handleConciergeSession } from "./concierge";
 import { serveStatic } from "./static";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -32,7 +32,7 @@ function loadOrCreateRoom(normalized: string): RoomState {
       console.error(`Failed to load world-${normalized}.json:`, e);
     }
   }
-  return new RoomState(normalized, Math.floor(Math.random() * 1_000_000) + 1, WORLDGEN_VERSION);
+  return new RoomState(normalized, Math.floor(Math.random() * 1_000_000) + 1);
 }
 
 function saveRoom(code: string, room: RoomState): boolean {
@@ -98,6 +98,10 @@ const server = Bun.serve<WsConnection>({
 
     if (url.pathname === "/npc/tts") {
       return handleNpcTts(req);
+    }
+
+    if (url.pathname === "/concierge/session") {
+      return handleConciergeSession(req);
     }
 
     return serveStatic(req, "dist");

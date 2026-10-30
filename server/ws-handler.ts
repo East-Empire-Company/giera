@@ -115,10 +115,11 @@ function handleHello(ws: WsSocket, msg: Record<string, unknown>, deps: WsDeps): 
     id: data.id,
     seed: room.seed,
     spawn: [player.x, player.y, player.z],
+    slot: player.slot ?? 0,
     players: room.getAllPlayers().filter((p) => p.id !== data.id),
   };
   ws.send(JSON.stringify(welcome));
-  const join: ServerMessage = { t: "join", id: data.id, name };
+  const join: ServerMessage = { t: "join", id: data.id, name, slot: player.slot ?? 0 };
   deps.publish(`room:${code}`, JSON.stringify(join));
   ws.subscribe(`room:${code}`);
 }

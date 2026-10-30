@@ -10,6 +10,8 @@ const directArchives = [
   { name: "joeenderman-textures-1", url: "https://opengameart.org/sites/default/files/assorted_textures_1.zip" },
   { name: "joeenderman-textures-2", url: "https://opengameart.org/sites/default/files/assorted_textures_2.zip" },
   { name: "ambientcg-ice-normal", url: "https://ambientcg.com/get?file=Ice001_1K-JPG.zip" },
+  { name: "kenney-factory-kit", url: "https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip" },
+  { name: "kenney-ui-pack-adventure", url: "https://opengameart.org/sites/default/files/kenney_ui-pack-adventure.zip" },
 ];
 const cacheRoot = resolve(".cache/assets");
 const publicRoot = resolve("public/assets");
@@ -17,6 +19,7 @@ type AssetSourceId =
   | "kenney-voxel-pack"
   | "kenney-blocky-characters"
   | "kenney-ui-pack"
+  | "kenney-ui-pack-adventure"
   | "kenney-particle-pack"
   | "aroach-block-textures"
   | "aroach-foliage-textures"
@@ -26,13 +29,15 @@ type AssetSourceId =
   | "ambientcg-pbr"
   | "polyhaven-hdri"
   | "kaykit-adventurers"
-  | "quaternius-nature";
+  | "quaternius-nature"
+  | "kenney-factory-kit";
 type AssetPick = { source: AssetSourceId; member: string; path: string; preplaced?: boolean };
 
 const sourceInfo: Record<AssetSourceId, { title: string; author: string; license: string; url: string }> = {
   "kenney-voxel-pack": { title: "Voxel Pack", author: "Kenney", license: "CC0", url: "https://kenney.nl/assets/voxel-pack" },
   "kenney-blocky-characters": { title: "Blocky Characters v2", author: "Kenney", license: "CC0", url: "https://kenney.nl/assets/blocky-characters" },
   "kenney-ui-pack": { title: "UI Pack", author: "Kenney", license: "CC0", url: "https://kenney.nl/assets/ui-pack" },
+  "kenney-ui-pack-adventure": { title: "UI Pack - Adventure", author: "Kenney", license: "CC0", url: "https://opengameart.org/content/ui-pack-adventure" },
   "kenney-particle-pack": { title: "Particle Pack", author: "Kenney", license: "CC0", url: "https://kenney.nl/assets/particle-pack" },
   "aroach-block-textures": { title: "16x16 Block Texture Set", author: "ARoachIFoundOnMyPillow", license: "CC0", url: "https://opengameart.org/content/16x16-block-texture-set" },
   "aroach-foliage-textures": { title: "16*16 Block Textures", author: "ARoachIFoundOnMyPillow", license: "CC0", url: "https://opengameart.org/content/1616-block-textures" },
@@ -40,9 +45,10 @@ const sourceInfo: Record<AssetSourceId, { title: string; author: string; license
   "joeenderman-textures-2": { title: "Assorted Minecraft style textures", author: "JoeEnderman", license: "CC0", url: "https://opengameart.org/content/assorted-minecraft-style-textures" },
   "ambientcg-ice-normal": { title: "Ice 001 NormalGL", author: "ambientCG", license: "CC0 / Public Domain", url: "https://ambientcg.com/view?id=Ice001" },
   "ambientcg-pbr": { title: "ambientCG PBR materials (Grass001, Ground020, Rock064, Rock058, Ground080, Bark001, ScatteredLeaves009, Planks010)", author: "ambientCG", license: "CC0 / Public Domain", url: "https://ambientcg.com" },
-  "polyhaven-hdri": { title: "Kloofendal 48d Partly Cloudy 2K HDR", author: "Poly Haven", license: "CC0", url: "https://polyhaven.com/a/kloofendal_48d_partly_cloudy" },
+  "polyhaven-hdri": { title: "Kloofendal 48d Partly Cloudy 1K HDR", author: "Poly Haven", license: "CC0", url: "https://polyhaven.com/a/kloofendal_48d_partly_cloudy" },
   "kaykit-adventurers": { title: "KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)", author: "Kay Lousberg", license: "CC0 1.0", url: "https://kaylousberg.itch.io/kaykit-adventurers" },
   "quaternius-nature": { title: "Ultimate Stylized Nature (Grass_Small, Bush_Small_Flowers, Flower_1)", author: "Quaternius", license: "CC0", url: "https://quaternius.com/packs/ultimatestylizednature.html" },
+  "kenney-factory-kit": { title: "Factory Kit 3.0", author: "Kenney", license: "CC0", url: "https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip" },
 };
 
 const assetPicks: Record<string, Record<string, AssetPick>> = {
@@ -69,6 +75,16 @@ const assetPicks: Record<string, Record<string, AssetPick>> = {
     playerTwo: { source: "kaykit-adventurers", member: "Characters/gltf/Rogue.glb", path: "assets/models/kaykit/rogue.glb", preplaced: true },
     mina: { source: "kaykit-adventurers", member: "Characters/gltf/Mage.glb", path: "assets/models/kaykit/mage.glb", preplaced: true },
     staszek: { source: "kaykit-adventurers", member: "Characters/gltf/Ranger.glb", path: "assets/models/kaykit/ranger.glb", preplaced: true },
+    factoryConveyor: { source: "kenney-factory-kit", member: "Models/GLB format/conveyor.glb", path: "assets/models/kenney-factory-kit/conveyor.glb" },
+    factoryLongConveyor: { source: "kenney-factory-kit", member: "Models/GLB format/conveyor-long.glb", path: "assets/models/kenney-factory-kit/conveyor-long.glb" },
+    factoryMachine: { source: "kenney-factory-kit", member: "Models/GLB format/machine.glb", path: "assets/models/kenney-factory-kit/machine.glb" },
+    factoryHopper: { source: "kenney-factory-kit", member: "Models/GLB format/hopper-square.glb", path: "assets/models/kenney-factory-kit/hopper-square.glb" },
+    factoryScanner: { source: "kenney-factory-kit", member: "Models/GLB format/scanner-low.glb", path: "assets/models/kenney-factory-kit/scanner-low.glb" },
+    factoryButton: { source: "kenney-factory-kit", member: "Models/GLB format/button-floor-round.glb", path: "assets/models/kenney-factory-kit/button-floor-round.glb" },
+    factoryGear: { source: "kenney-factory-kit", member: "Models/GLB format/cog-a.glb", path: "assets/models/kenney-factory-kit/cog-a.glb" },
+  },
+  modelTextures: {
+    factoryKit: { source: "kenney-factory-kit", member: "Models/GLB format/Textures/colormap.png", path: "assets/models/kenney-factory-kit/Textures/colormap.png" },
   },
   sky: {
     clouds: { source: "kenney-voxel-pack", member: "PNG/Other/clouds.png", path: "assets/sky/clouds.png" },
@@ -87,6 +103,12 @@ const assetPicks: Record<string, Record<string, AssetPick>> = {
     squareButton: { source: "kenney-ui-pack", member: "PNG/Green/Default/button_square_depth_line.png", path: "assets/ui/kenney/button_square_depth_line.png" },
     checkmark: { source: "kenney-ui-pack", member: "PNG/Green/Default/check_square_color_checkmark.png", path: "assets/ui/kenney/check_square_color_checkmark.png" },
     star: { source: "kenney-ui-pack", member: "PNG/Green/Default/star.png", path: "assets/ui/kenney/star.png" },
+    launchPanel: { source: "kenney-ui-pack-adventure", member: "PNG/Double/panel_brown.png", path: "assets/ui/kenney-adventure/panel_brown.png" },
+    launchBanner: { source: "kenney-ui-pack-adventure", member: "PNG/Double/banner_classic_curtain.png", path: "assets/ui/kenney-adventure/banner_classic_curtain.png" },
+    launchButton: { source: "kenney-ui-pack-adventure", member: "PNG/Double/button_brown.png", path: "assets/ui/kenney-adventure/button_brown.png" },
+    launchModeEmpty: { source: "kenney-ui-pack-adventure", member: "PNG/Double/checkbox_beige_empty.png", path: "assets/ui/kenney-adventure/checkbox_beige_empty.png" },
+    launchModeSelected: { source: "kenney-ui-pack-adventure", member: "PNG/Double/checkbox_beige_checked.png", path: "assets/ui/kenney-adventure/checkbox_beige_checked.png" },
+    launchStar: { source: "kenney-ui-pack-adventure", member: "PNG/Double/minimap_icon_star_yellow.png", path: "assets/ui/kenney-adventure/minimap_icon_star_yellow.png" },
   },
   icons: {
     axe: { source: "kenney-voxel-pack", member: "PNG/Items/axe_iron.png", path: "assets/ui/icons/axe_iron.png" },
@@ -219,7 +241,7 @@ async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
     "| `assets/fonts/*` | [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) | Pixelify Sans Project Authors | SIL OFL 1.1 |",
     "| `assets/models/kaykit/anims/Rig_Medium_*.glb` | [KayKit - Character Pack : Adventurers 2.0](https://kaylousberg.itch.io/kaykit-adventurers) / `Animations/gltf/Rig_Medium/*.glb` | Kay Lousberg | CC0 1.0 |",
     "| `assets/models/props/*` | [Ultimate Stylized Nature](https://quaternius.com/packs/ultimatestylizednature.html) / `glTF/{Grass_Small,Bush_Small_Flowers,Flower_1}.*` | Quaternius | CC0 |",
-    "| `assets/sky/kloofendal_48d_partly_cloudy_2k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `2k HDR` | Poly Haven | CC0 |",
+    "| `assets/sky/kloofendal_48d_partly_cloudy_1k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `1k HDR` | Poly Haven | CC0 |",
     "| `assets/textures/pbr/*` | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |",
   );
   await writeFile(resolve("src/shared/asset-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -247,9 +269,9 @@ async function fetchAmbientCgPbr(): Promise<void> {
 }
 
 async function fetchHdri(): Promise<void> {
-  const target = join(publicRoot, "sky/kloofendal_48d_partly_cloudy_2k.hdr");
+  const target = join(publicRoot, "sky/kloofendal_48d_partly_cloudy_1k.hdr");
   if (existsSync(target)) return;
-  await download("https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloofendal_48d_partly_cloudy_2k.hdr", target);
+  await download("https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_1k.hdr", target);
 }
 
 async function main(): Promise<void> {

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { CHUNK_SIZE, CHUNK_VOLUME, chunkKey, getBlockIndex, type ChunkPosition } from "../../shared/chunk";
 import { meshChunk, type ChunkMesh, type MeshGroup } from "../../shared/mesher";
 import { TERRAIN_MATERIAL, TERRAIN_MATERIAL_COUNT, terrainMaterialFor } from "../../shared/terrain-materials";
-import { generateBlock, surfaceHeight, WORLDGEN_VERSION } from "../../shared/worldgen";
+import { generateBlock, MAX_GENERATED_BLOCK_Y, surfaceHeight } from "../../shared/worldgen";
 import type { ChunkBuildRequest, ChunkBuildResponse } from "../../shared/chunk-worker-protocol";
 import atlasManifest from "../../shared/atlas-manifest.json";
 import { addFoliageWind, decorRadiiFor, disposeGroundDecor, placeGroundDecor, scatterGrassBlades, scatterGroundDecor, setFoliageWindTime } from "./ground-decor";
@@ -16,7 +16,7 @@ type ChunkJob = {
   reject: (error: Error) => void;
 };
 type AtlasTile = (typeof atlasManifest.tiles)[keyof typeof atlasManifest.tiles];
-const MAX_SURFACE_CHUNK_Y = 4;
+const MAX_SURFACE_CHUNK_Y = Math.floor(MAX_GENERATED_BLOCK_Y / CHUNK_SIZE);
 /** Smooth-top vertex normals read columns up to two cells away, so edits that close to a border change the neighbour chunk. */
 const SMOOTH_NORMAL_REACH = 2;
 
@@ -45,9 +45,9 @@ export function shadowCastsFrom(
   return false;
 }
 
-/** Highest non-air, non-water block in the decor scan band (y 70 down to 31), or NaN when the column has none. */
+/** Highest non-air, non-water block in the generated terrain range, or NaN when the column has none. */
 export function topSolidY(blockAt: (x: number, y: number, z: number) => number, x = 0, z = 0): number {
-  for (let y = 70; y > 30; y--) {
+  for (let y = MAX_GENERATED_BLOCK_Y; y > 30; y--) {
     const id = blockAt(x, y, z);
     if (id !== 0 && id !== BLOCK_ID.water) return y;
   }
@@ -100,7 +100,14 @@ const GRASS_BLEND_SAMPLING = `vec3 gieraTriWeights = pow(abs(normalize(gieraWorl
         vec4 gieraGrassSampleY = textureGrad( map, mix( gieraGrassTopRect.xy, gieraGrassTopRect.zw, fract( gieraGrassUvY ) ), dFdx( gieraGrassUvY ) * gieraGrassTopScale, dFdy( gieraGrassUvY ) * gieraGrassTopScale );
         vec4 gieraGrassSampleZ = textureGrad( map, mix( gieraGrassSideRect.xy, gieraGrassSideRect.zw, fract( gieraGrassUvZ ) ), dFdx( gieraGrassUvZ ) * gieraGrassSideScale, dFdy( gieraGrassUvZ ) * gieraGrassSideScale );
         sampledDiffuseColor = gieraGrassSampleX * gieraTriWeights.x + gieraGrassSampleY * gieraTriWeights.y + gieraGrassSampleZ * gieraTriWeights.z;`;
-const OAK_BARK_SAMPLING = "sampledDiffuseColor = vec4( gieraOakBarkColor, 1.0 );";
+const OAK_BARK_SAMPLING = `float gieraBarkAcross = mix( gieraWorldPosition.z, gieraWorldPosition.x, step( 0.5, abs( gieraWorldNormal.z ) ) );
+        float gieraBarkWarp = gieraBarkAcross + 0.035 * sin( gieraWorldPosition.y * 3.0 + gieraBarkAcross * 5.0 );
+        float gieraBarkGrain = sin( gieraBarkWarp * 18.0 );
+        float gieraBarkGroove = smoothstep( -0.82, -0.28, gieraBarkGrain );
+        float gieraBarkFineGrain = sin( gieraBarkWarp * 41.0 + sin( gieraWorldPosition.y * 2.1 ) * 0.7 );
+        vec3 gieraBarkColor = gieraOakBarkColor * mix( 0.72, 1.08, gieraBarkGroove );
+        gieraBarkColor *= 1.0 + gieraBarkFineGrain * 0.035;
+        sampledDiffuseColor = vec4( gieraBarkColor, 1.0 );`;
 const TILE_SAMPLING = "sampledDiffuseColor = textureGrad( map, gieraTileUv, gieraDx, gieraDy );";
 
 const GRASS_TOP_RECT = rectOf("grass_top");
@@ -206,8 +213,9 @@ function applyAtlasShading(material: THREE.MeshStandardMaterial, shading: AtlasS
       const expand = (chunk: "normal_fragment_maps" | "roughnessmap_fragment" | "aomap_fragment", from: string, to: string): void => {
         const source = THREE.ShaderChunk[chunk];
         if (!source.includes(from)) throw new Error(`Three.js ${chunk} chunk changed; ${from} missing`);
-        shader.fragmentShader = shader.fragmentShader.replace(`#include <${chunk}>`, source.replace(from, to));
+        shader.fragmentShader = shader.fragmentShader.replace(`#include <${chunk}>`, source.replaceAll(from, to));
       };
+      expand("normal_fragment_maps", "texture2D( normalMap, vNormalMapUv )", "textureGrad( normalMap, gieraTileUv, gieraDx, gieraDy )");
       expand("roughnessmap_fragment", "texture2D( roughnessMap, vRoughnessMapUv )", "textureGrad( roughnessMap, gieraTileUv, gieraDx, gieraDy )");
       expand("aomap_fragment", "texture2D( aoMap, vAoMapUv )", "textureGrad( aoMap, gieraTileUv, gieraDx, gieraDy )");
     }
@@ -279,7 +287,10 @@ export function createTileMaterials(
       envMapIntensity: water ? 1.6 : glass ? 1.2 : 1,
       cacheKey: `giera-atlas-pbr-${tile.id}-${water ? "water" : glass ? "flat" : "atlas"}`,
     });
-    if (name === "ginkgo_leaves") addFoliageWind(material);
+    if (name === "ginkgo_leaves") {
+      material.alphaTest = 0.5;
+      addFoliageWind(material);
+    }
     materials[tile.id] = material;
   }
   return materials;
@@ -374,7 +385,6 @@ export class WorldRenderer {
   private readonly chunkMaterials: THREE.Material[];
   private readonly waterNormal: THREE.Texture;
   private readonly seed: number;
-  private readonly worldgenVersion: number;
   private readonly scene: THREE.Scene;
   private readonly onProgress?: (loaded: number, total: number) => void;
   private completed = 0;
@@ -388,7 +398,6 @@ export class WorldRenderer {
   constructor(options: {
     scene: THREE.Scene;
     seed: number;
-    worldgenVersion?: number;
     atlasTexture: THREE.Texture;
     atlasNormal: THREE.Texture;
     atlasOrm: THREE.Texture;
@@ -400,7 +409,6 @@ export class WorldRenderer {
     this.decor.name = "ground-decor";
     this.scene.add(this.decor);
     this.seed = options.seed;
-    this.worldgenVersion = options.worldgenVersion ?? WORLDGEN_VERSION;
     this.onProgress = options.onProgress;
     this.materials = createTileMaterials(options.atlasTexture, options.atlasNormal, options.atlasOrm, options.waterNormal);
     this.chunkMaterials = createChunkMaterials(this.materials, createMergedTileMaterial(options.atlasTexture, options.atlasNormal, options.atlasOrm));
@@ -467,7 +475,7 @@ export class WorldRenderer {
     await Promise.all(required.map(async (position) => {
       const key = chunkKey(position.cx, position.cy, position.cz);
       try {
-        const result = await this.workers.generate({ ...position, seed: this.seed, worldgenVersion: this.worldgenVersion });
+        const result = await this.workers.generate({ ...position, seed: this.seed });
         if ("error" in result) throw new Error(result.error);
         const chunk: ChunkView = { data: result.data, cx: position.cx, cz: position.cz };
         if (result.mesh.indices.length > 0) this.attachChunkMesh(chunk, result.mesh, position);
@@ -521,7 +529,7 @@ export class WorldRenderer {
     const cy = Math.floor(y / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
-    if (!chunk) return generateBlock(x, y, z, this.seed, this.worldgenVersion);
+    if (!chunk) return generateBlock(x, y, z, this.seed);
     const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const localY = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
@@ -536,7 +544,7 @@ export class WorldRenderer {
     const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     let cachedCy = Number.NaN;
     let cachedData: Uint8Array | undefined;
-    for (let y = 70; y > 30; y--) {
+    for (let y = MAX_GENERATED_BLOCK_Y; y > 30; y--) {
       const cy = Math.floor(y / CHUNK_SIZE);
       if (cy !== cachedCy) {
         cachedCy = cy;
@@ -544,7 +552,7 @@ export class WorldRenderer {
       }
       const id = cachedData
         ? cachedData[getBlockIndex(localX, ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE, localZ)]
-        : generateBlock(x, y, z, this.seed, this.worldgenVersion);
+        : generateBlock(x, y, z, this.seed);
       if (id !== 0 && id !== BLOCK_ID.water) return y;
     }
     return Number.NaN;
@@ -561,7 +569,7 @@ export class WorldRenderer {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         for (let ly = 0; ly < CHUNK_SIZE; ly++) {
           for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-            data[getBlockIndex(lx, ly, lz)] = generateBlock(cx * CHUNK_SIZE + lx, cy * CHUNK_SIZE + ly, cz * CHUNK_SIZE + lz, this.seed, this.worldgenVersion);
+            data[getBlockIndex(lx, ly, lz)] = generateBlock(cx * CHUNK_SIZE + lx, cy * CHUNK_SIZE + ly, cz * CHUNK_SIZE + lz, this.seed);
           }
         }
       }

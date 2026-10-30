@@ -35,12 +35,15 @@ export class GameHUD {
   private readonly objectiveRibbon: HTMLElement;
   private readonly tycoonChip: HTMLElement;
   private readonly tycoonStars: HTMLElement;
+  private readonly tycoonVault: HTMLElement;
+  private readonly tycoonUpgradeCost: HTMLElement;
   private readonly tycoonTier: HTMLElement;
   private readonly inventoryModal: HTMLElement;
   private readonly inventoryGrid: HTMLElement;
   private readonly recipeList: HTMLElement;
   private inventoryOpen = false;
   readonly modeBtn: HTMLButtonElement;
+  private readonly musicBtn: HTMLButtonElement;
   readonly lanBtn: HTMLButtonElement;
   readonly controlsBtn: HTMLButtonElement;
   private readonly lanModal: HTMLElement;
@@ -97,17 +100,41 @@ export class GameHUD {
     this.objectiveRibbon.className = "hud-objective-ribbon";
     this.container.appendChild(this.objectiveRibbon);
 
-    // Tycoon progress chip (stars + dropper tier)
     this.tycoonChip = document.createElement("div");
     this.tycoonChip.className = "hud-tycoon-chip";
-    const starIcon = document.createElement("img");
-    starIcon.src = "/assets/ui/kenney/star.png";
-    starIcon.alt = "";
-    this.tycoonStars = document.createElement("span");
-    this.tycoonStars.className = "hud-tycoon-stars";
+    const createMetric = (iconPath: string, iconClass: string, valueClass: string) => {
+      const group = document.createElement("span");
+      group.setAttribute("role", "group");
+      group.style.display = "inline-flex";
+      group.style.alignItems = "center";
+      group.style.gap = "4px";
+      const icon = document.createElement("img");
+      icon.className = iconClass;
+      icon.src = iconPath;
+      icon.alt = "";
+      const value = document.createElement("span");
+      value.className = valueClass;
+      group.append(icon, value);
+      return { group, value };
+    };
+    const stars = createMetric("/assets/ui/kenney/star.png", "hud-tycoon-stars-icon", "hud-tycoon-stars");
+    const vault = createMetric("/assets/ui/icons/ore_gold.png", "hud-tycoon-vault-icon", "hud-tycoon-vault");
+    const upgradeCost = createMetric(
+      "/assets/ui/kenney/star.png",
+      "hud-tycoon-upgrade-icon",
+      "hud-tycoon-upgrade-cost"
+    );
+    const upgradeMark = document.createElement("span");
+    upgradeMark.className = "hud-tycoon-upgrade-mark";
+    upgradeMark.textContent = "↑";
+    upgradeMark.setAttribute("aria-hidden", "true");
+    upgradeCost.group.prepend(upgradeMark);
+    this.tycoonStars = stars.value;
+    this.tycoonVault = vault.value;
+    this.tycoonUpgradeCost = upgradeCost.value;
     this.tycoonTier = document.createElement("span");
     this.tycoonTier.className = "hud-tycoon-tier";
-    this.tycoonChip.append(starIcon, this.tycoonStars, this.tycoonTier);
+    this.tycoonChip.append(stars.group, vault.group, upgradeCost.group, this.tycoonTier);
     this.container.appendChild(this.tycoonChip);
 
     // NPC speech bubbles (world-anchored)
@@ -144,14 +171,14 @@ export class GameHUD {
     this.lanBtn.addEventListener("click", () => this.toggleLanModal(options.onConnectLan));
     this.container.appendChild(this.lanBtn);
     // Music track button
-    const musicBtn = document.createElement("button");
-    musicBtn.className = "hud-music-btn";
-    musicBtn.textContent = "🎵 Sigma Phonk";
-    musicBtn.addEventListener("click", () => {
+    this.musicBtn = document.createElement("button");
+    this.musicBtn.className = "hud-music-btn";
+    this.musicBtn.textContent = "🎵 Sigma Phonk";
+    this.musicBtn.addEventListener("click", () => {
       const next = options.onCycleMusic?.() ?? "Sigma Phonk";
-      musicBtn.textContent = `🎵 ${next}`;
+      this.setMusicTrack(next);
     });
-    this.container.appendChild(musicBtn);
+    this.container.appendChild(this.musicBtn);
 
     // LAN Modal
     this.lanModal = document.createElement("div");
@@ -262,6 +289,9 @@ export class GameHUD {
 
     this.renderHotbar(options.inventory);
     this.updateObjective(options.objectives);
+  }
+  setMusicTrack(name: string): void {
+    this.musicBtn.textContent = `🎵 ${name}`;
   }
 
   isInventoryOpen(): boolean {
@@ -443,9 +473,22 @@ export class GameHUD {
     }
   }
 
-  updateTycoon(stars: number, tier: number): void {
+  updateTycoon(stars: number, vaultCoins: number, tier: number, upgradeCost: number): void {
     const starText = String(stars);
-    if (this.tycoonStars.textContent !== starText) this.tycoonStars.textContent = starText;
+    if (this.tycoonStars.textContent !== starText) {
+      this.tycoonStars.textContent = starText;
+      this.tycoonStars.parentElement?.setAttribute("aria-label", `Gwiazdy: ${starText}`);
+    }
+    const vaultText = String(vaultCoins);
+    if (this.tycoonVault.textContent !== vaultText) {
+      this.tycoonVault.textContent = vaultText;
+      this.tycoonVault.parentElement?.setAttribute("aria-label", `Skarbiec: ${vaultText}`);
+    }
+    const upgradeCostText = String(upgradeCost);
+    if (this.tycoonUpgradeCost.textContent !== upgradeCostText) {
+      this.tycoonUpgradeCost.textContent = upgradeCostText;
+      this.tycoonUpgradeCost.parentElement?.setAttribute("aria-label", `Koszt ulepszenia: ${upgradeCostText}`);
+    }
     const tierText = `Poziom ${tier}`;
     if (this.tycoonTier.textContent !== tierText) this.tycoonTier.textContent = tierText;
   }

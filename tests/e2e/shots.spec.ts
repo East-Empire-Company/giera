@@ -11,6 +11,8 @@ test.describe("Evidence screenshot generator", () => {
     await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, null, {
       timeout: 25_000,
     });
+    await expect(page.locator("#launch-menu")).toBeVisible();
+    await page.getByRole("button", { name: "Rozpocznij grę" }).click();
 
     // 01-boot.png
     const bootPath = resolve(EVIDENCE_DIR, "01-boot.png");

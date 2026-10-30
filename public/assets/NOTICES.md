@@ -23,6 +23,14 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 | `assets/models/kaykit/rogue.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/Rogue.glb` | Kay Lousberg | CC0 1.0 |
 | `assets/models/kaykit/mage.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/Mage.glb` | Kay Lousberg | CC0 1.0 |
 | `assets/models/kaykit/ranger.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/Ranger.glb` | Kay Lousberg | CC0 1.0 |
+| `assets/models/kenney-factory-kit/conveyor.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/conveyor.glb` | Kenney | CC0 |
+| `assets/models/kenney-factory-kit/conveyor-long.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/conveyor-long.glb` | Kenney | CC0 |
+| `assets/models/kenney-factory-kit/machine.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/machine.glb` | Kenney | CC0 |
+| `assets/models/kenney-factory-kit/hopper-square.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/hopper-square.glb` | Kenney | CC0 |
+| `assets/models/kenney-factory-kit/scanner-low.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/scanner-low.glb` | Kenney | CC0 |
+| `assets/models/kenney-factory-kit/button-floor-round.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/button-floor-round.glb` | Kenney | CC0 |
+| `assets/models/kenney-factory-kit/cog-a.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/cog-a.glb` | Kenney | CC0 |
+| `assets/models/kenney-factory-kit/Textures/colormap.png` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/Textures/colormap.png` | Kenney | CC0 |
 | `assets/sky/clouds.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Other/clouds.png` | Kenney | CC0 |
 | `assets/sky/skybox_sideClouds.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Other/skybox_sideClouds.png` | Kenney | CC0 |
 | `assets/particles/dirt_01.png` | [Particle Pack](https://kenney.nl/assets/particle-pack) / `PNG (Transparent)/dirt_01.png` | Kenney | CC0 |
@@ -35,6 +43,12 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 | `assets/ui/kenney/button_square_depth_line.png` | [UI Pack](https://kenney.nl/assets/ui-pack) / `PNG/Green/Default/button_square_depth_line.png` | Kenney | CC0 |
 | `assets/ui/kenney/check_square_color_checkmark.png` | [UI Pack](https://kenney.nl/assets/ui-pack) / `PNG/Green/Default/check_square_color_checkmark.png` | Kenney | CC0 |
 | `assets/ui/kenney/star.png` | [UI Pack](https://kenney.nl/assets/ui-pack) / `PNG/Green/Default/star.png` | Kenney | CC0 |
+| `assets/ui/kenney-adventure/panel_brown.png` | [UI Pack - Adventure](https://opengameart.org/content/ui-pack-adventure) / `PNG/Double/panel_brown.png` | Kenney | CC0 |
+| `assets/ui/kenney-adventure/banner_classic_curtain.png` | [UI Pack - Adventure](https://opengameart.org/content/ui-pack-adventure) / `PNG/Double/banner_classic_curtain.png` | Kenney | CC0 |
+| `assets/ui/kenney-adventure/button_brown.png` | [UI Pack - Adventure](https://opengameart.org/content/ui-pack-adventure) / `PNG/Double/button_brown.png` | Kenney | CC0 |
+| `assets/ui/kenney-adventure/checkbox_beige_empty.png` | [UI Pack - Adventure](https://opengameart.org/content/ui-pack-adventure) / `PNG/Double/checkbox_beige_empty.png` | Kenney | CC0 |
+| `assets/ui/kenney-adventure/checkbox_beige_checked.png` | [UI Pack - Adventure](https://opengameart.org/content/ui-pack-adventure) / `PNG/Double/checkbox_beige_checked.png` | Kenney | CC0 |
+| `assets/ui/kenney-adventure/minimap_icon_star_yellow.png` | [UI Pack - Adventure](https://opengameart.org/content/ui-pack-adventure) / `PNG/Double/minimap_icon_star_yellow.png` | Kenney | CC0 |
 | `assets/ui/icons/axe_iron.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Items/axe_iron.png` | Kenney | CC0 |
 | `assets/ui/icons/pick_iron.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Items/pick_iron.png` | Kenney | CC0 |
 | `assets/ui/icons/ore_coal.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Items/ore_coal.png` | Kenney | CC0 |
@@ -45,5 +59,5 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 | `assets/fonts/*` | [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) | Pixelify Sans Project Authors | SIL OFL 1.1 |
 | `assets/models/kaykit/anims/Rig_Medium_*.glb` | [KayKit - Character Pack : Adventurers 2.0](https://kaylousberg.itch.io/kaykit-adventurers) / `Animations/gltf/Rig_Medium/*.glb` | Kay Lousberg | CC0 1.0 |
 | `assets/models/props/*` | [Ultimate Stylized Nature](https://quaternius.com/packs/ultimatestylizednature.html) / `glTF/{Grass_Small,Bush_Small_Flowers,Flower_1}.*` | Quaternius | CC0 |
-| `assets/sky/kloofendal_48d_partly_cloudy_2k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `2k HDR` | Poly Haven | CC0 |
+| `assets/sky/kloofendal_48d_partly_cloudy_1k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `1k HDR` | Poly Haven | CC0 |
 | `assets/textures/pbr/*` | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |

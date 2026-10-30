@@ -29,7 +29,7 @@ describe("runtime asset manifest", () => {
     for (const path of paths) expect(existsSync(join("public", path))).toBe(true);
   });
   it("records atlas rectangles for every downloaded block tile", () => {
-    expect(existsSync("public/assets/textures/atlas.png")).toBe(true);
+    expect(existsSync("public/assets/textures/atlas.webp")).toBe(true);
     const ids = Object.values(atlasManifest.tiles).map((tile) => tile.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const tile of Object.keys(manifest.tiles)) expect(atlasManifest.tiles).toHaveProperty(tile);

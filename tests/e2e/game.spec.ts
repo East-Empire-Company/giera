@@ -9,6 +9,7 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
     await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true, null, {
       timeout: 25_000,
     });
+    await expect(page.locator("#launch-menu")).toBeVisible();
 
     const hasCanvas = await page.evaluate(() => !!document.querySelector("canvas#game"));
     expect(hasCanvas).toBe(true);
@@ -18,12 +19,56 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
 
     expect(errors).toEqual([]);
   });
+  test("launch: waits for start and applies selected settings", async ({ page }) => {
+    const musicRequests: string[] = [];
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (path.startsWith("/assets/audio/music/")) musicRequests.push(path);
+    });
+
+    await page.goto("/?seed=424242");
+    await page.waitForFunction(() => window.__GIERA__?.ready === true);
+    await expect(page.locator("#launch-menu")).toBeVisible();
+    expect(musicRequests).toContain("/assets/audio/music/sigma_protocol.mp3");
+    await page.keyboard.press("ArrowDown");
+    await page.waitForFunction(() => window.__GIERA__?.audio.playingMusic === "sigma_protocol");
+
+    const before = await page.evaluate(() => {
+      const game = window.__GIERA__;
+      if (!game) throw new Error("Game bridge missing after boot");
+      return [game.player.position.x, game.player.position.y, game.player.position.z];
+    });
+    await page.keyboard.down("w");
+    await page.waitForTimeout(200);
+    await page.keyboard.up("w");
+    const after = await page.evaluate(() => {
+      const game = window.__GIERA__;
+      if (!game) throw new Error("Game bridge missing after boot");
+      return [game.player.position.x, game.player.position.y, game.player.position.z];
+    });
+    expect(after).toEqual(before);
+
+    await page.locator("#launch-mode").click();
+    await page.locator("#launch-music").selectOption("combat_phonk");
+    const splitBeforeStart = await page.evaluate(() => window.__GIERA__?.splitScreen.isSplitScreen);
+    expect(splitBeforeStart).toBe(false);
+    const menuTrackAfterSelect = await page.evaluate(() => window.__GIERA__?.audio.playingMusic);
+    expect(menuTrackAfterSelect).toBe("sigma_protocol");
+
+    await page.getByRole("button", { name: "Rozpocznij grę" }).click();
+    await page.waitForFunction(() => window.__GIERA__?.splitScreen.isSplitScreen === true);
+    await page.waitForFunction(() => window.__GIERA__?.audio.playingMusic === "combat_phonk");
+    expect(musicRequests).toContain("/assets/audio/music/combat_phonk.mp3");
+    await expect(page.locator("#launch-menu")).toBeHidden();
+  });
+
 
 
 
   test("craft: toggles inventory modal and crafts recipes", async ({ page }) => {
     await page.goto("/?seed=424242");
     await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true);
+    await page.getByRole("button", { name: "Rozpocznij grę" }).click();
 
     // Give wood for crafting
     await page.evaluate(() => {
@@ -55,6 +100,7 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
   test("split: toggles 2-player split screen mode", async ({ page }) => {
     await page.goto("/?seed=424242");
     await page.waitForFunction(() => (window as unknown as { __GIERA__?: { ready: boolean } }).__GIERA__?.ready === true);
+    await page.getByRole("button", { name: "Rozpocznij grę" }).click();
 
     await page.click(".hud-mode-btn");
 

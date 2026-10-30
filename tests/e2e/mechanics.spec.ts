@@ -400,7 +400,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
         if (node.isMesh && node.geometry?.type === "BoxGeometry" && node.geometry.parameters?.width === 0.32) {
           dropTotal++;
           const src = node.material?.map?.image?.src ?? "";
-          if (src.includes("atlas.png")) dropWithAtlas++;
+          if (src.includes("atlas.webp")) dropWithAtlas++;
         }
       });
       return { isActing: g.player.isActing, motion: g.player.avatar?.requestedMotion ?? null, dropTotal, dropWithAtlas };

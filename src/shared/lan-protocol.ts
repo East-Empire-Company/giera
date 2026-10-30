@@ -9,6 +9,7 @@ export type PlayerState = {
   yaw: number;
   pitch: number;
   anim: string;
+  slot?: number;
 };
 
 export type ClientMessage =
@@ -18,10 +19,10 @@ export type ClientMessage =
   | { t: "input"; seq: number; x: number; y: number; z: number; yaw: number; pitch: number; anim: string };
 
 export type ServerMessage =
-  | { t: "welcome"; id: string; seed: number; spawn: [number, number, number]; players: PlayerState[] }
+  | { t: "welcome"; id: string; seed: number; spawn: [number, number, number]; slot: number; players: PlayerState[] }
   | { t: "block"; x: number; y: number; z: number; id: number; by: string }
   | { t: "player"; id: string; name: string; x: number; y: number; z: number; yaw: number; pitch: number; anim: string }
-  | { t: "join"; id: string; name: string }
+  | { t: "join"; id: string; name: string; slot: number }
   | { t: "leave"; id: string };
 export type ChunkPacket = {
   cx: number;

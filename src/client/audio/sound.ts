@@ -41,13 +41,17 @@ export class AudioManager {
   private currentMusic?: { id: string; source: AudioBufferSourceNode; gain: GainNode };
   private wantedMusic?: string;
   private voiceBusyUntil = 0;
+  private masterVolume = 0.8;
 
   constructor() {
     Object.assign(this.paths, VOICE_PATHS);
     Object.assign(this.paths, MUSIC_TRACKS);
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) return;
+        if (!document.hidden) {
+          if (this.wantedMusic) void this.playMusic(this.wantedMusic).catch(() => {});
+          return;
+        }
         for (const source of this.sources) source.stop();
         this.sources.clear();
         this.currentMusic = undefined;
@@ -56,14 +60,17 @@ export class AudioManager {
     }
   }
 
-  private async unlock(): Promise<AudioContext> {
+  private ensureContext(): AudioContext {
     if (!this.context) {
       this.context = new AudioContext();
       this.master = this.context.createGain();
-      this.master.gain.value = 0.8;
+      this.master.gain.value = this.masterVolume;
       this.master.connect(this.context.destination);
     }
-    if (this.context.state === "suspended") await this.context.resume();
+    return this.context;
+  }
+
+  private loadManifest(): Promise<void> {
     if (!this.manifest) {
       this.manifest = fetch("/assets/audio/generated/manifest.json", { cache: "force-cache" })
         .then(async (response) => {
@@ -71,8 +78,37 @@ export class AudioManager {
         })
         .catch(() => undefined);
     }
-    await this.manifest;
-    return this.context;
+    return this.manifest;
+  }
+
+  get playingMusic(): string | undefined {
+    return this.currentMusic?.id;
+  }
+
+  get volume(): number {
+    return this.masterVolume;
+  }
+
+  setVolume(level: number): number {
+    const value = Math.min(1, Math.max(0, Number.isFinite(level) ? level : this.masterVolume));
+    this.masterVolume = value;
+    if (this.master && this.context) {
+      this.master.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
+    }
+    return value;
+  }
+
+  async preload(ids: readonly string[]): Promise<void> {
+    this.ensureContext();
+    await this.loadManifest();
+    await Promise.all(ids.map((id) => this.loadBuffer(id)));
+  }
+
+  private async unlock(): Promise<AudioContext> {
+    const context = this.ensureContext();
+    if (context.state === "suspended") await context.resume();
+    await this.loadManifest();
+    return context;
   }
 
   private async loadBuffer(id: string): Promise<AudioBuffer | null> {
@@ -92,6 +128,9 @@ export class AudioManager {
   async play(id: string, options: { volume?: number; rate?: number } = {}): Promise<void> {
     if (document.hidden) return;
     const context = await this.unlock();
+    if (this.wantedMusic && !this.currentMusic && !document.hidden) {
+      void this.playMusic(this.wantedMusic).catch(() => {});
+    }
     const buffer = await this.loadBuffer(id);
     if (!buffer || !this.master) return;
     const source = context.createBufferSource();
@@ -109,9 +148,9 @@ export class AudioManager {
     this.wantedMusic = id;
     if (document.hidden || this.currentMusic?.id === id) return;
     const context = await this.unlock();
-    if (this.wantedMusic !== id || this.currentMusic?.id === id) return;
+    if (document.hidden || this.wantedMusic !== id || this.currentMusic?.id === id) return;
     const buffer = await this.loadBuffer(id);
-    if (this.wantedMusic !== id || this.currentMusic?.id === id) return;
+    if (document.hidden || this.wantedMusic !== id || this.currentMusic?.id === id) return;
     if (!buffer || !this.master) return;
     const now = context.currentTime;
     const source = context.createBufferSource();

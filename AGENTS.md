@@ -28,6 +28,8 @@ Report lands in `.ai/evidence/pipeline/report.md` + `report.json`.
 - `?qa=1` contract: fixed 1/60 timestep, sky pinned to `elapsed = 150` (midday), `window.__GIERA__.qa.events` records audio/gameplay events, `qa.frame` counts frames. Tests wait on `qa.frame`, never on wall clock.
 - Goldens freeze the sim before capture: set `qa.pauseAt = frame`, wait for `qa.paused === true`, assert `qa.frame` equals the target. Wind, NPC wander and particles are time-driven, so a moving capture point makes split-screen goldens drift (~0.15 %).
 - Seeds: tests use `?seed=424242`. Worldgen is pure seeded hash noise.
+- Worldgen has one current algorithm. Existing saves and rooms retain their seed and edits; generated terrain uses the current algorithm.
+- Autosaves retain tycoon vault coins, collected stars, and upgrade tier.
 
 ## Test philosophy
 
@@ -61,7 +63,7 @@ Hardware-only checks (Xbox pads, real mic STT, touch overlay, Xbox Edge fps) liv
 Presentation only — worldgen, physics, mining, crafting, NPC logic, LAN protocol and saves stay voxel-driven.
 
 - Block faces read three atlases built by `bun run assets:atlas` (`scripts/build-atlas.ts`): `atlas.png` (albedo, sRGB), `atlas-normal.png` (NormalGL), `atlas-orm.png` (R=AO, G=roughness). Sources are AmbientCG CC0 1K-JPG maps that `bun run assets:fetch` writes to `public/assets/textures/pbr/<id>/` (git-ignored, re-downloadable); `src/shared/atlas-manifest.json` holds the UV rects.
-- Smooth-top terrain uses shared height-gradient normals across chunk borders. Terrain shaders blend grass-top and cliff-side atlas tiles by world normal; oak bark uses a warm flat palette.
+- Smooth-top terrain uses shared height-gradient normals across chunk borders. Terrain shaders blend grass-top and cliff-side atlas tiles by world normal; oak bark keeps its warm base palette with fine vertical grain in the shared voxel shader.
 - Heroes/NPCs are KayKit CC0 GLBs in `public/assets/models/kaykit/` (Rig_Medium clip names live in `ANIM_MAP` in `src/client/entities/avatar.ts`). Decor props are Quaternius CC0 glTF in `public/assets/models/props/`.
 - Environment lighting uses a Poly Haven CC0 HDR (`HDRLoader` → `PMREMGenerator` → `scene.environment`). `SkyCycle` coordinates HDR intensity, procedural sky, hemisphere fill, daylight-driven sun, and horizon-matched fog.
 - Shadows use the official Three r186 `CSM` addon (`src/client/render/cascaded-shadows.ts`): 2 practical cascades at 1024², range capped at `MAX_SHADOW_DISTANCE` (128) via `shadowDistanceFor`, `PCFShadowMap` (r186 removed `PCFSoftShadowMap`; it warns and falls back; `tests/unit/shadow-map-type.test.ts` guards this). The `SkyCycle` sun is hidden and only supplies direction, colour and intensity. `PostFX` calls `prepareView(camera)` before each composer render so split-screen cascades follow each camera. CSM overwrites the global `lights_fragment_begin` chunk with a pre-r186 copy that lacks `material.dfg`/`multiScatteringCompensation`; `spliceStockPrelude` keeps Three's stock prelude and takes only CSM's directional tail, and `dispose()` restores both global chunks. Re-check this splice on every Three upgrade (it throws if the marker moves).
@@ -89,3 +91,12 @@ bun run deploy        # build+push image, apply k8s/, rollout, verify public URL
 ```
 
 Requires: kubectl kubeconfig at `~/cluster-migration/kube/kubeconfig.yaml`, sops age key, docker buildx, TS_APIKEY.
+
+## Xbox / Windows package
+
+`platform/xbox-uwp-giera` is a UWP host that boots the built web app inside WinUI 2.8 `Microsoft.UI.Xaml.Controls.WebView2`. The classic XAML `WebView` is EdgeHTML and cannot run the game (no WebGL2, no ES2022), so never substitute it.
+
+- `bun platform/xbox-uwp-giera/sync-web.ts` builds and copies `dist/` to `Assets/www` (git-ignored), served at `https://giera.local/` via `SetVirtualHostNameToFolderMapping` so root-absolute URLs and the service worker behave as on the web.
+- `src/main.ts` `notifyHost()` posts `boot-ready` through `chrome.webview.postMessage`, falling back to `window.external.notify`. The native splash layer fades on that message.
+- `build-giera.ps1` needs Visual Studio with the UWP workload plus Windows 10 SDK 19041 (`tools/install-vs-buildtools.cmd` installs Build Tools with both). Without them the build stops at `vswhere`.
+- `MainPage` writes `boot-log.txt` to the app's `LocalFolder` (engine, WebGL2, boot-ready, ready/music/audio/fps snapshots); `deploy-xbox.sh log` reads it from a Developer Mode console.

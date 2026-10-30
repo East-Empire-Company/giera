@@ -1,10 +1,10 @@
 import type { PlayerState } from "../src/shared/lan-protocol";
+import { nextFreeTycoonSlot } from "../src/shared/tycoon-slots";
 import { generateChunk } from "../src/shared/worldgen";
 import { CHUNK_SIZE, encodeRLE, getBlockIndex } from "../src/shared/chunk";
 
 export type WorldSnapshot = {
   seed: number;
-  worldgenVersion?: number;
   edits: Record<string, number>;
   savedAt: string;
 };
@@ -12,15 +12,13 @@ export type WorldSnapshot = {
 export class RoomState {
   readonly code: string;
   readonly seed: number;
-  readonly worldgenVersion: number;
   private readonly players = new Map<string, PlayerState>();
   private readonly edits = new Map<string, number>();
   private readonly chunks = new Map<string, Uint8Array>();
 
-  constructor(code: string, seed: number, worldgenVersion: number) {
+  constructor(code: string, seed: number) {
     this.code = code;
     this.seed = seed;
-    this.worldgenVersion = worldgenVersion;
   }
 
   getPlayerCount(): number {
@@ -36,6 +34,7 @@ export class RoomState {
   }
 
   addPlayer(socketId: string, name: string): PlayerState {
+    const slot = nextFreeTycoonSlot(this.getAllPlayers().map((p) => p.slot ?? 0));
     const player: PlayerState = {
       id: socketId,
       name,
@@ -45,6 +44,7 @@ export class RoomState {
       yaw: 0,
       pitch: 0,
       anim: "idle",
+      slot,
     };
     this.players.set(socketId, player);
     return player;
@@ -86,7 +86,7 @@ export class RoomState {
     const key = `${cx},${cy},${cz}`;
     let data = this.chunks.get(key);
     if (!data) {
-      data = generateChunk(cx, cy, cz, this.seed, this.worldgenVersion);
+      data = generateChunk(cx, cy, cz, this.seed);
       for (const [editKey, id] of this.edits) {
         const [ex, ey, ez] = editKey.split(",").map(Number);
         const ecx = Math.floor(ex / CHUNK_SIZE);
@@ -109,14 +109,13 @@ export class RoomState {
     for (const [k, v] of this.edits) edits[k] = v;
     return {
       seed: this.seed,
-      worldgenVersion: this.worldgenVersion,
       edits,
       savedAt: new Date().toISOString(),
     };
   }
 
   static fromJSON(code: string, json: WorldSnapshot): RoomState {
-    const room = new RoomState(code, json.seed, json.worldgenVersion ?? 1);
+    const room = new RoomState(code, json.seed);
     for (const [k, v] of Object.entries(json.edits)) {
       room.edits.set(k, v);
     }

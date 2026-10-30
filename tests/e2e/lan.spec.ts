@@ -41,6 +41,25 @@ test("lan: two clients join one room, exchange a block edit, server persists the
   await connect(A);
   await connect(B);
 
+  const origin = (page: Page) =>
+    page.evaluate(() => {
+      const g = (window as unknown as G).__GIERA__;
+      const remotes = [...g.remoteTycoons.values()].map((t: { origin: { x: number; z: number } }) => ({
+        x: t.origin.x,
+        z: t.origin.z,
+      }));
+      return { own: { x: g.tycoon.origin.x, z: g.tycoon.origin.z }, remotes };
+    });
+
+  await expect.poll(async () => (await origin(A)).remotes.length, { timeout: 20_000 }).toBe(1);
+  await expect.poll(async () => (await origin(B)).remotes.length, { timeout: 20_000 }).toBe(1);
+
+  const a = await origin(A);
+  const b = await origin(B);
+  expect(a.own).not.toEqual(a.remotes[0]);
+  expect(a.remotes[0]).toEqual(b.own);
+  expect(b.remotes[0]).toEqual(a.own);
+
   await A.evaluate(() => {
     const g = (window as unknown as G).__GIERA__;
     const p = g.player.position;

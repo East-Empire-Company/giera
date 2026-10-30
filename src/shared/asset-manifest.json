@@ -20,7 +20,17 @@
     "playerOne": "assets/models/kaykit/knight.glb",
     "playerTwo": "assets/models/kaykit/rogue.glb",
     "mina": "assets/models/kaykit/mage.glb",
-    "staszek": "assets/models/kaykit/ranger.glb"
+    "staszek": "assets/models/kaykit/ranger.glb",
+    "factoryConveyor": "assets/models/kenney-factory-kit/conveyor.glb",
+    "factoryLongConveyor": "assets/models/kenney-factory-kit/conveyor-long.glb",
+    "factoryMachine": "assets/models/kenney-factory-kit/machine.glb",
+    "factoryHopper": "assets/models/kenney-factory-kit/hopper-square.glb",
+    "factoryScanner": "assets/models/kenney-factory-kit/scanner-low.glb",
+    "factoryButton": "assets/models/kenney-factory-kit/button-floor-round.glb",
+    "factoryGear": "assets/models/kenney-factory-kit/cog-a.glb"
+  },
+  "modelTextures": {
+    "factoryKit": "assets/models/kenney-factory-kit/Textures/colormap.png"
   },
   "sky": {
     "clouds": "assets/sky/clouds.png",
@@ -38,7 +48,13 @@
     "roundButton": "assets/ui/kenney/button_round_depth_line.png",
     "squareButton": "assets/ui/kenney/button_square_depth_line.png",
     "checkmark": "assets/ui/kenney/check_square_color_checkmark.png",
-    "star": "assets/ui/kenney/star.png"
+    "star": "assets/ui/kenney/star.png",
+    "launchPanel": "assets/ui/kenney-adventure/panel_brown.png",
+    "launchBanner": "assets/ui/kenney-adventure/banner_classic_curtain.png",
+    "launchButton": "assets/ui/kenney-adventure/button_brown.png",
+    "launchModeEmpty": "assets/ui/kenney-adventure/checkbox_beige_empty.png",
+    "launchModeSelected": "assets/ui/kenney-adventure/checkbox_beige_checked.png",
+    "launchStar": "assets/ui/kenney-adventure/minimap_icon_star_yellow.png"
   },
   "icons": {
     "axe": "assets/ui/icons/axe_iron.png",

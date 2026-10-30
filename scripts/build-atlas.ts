@@ -4,6 +4,8 @@ import { dirname, resolve } from "node:path";
 import sharp from "sharp";
 import assetManifest from "../src/shared/asset-manifest.json";
 
+const ATLAS_WEBP_QUALITY = 92;
+
 type TileSize = { name: string; width: number; height: number };
 type Placement = TileSize & { x: number; y: number };
 type PackedAtlas = { width: number; height: number; placements: Placement[] };
@@ -184,16 +186,20 @@ async function main(): Promise<void> {
     tiles[name] = { id, uv: [u0, v0, u1, v1], normalRect: [u0, v0, u1, v1], ormRect: [u0, v0, u1, v1], path: tilePath };
   }
 
-  const compose = async (cells: typeof albedoCells): Promise<Buffer> =>
+  const compose = async (cells: typeof albedoCells, lossless = false): Promise<Buffer> =>
     sharp({ create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } })
       .composite(cells)
-      .png({ compressionLevel: 9 })
+      .webp(lossless ? { lossless: true, effort: 6 } : { quality: ATLAS_WEBP_QUALITY, alphaQuality: 100, effort: 6 })
       .toBuffer();
-  const [albedoPng, normalPng, ormPng] = await Promise.all([compose(albedoCells), compose(normalCells), compose(ormCells)]);
-  const atlasPath = resolve("public/assets/textures/atlas.png");
-  await writeFile(atlasPath, albedoPng);
-  await writeFile(resolve("public/assets/textures/atlas-normal.png"), normalPng);
-  await writeFile(resolve("public/assets/textures/atlas-orm.png"), ormPng);
+  const [albedoWebp, normalWebp, ormWebp] = await Promise.all([
+    compose(albedoCells),
+    compose(normalCells, true),
+    compose(ormCells),
+  ]);
+  const atlasPath = resolve("public/assets/textures/atlas.webp");
+  await writeFile(atlasPath, albedoWebp);
+  await writeFile(resolve("public/assets/textures/atlas-normal.webp"), normalWebp);
+  await writeFile(resolve("public/assets/textures/atlas-orm.webp"), ormWebp);
   const atlasManifest = { width: size, height: size, tileRes: res, gutter: GUTTER, tiles };
   await writeFile(resolve("src/shared/atlas-manifest.json"), `${JSON.stringify(atlasManifest, null, 2)}\n`);
   console.log(`Packed ${entries.length} tiles into 3 atlases at ${dirname(atlasPath)} (${size}x${size}, res ${res}).`);

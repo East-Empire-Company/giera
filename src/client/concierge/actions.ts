@@ -1,0 +1,96 @@
+import { LAUNCH_PLAYLIST } from "../startup/launch-menu";
+import { CONCIERGE_TOOLS, type ConciergeToolName } from "../../shared/concierge-tools";
+import { createBackup, readBackups, restoreBackup, clearProgress, summarize, type BackupSummary } from "./backups";
+
+export type ConciergeStatus = {
+  started: boolean;
+  splitScreen: boolean;
+  musicTrackId: string;
+  musicName: string;
+  volume: number;
+  coins: number;
+  tier: number;
+};
+
+export type ConciergeHost = {
+  status(): ConciergeStatus;
+  setMusicTrack(id: string): string;
+  setSplitScreen(enabled: boolean): void;
+  setVolume(level: number): number;
+  teleportToSpawn(): void;
+  reload(): void;
+};
+
+export type ConciergeToolHandler = (params: Record<string, unknown>) => Promise<string>;
+
+const clampVolume = (value: unknown): number => {
+  const level = typeof value === "number" && Number.isFinite(value) ? value : 0.8;
+  return Math.min(1, Math.max(0, level));
+};
+
+const describeBackup = (backup: BackupSummary): string => `${backup.label} (${backup.id})`;
+
+export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolName, ConciergeToolHandler> {
+  return {
+    async get_status() {
+      const status = host.status();
+      return JSON.stringify(status);
+    },
+
+    async set_music_track(params) {
+      const trackId = typeof params.track_id === "string" ? params.track_id : "";
+      if (!LAUNCH_PLAYLIST.some((track) => track.id === trackId)) {
+        return `Nie znam takiego utworu. Dostępne: ${LAUNCH_PLAYLIST.map((track) => track.id).join(", ")}`;
+      }
+      const name = host.setMusicTrack(trackId);
+      return `Gram teraz: ${name}`;
+    },
+
+    async set_split_screen(params) {
+      const enabled = params.enabled === true;
+      host.setSplitScreen(enabled);
+      return enabled ? "Włączony tryb dwóch graczy." : "Włączony tryb jednego gracza.";
+    },
+
+    async set_volume(params) {
+      const level = host.setVolume(clampVolume(params.level));
+      return `Głośność ustawiona na ${Math.round(level * 100)}%.`;
+    },
+
+    async teleport_to_spawn() {
+      host.teleportToSpawn();
+      return "Gracz jest na punkcie startowym.";
+    },
+
+    async make_backup(params) {
+      const label = typeof params.label === "string" ? params.label : "kopia";
+      const backup = await createBackup(label);
+      return backup ? `Zapisana kopia: ${describeBackup(backup)}` : "Nie ma jeszcze postępów do zapisania.";
+    },
+
+    async list_backups() {
+      const backups = readBackups().map(summarize);
+      return backups.length ? backups.map(describeBackup).join("; ") : "Nie ma żadnych kopii zapasowych.";
+    },
+
+    async restore_backup(params) {
+      const id = typeof params.backup_id === "string" ? params.backup_id : "";
+      const restored = await restoreBackup(id);
+      if (!restored) return "Nie znalazłem takiej kopii.";
+      host.reload();
+      return "Przywracam postępy. Gra wczyta się od nowa.";
+    },
+
+    async reset_progress(params) {
+      if (params.confirmed !== true) {
+        return "Najpierw zapytaj dziecko, czy na pewno chce zacząć od nowa. Potem wywołaj to narzędzie z confirmed=true.";
+      }
+      await createBackup("przed resetem");
+      await clearProgress();
+      host.reload();
+      return "Postępy skasowane. Zrobiłem kopię zapasową na wszelki wypadek.";
+    },
+  };
+}
+
+export const CONCIERGE_TOOL_NAMES: readonly string[] = CONCIERGE_TOOLS.map((tool) => tool.name);

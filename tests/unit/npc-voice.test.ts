@@ -11,6 +11,10 @@ let gains: FakeGain[];
 let sources: FakeSource[];
 let ttsCalls: number;
 let ttsOk: boolean;
+let documentHidden: boolean;
+let visibilityChange: (() => void) | undefined;
+
+
 
 class FakeAudioContext {
   state: "running" | "suspended" = "running";
@@ -38,8 +42,12 @@ class FakeAudioContext {
   async decodeAudioData(): Promise<{ duration: number }> {
     return { duration: 2 };
   }
-  async resume(): Promise<void> {}
-  async suspend(): Promise<void> {}
+  async resume(): Promise<void> {
+    this.state = "running";
+  }
+  async suspend(): Promise<void> {
+    this.state = "suspended";
+  }
 }
 
 beforeEach(() => {
@@ -47,8 +55,15 @@ beforeEach(() => {
   sources = [];
   ttsCalls = 0;
   ttsOk = true;
+  documentHidden = false;
+  visibilityChange = undefined;
   vi.stubGlobal("AudioContext", FakeAudioContext);
-  vi.stubGlobal("document", { hidden: false, addEventListener: () => {} });
+  vi.stubGlobal("document", {
+    get hidden() { return documentHidden; },
+    addEventListener: (type: string, listener: () => void) => {
+      if (type === "visibilitychange") visibilityChange = listener;
+    },
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -125,4 +140,29 @@ describe("AudioManager.playMusic", () => {
     const started = sources.filter((s) => s.loop);
     expect(started).toHaveLength(1);
   });
+  it("restarts selected music after visibility returns", async () => {
+    const manager = await readyManager();
+    const playMusic = vi.spyOn(manager, "playMusic");
+
+    documentHidden = true;
+    visibilityChange?.();
+    documentHidden = false;
+    visibilityChange?.();
+    await playMusic.mock.results[0].value;
+
+    expect(sources.filter((source) => source.loop)).toHaveLength(2);
+  });
+  it("restarts selected music on the first audio unlock after visibility loss", async () => {
+    const manager = await readyManager();
+    const playMusic = vi.spyOn(manager, "playMusic");
+
+    documentHidden = true;
+    visibilityChange?.();
+    documentHidden = false;
+    await manager.play("ui_click");
+    await playMusic.mock.results[0].value;
+
+    expect(sources.filter((source) => source.loop)).toHaveLength(2);
+  });
+
 });

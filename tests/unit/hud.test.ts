@@ -20,6 +20,18 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(firstIcon).not.toBeNull();
     expect(firstIcon.src).toContain(".png");
   });
+  it("shows the launch-selected music and keeps the HUD cycle label current", () => {
+    const hud = new GameHUD({
+      inventory: new GameInventory(),
+      objectives: new ObjectiveManager(),
+      onCycleMusic: () => "Adventure",
+    });
+
+    hud.setMusicTrack("Combat Phonk");
+    expect(document.querySelector(".hud-music-btn")?.textContent).toBe("🎵 Combat Phonk");
+    document.querySelector<HTMLButtonElement>(".hud-music-btn")?.click();
+    expect(document.querySelector(".hud-music-btn")?.textContent).toBe("🎵 Adventure");
+  });
 
   it("provides visual Xbox controller mapping modal", () => {
     const inventory = new GameInventory();
@@ -81,24 +93,27 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(objIcon.src).toContain("oak_log_side.png");
   });
 
-  it("shows tycoon star count and tier in the HUD chip", () => {
+  it("shows tycoon stars, vault coins, next upgrade cost, and tier", () => {
     const inventory = new GameInventory();
     const objectives = new ObjectiveManager();
     const hud = new GameHUD({ inventory, objectives });
-
     const chip = document.querySelector(".hud-tycoon-chip");
     expect(chip).not.toBeNull();
-    const chipIcon = chip?.querySelector("img") as HTMLImageElement;
-    expect(chipIcon.src).toContain("star.png");
 
-    hud.updateTycoon(7, 2);
+    expect((chip?.querySelector(".hud-tycoon-stars-icon") as HTMLImageElement).src).toContain("star.png");
+    expect((chip?.querySelector(".hud-tycoon-vault-icon") as HTMLImageElement).src).toContain("ore_gold.png");
+    expect((chip?.querySelector(".hud-tycoon-upgrade-icon") as HTMLImageElement).src).toContain("star.png");
 
-    expect(document.querySelector(".hud-tycoon-stars")?.textContent).toBe("7");
-    expect(document.querySelector(".hud-tycoon-tier")?.textContent).toBe("Poziom 2");
+    hud.updateTycoon(7, 3, 2, 10);
 
-    hud.updateTycoon(7, 2);
-    expect(document.querySelector(".hud-tycoon-stars")?.textContent).toBe("7");
-    expect(document.querySelector(".hud-tycoon-tier")?.textContent).toBe("Poziom 2");
+    expect(chip?.querySelector(".hud-tycoon-stars")?.textContent).toBe("7");
+    expect(chip?.querySelector(".hud-tycoon-vault")?.textContent).toBe("3");
+    expect(chip?.querySelector(".hud-tycoon-upgrade-cost")?.textContent).toBe("10");
+    expect(chip?.querySelector(".hud-tycoon-tier")?.textContent).toBe("Poziom 2");
+
+    hud.updateTycoon(7, 3, 2, 10);
+    expect(chip?.querySelector(".hud-tycoon-vault")?.textContent).toBe("3");
+    expect(chip?.querySelector(".hud-tycoon-upgrade-cost")?.textContent).toBe("10");
   });
 
   it("shows and positions world-anchored NPC speech bubbles", () => {

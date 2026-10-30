@@ -10,8 +10,8 @@ import { generateChunk } from "../../src/shared/worldgen";
 
 describe("binary chunk frames", () => {
   it("round-trips real RLE chunk data with coordinates", () => {
-    const a = generateChunk(0, 2, 0, 4242, 2);
-    const b = generateChunk(-3, 1, 5, 4242, 2);
+    const a = generateChunk(0, 2, 0, 4242);
+    const b = generateChunk(-3, 1, 5, 4242);
     const flat = new Uint8Array(CHUNK_VOLUME).fill(2);
     const packets = [
       { cx: 0, cy: 2, cz: 0, rleData: encodeRLE(a) },

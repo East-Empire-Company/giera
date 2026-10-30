@@ -4,6 +4,18 @@ Run `bun run manual` (boots dev server, opens `http://localhost:5173/?seed=42424
 Save evidence (screenshots, notes, clip names) to `.ai/evidence/manual/YYYY-MM-DD/`.
 Software-covered items are regression-tested by `bun run pipeline` — manual pass is a spot-check, not a re-test.
 
+## Launch menu
+
+- [ ] Menu appears after world load. Game waits until `Zaczynamy!`.
+
+- [ ] Movement and music stay inactive before start.
+
+- [ ] Keyboard, touch, D-pad, and left stick navigate settings.
+
+- [ ] Xbox A starts once. Holding A does not trigger a jump.
+
+- [ ] Selected player count and music track apply after start.
+
 ## Hardware-only (must be done by hand)
 
 ### Xbox controllers (2 pads, Edge on Xbox Series X|S)

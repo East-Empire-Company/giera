@@ -23,13 +23,13 @@ describe("RoomState chunk cache and edits", () => {
   for (const { name, pos } of cases) {
     const [x, y, z] = pos;
     it(`serves an edit made before the chunk was generated (${name})`, () => {
-      const room = new RoomState("K7QX", 9999, 2);
+      const room = new RoomState("K7QX", 9999);
       room.setBlock(x, y, z, 9);
       expect(readBlock(room, x, y, z)).toBe(9);
     });
 
     it(`serves an edit made after the chunk was cached (${name})`, () => {
-      const room = new RoomState("K7QX", 9999, 2);
+      const room = new RoomState("K7QX", 9999);
       readBlock(room, x, y, z);
       room.setBlock(x, y, z, 9);
       expect(readBlock(room, x, y, z)).toBe(9);
@@ -39,7 +39,7 @@ describe("RoomState chunk cache and edits", () => {
   }
 
   it("does not alter other cached chunks when editing", () => {
-    const room = new RoomState("K7QX", 9999, 2);
+    const room = new RoomState("K7QX", 9999);
     const before = Array.from(decodeRLE(room.getChunkRLE(0, 2, 0)));
     room.getChunkRLE(1, 2, 0);
     room.setBlock(16, 40, 0, 9);
@@ -49,7 +49,7 @@ describe("RoomState chunk cache and edits", () => {
 
 describe("RoomState", () => {
   it("initializes room with seed and an empty edits snapshot", () => {
-    const room = new RoomState("K7QX", 9999, 2);
+    const room = new RoomState("K7QX", 9999);
     expect(room.code).toBe("K7QX");
     expect(room.seed).toBe(9999);
     expect(room.getPlayerCount()).toBe(0);
@@ -57,7 +57,7 @@ describe("RoomState", () => {
   });
 
   it("adds and removes players cleanly", () => {
-    const room = new RoomState("K7QX", 9999, 2);
+    const room = new RoomState("K7QX", 9999);
     const p1 = room.addPlayer("socket-1", "Ziemek");
     expect(room.getPlayerCount()).toBe(1);
     expect(p1.name).toBe("Ziemek");
@@ -70,8 +70,19 @@ describe("RoomState", () => {
     expect(room.getPlayer("socket-2")?.name).toBe("Gniewko");
   });
 
+  it("hands each player their own tycoon slot and reuses freed slots", () => {
+    const room = new RoomState("K7QX", 9999);
+    const p1 = room.addPlayer("socket-1", "Ziemek");
+    const p2 = room.addPlayer("socket-2", "Gniewko");
+    const p3 = room.addPlayer("socket-3", "Babcia");
+    expect([p1.slot, p2.slot, p3.slot]).toEqual([0, 1, 2]);
+
+    room.removePlayer("socket-2");
+    expect(room.addPlayer("socket-4", "Dziadek").slot).toBe(1);
+  });
+
   it("stores and applies block edits", () => {
-    const room = new RoomState("K7QX", 9999, 2);
+    const room = new RoomState("K7QX", 9999);
     room.setBlock(10, 45, 12, 9); // planks
     expect(room.getBlock(10, 45, 12)).toBe(9);
 
@@ -80,7 +91,7 @@ describe("RoomState", () => {
   });
 
   it("serializes to world JSON snapshot", () => {
-    const room = new RoomState("K7QX", 9999, 2);
+    const room = new RoomState("K7QX", 9999);
     room.setBlock(5, 50, 5, 3);
     const json = room.toJSON();
     expect(json.seed).toBe(9999);
@@ -88,14 +99,24 @@ describe("RoomState", () => {
   });
 
   it("serves the worldgen chunk for its seed when there are no edits", () => {
-    const room = new RoomState("K7QX", 9999, 2);
-    expect(Array.from(decodeRLE(room.getChunkRLE(0, 2, 0)))).toEqual(Array.from(generateChunk(0, 2, 0, 9999, 2)));
+    const room = new RoomState("K7QX", 9999);
+    expect(Array.from(decodeRLE(room.getChunkRLE(0, 2, 0)))).toEqual(Array.from(generateChunk(0, 2, 0, 9999)));
   });
 
-  it("round-trips worldgen version and defaults legacy snapshots to v1", () => {
-    const room = new RoomState("K7QX", 9999, 2);
-    expect(room.toJSON().worldgenVersion).toBe(2);
-    const legacy = RoomState.fromJSON("K7QX", { seed: 9999, edits: {}, savedAt: "2026-01-01T00:00:00.000Z" });
-    expect(legacy.worldgenVersion).toBe(1);
+  it.each([1, 2])("loads existing room edits with current terrain (legacy metadata %i)", (worldgenVersion) => {
+    const snapshot = {
+      seed: 9999,
+      worldgenVersion,
+      edits: { "5,40,5": 3 },
+      savedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const legacy = RoomState.fromJSON("K7QX", snapshot);
+    const expected = generateChunk(0, 2, 0, 9999);
+    expected[getBlockIndex(5, 8, 5)] = 3;
+
+    expect(legacy.seed).toBe(9999);
+    expect(legacy.getBlock(5, 40, 5)).toBe(3);
+    expect(Array.from(decodeRLE(legacy.getChunkRLE(0, 2, 0)))).toEqual(Array.from(expected));
+    expect(legacy.toJSON()).not.toHaveProperty("worldgenVersion");
   });
 });

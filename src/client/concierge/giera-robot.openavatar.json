@@ -1,0 +1,79 @@
+{
+  "openavatar": "0.1",
+  "id": "giera-iskra",
+  "name": "Iskra",
+  "meta": {
+    "description": "Iskra, the helper robot that guides Ziemek and Gniewko around Giera.",
+    "authors": [{ "name": "Giera" }],
+    "license": "Apache-2.0",
+    "version": "1.0.0",
+    "tags": ["robot", "helper", "guide"]
+  },
+  "body": {
+    "rig": "biped",
+    "anchor": "ground",
+    "shape": { "type": "ellipsoid", "radii": [0.56, 0.72, 0.46] },
+    "material": { "type": "metal", "color": "#e8eef5", "roughness": 0.32, "sheen": "#9fe8ff" },
+    "proportions": {
+      "head": 0.36,
+      "headShape": "square",
+      "body": 0.4,
+      "bodyShape": "slim",
+      "legs": 0.32,
+      "arms": 0.3
+    },
+    "arms": {
+      "style": "paw",
+      "length": 0.5,
+      "thickness": 0.2,
+      "material": { "type": "plastic", "color": "#8fd3e8", "roughness": 0.4 }
+    }
+  },
+  "materials": {
+    "visor": { "type": "glass", "color": "#0b2230", "roughness": 0.12, "sheen": "#5fe8ff" },
+    "lamp": { "type": "plastic", "color": "#2ae4ff", "roughness": 0.2, "sheen": "#bff6ff" }
+  },
+  "face": {
+    "type": "bead",
+    "eyes": {
+      "shape": "round",
+      "size": 0.085,
+      "spacing": 0.2,
+      "height": 0.06,
+      "color": "#2ae4ff",
+      "highlight": true,
+      "blink": true,
+      "gaze": true
+    },
+    "mouth": { "shape": "smile", "width": 0.16, "height": -0.02, "color": "#2ae4ff", "speaks": true }
+  },
+  "parts": [
+    {
+      "id": "antenna",
+      "role": "antenna",
+      "shape": { "type": "capsule", "from": [0, 0, 0], "to": [0, 0.26, 0], "radius": 0.03 },
+      "material": "lamp",
+      "attach": { "to": "head", "at": [0, 1.02], "align": "upright" },
+      "animations": [{ "type": "glow", "driver": "speaking", "amount": 0.6, "speed": 2 }]
+    },
+    {
+      "id": "chest-light",
+      "role": "detail",
+      "shape": { "type": "sphere", "radius": 0.1 },
+      "material": "lamp",
+      "attach": { "to": "body", "at": [0, 0.18], "align": "surface" },
+      "animations": [{ "type": "glow", "driver": "voice", "amount": 0.5, "speed": 3 }]
+    }
+  ],
+  "behavior": {
+    "temperament": { "energy": 0.7, "bounce": 0.45, "sway": 0.5, "blink": 0.6 },
+    "reactions": {
+      "states": {
+        "idle": { "expression": "neutral", "gaze": "user", "intensity": 0.4 },
+        "listening": { "expression": "relaxed", "gaze": "user", "motion": "nod", "intensity": 0.6 },
+        "thinking": { "expression": "thinking", "gaze": "up", "effect": "dots", "intensity": 0.7 },
+        "speaking": { "expression": "happy", "gaze": "user", "intensity": 0.8 }
+      }
+    }
+  }
+}

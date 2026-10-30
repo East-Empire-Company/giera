@@ -19,6 +19,7 @@ const state: SavedGameState = {
     chunkEdits: { "0,0,0": 9 },
   },
   objectives: { stepIndex: 2, currentProgress: 1 },
+  tycoon: { vaultCoins: 3, collectedStars: 17, dropperTier: 4 },
   edits: { "0,0,0": 9 },
   savedAt: "2026-10-24T18:30:00.000Z",
 };
@@ -35,6 +36,18 @@ describe("save store", () => {
   it("round-trips every save field through the storage fallback", async () => {
     await saveGameState(state);
     expect(await loadGameState()).toEqual(state);
+  });
+
+  it("accepts saves written before tycoon progress existed", () => {
+    const legacyState = { ...state };
+    delete legacyState.tycoon;
+
+    expect(parseSaveData(JSON.stringify(legacyState))).toEqual(legacyState);
+  });
+
+  it.each([1, 2])("loads prior saves without terrain metadata (%i)", (worldgenVersion) => {
+    const previousSave = { ...state, worldgenVersion };
+    expect(parseSaveData(JSON.stringify(previousSave))).toEqual(state);
   });
 
   it("returns null when nothing was saved", async () => {
@@ -60,11 +73,13 @@ describe("save store", () => {
     expect(parseSaveData(JSON.stringify({ ...state, inventory: [state.inventory] }))).toBeNull();
     expect(parseSaveData(JSON.stringify({ ...state, inventory: { ...state.inventory, blocks: [1] } }))).toBeNull();
     expect(parseSaveData(JSON.stringify({ ...state, inventory: { ...state.inventory, items: [1] } }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, tycoon: { ...state.tycoon, dropperTier: "4" } }))).toBeNull();
   });
 
-  it("serializes save state to JSON", () => {
+  it("serializes save state without worldgen metadata", () => {
     const raw = formatSaveData(state);
-    expect(JSON.parse(raw).seed).toBe(424242);
-    expect(parseSaveData(raw)?.objectives.stepIndex).toBe(2);
+    expect(JSON.parse(raw)).toEqual(state);
+    expect(JSON.parse(raw)).not.toHaveProperty("worldgenVersion");
+    expect(parseSaveData(raw)).toEqual(state);
   });
 });

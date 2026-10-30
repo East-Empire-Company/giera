@@ -13,3 +13,6 @@ reason: tone mapping moved into the post chain (R5) plus cascaded shadows and gr
 ## 2026-10-29T22:04:02.044Z stage=goldens
 reason: tone mapping moved into the post chain (R5) plus cascaded shadows and grass decor landed after the 13:26 refresh; F2 merged opaque tile material verified look-neutral (0.0002% vs legacy path); captures now freeze the sim at frame 600 so time-driven wind/NPC/particles cannot drift
 
+## 2026-10-30T13:03:46.701Z stage=goldens
+reason: intended worldgen/tycoon terrain change plus atlas re-encode to WebP (albedo+ORM q92, normal lossless) and 1k HDR env
+

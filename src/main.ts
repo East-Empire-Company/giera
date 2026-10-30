@@ -14,6 +14,7 @@ import { GameHUD } from "./client/game/hud";
 import { GameInventory } from "./client/game/inventory";
 import { OBJECTIVE_STEPS, ObjectiveManager } from "./client/game/objectives";
 import { TycoonManager } from "./client/game/tycoon";
+import { tycoonSlotOrigin, tycoonTheme } from "./shared/tycoon-slots";
 import { TouchController } from "./client/input/touch";
 import { loadGameState, saveGameState } from "./client/persist/db";
 import { pushOutOfCylinders } from "./shared/entity-collision";
@@ -29,12 +30,15 @@ import { getSplitViewports, SplitScreenManager } from "./client/render/split-scr
 import { PostFX } from "./client/render/postfx";
 import { WorldRenderer } from "./client/render/worldRenderer";
 import { resolveWorldSeed } from "./client/startup/world-seed";
-import { WORLDGEN_VERSION } from "./shared/worldgen";
+import { LAUNCH_PLAYLIST, LaunchMenuController } from "./client/startup/launch-menu";
+import { PauseMenuController } from "./client/game/pause-menu";
+import { ConciergeSession } from "./client/concierge/session";
+import type { ConciergeHost } from "./client/concierge/actions";
 import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "./shared/blocks";
 import { CHUNK_SIZE, chunkKey } from "./shared/chunk";
 import { raycastInteract } from "./shared/raycast";
 import { makeRng } from "./shared/rng";
-import { surfaceHeight } from "./shared/worldgen";
+import { generateBlock, surfaceHeight } from "./shared/worldgen";
 
 type GameStats = { fps: number; drawCalls: number; chunkCount: number };
 type GameBridge = {
@@ -56,6 +60,7 @@ type GameBridge = {
   audio: AudioManager;
   stats: GameStats;
   tycoon: TycoonManager;
+  remoteTycoons: Map<string, TycoonManager>;
   postfx: PostFX;
   qa?: {
     simTime: number;
@@ -83,6 +88,7 @@ const status: HTMLElement = statusElement;
 const message: HTMLElement = messageElement;
 const progress: HTMLElement = progressElement;
 const qa = new URLSearchParams(window.location.search).get("qa") === "1";
+if (!qa) canvas.inert = true;
 const ambientChatterEnabled = ambientNpcChatterEnabled(window.location.search);
 const INTERACT_REACH = 12;
 const VIEW_RADIUS = pickViewRadius(navigator.userAgent, (navigator as Navigator & { deviceMemory?: number }).deviceMemory);
@@ -120,40 +126,40 @@ function showBootError(error: unknown): void {
 }
 
 async function boot(): Promise<void> {
-  const playlist = [
-    { id: "sigma_protocol", name: "Sigma Phonk" },
-    { id: "drift_phonk", name: "Drift Phonk" },
-    { id: "combat_phonk", name: "Combat Phonk" },
-    { id: "adventure_island", name: "Adventure" },
-    { id: "little_farm", name: "Little Farm" },
-  ];
   let currentTrackIndex = 0;
+  let gameStarted = qa;
+  let paused = false;
+  let suppressGamepadJumpUntilRelease = false;
   const audio = new AudioManager();
-  if (!qa) {
-    const startMusic = (): void => void audio.playMusic(playlist[currentTrackIndex].id).catch(() => {});
-    startMusic();
-    const unlockEvents = ["pointerdown", "keydown", "touchstart"] as const;
-    const unlockMusic = (): void => {
-      for (const type of unlockEvents) window.removeEventListener(type, unlockMusic);
-      startMusic();
-    };
-    for (const type of unlockEvents) window.addEventListener(type, unlockMusic, { passive: true });
-  }
-  const saved = await loadGameState();
-  const urlHasSeed = new URLSearchParams(window.location.search).has("seed");
-  const seed = urlHasSeed ? chooseSeed() : saved?.seed ?? chooseSeed();
-  const worldgenVersion = urlHasSeed ? WORLDGEN_VERSION : saved?.worldgenVersion ?? 1;
-  updateSeedUrl(seed);
+  const menuMusicId = LAUNCH_PLAYLIST[0].id;
+  void audio.preload([menuMusicId]).catch(() => {});
   const renderer = createRenderer(canvas);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 900);
   const camera2 = new THREE.PerspectiveCamera(68, (window.innerWidth / 2) / window.innerHeight, 0.1, 900);
   const stats: GameStats = { fps: 0, drawCalls: 0, chunkCount: 0 };
-  const assets = await loadRenderAssets(renderer, (done, total) => {
-    progress.style.width = `${Math.min(100, (done / total) * 20)}%`;
+  const assetsPromise = loadRenderAssets(renderer, (done, total) => {
+    progress.style.width = `${Math.min(100, 6 + (done / total) * 38)}%`;
     message.textContent = `Wczytujemy zasoby: ${done} / ${total}`;
   });
+  const saved = await loadGameState();
+  const urlHasSeed = new URLSearchParams(window.location.search).has("seed");
+  const seed = urlHasSeed ? chooseSeed() : saved?.seed ?? chooseSeed();
+  updateSeedUrl(seed);
+  const spawnY = surfaceHeight(3, 5, seed) + 1;
+  const player = new PlayerController({ id: "p1", spawn: [3, spawnY, 5] });
+  const player2 = new PlayerController({ id: "p2", spawn: [4.5, spawnY, 5] });
+  const npcManager = new NPCManager();
+  const [assets, avatar, avatar2] = await Promise.all([
+    assetsPromise,
+    player.loadAvatar(),
+    player2.loadAvatar(),
+    npcManager.spawnInScene(scene, (x: number, z: number) => surfaceHeight(x, z, seed)),
+  ]);
   scene.environment = assets.environment;
+  scene.add(avatar.object);
+  scene.add(avatar2.object);
+  void audio.preload(LAUNCH_PLAYLIST.slice(1).map((track) => track.id)).catch(() => {});
   let lanClient: LanClient | null = null;
   const crackTexture = new THREE.TextureLoader().load("/assets/textures/crackover.png");
   crackTexture.magFilter = THREE.NearestFilter;
@@ -172,29 +178,27 @@ async function boot(): Promise<void> {
   const itemDrops = new ItemDropManager({ scene, rng: makeRng(1337) });
   const gameplayVfx = new GameplayVfx(scene, seed, assets.particles);
 
-  // Sunny clearing spawn away from tree trunks
-  const spawnY = surfaceHeight(3, 5, seed) + 1;
-  const player = new PlayerController({ id: "p1", spawn: [3, spawnY, 5] });
-  const avatar = await player.loadAvatar();
-  scene.add(avatar.object);
-
-  const player2 = new PlayerController({ id: "p2", spawn: [4.5, spawnY, 5] });
-  const avatar2 = await player2.loadAvatar();
-  scene.add(avatar2.object);
-
-
   const dummyY = surfaceHeight(1.5, 3, seed);
 
-  const tycoonY = surfaceHeight(-3, 7, seed);
-  const tycoon = new TycoonManager({ x: -3, y: tycoonY, z: 7 }, scene);
+  const makeTycoon = (slot: number, label?: string): TycoonManager => {
+    const at = tycoonSlotOrigin(slot);
+    return new TycoonManager({ x: at.x, y: surfaceHeight(at.x, at.z, seed), z: at.z }, scene, {
+      surfaceAt: (x, z) => surfaceHeight(x, z, seed),
+      blocked: (x, z) => generateBlock(x, surfaceHeight(x, z, seed) + 1, z, seed) !== 0,
+      theme: tycoonTheme(slot),
+      label,
+    });
+  };
+  let tycoonSlot = 0;
+  let tycoon = makeTycoon(0, player.profile.name);
+  if (saved?.tycoon) tycoon.restore(saved.tycoon);
+  const remoteTycoons = new Map<string, TycoonManager>();
 
   const splitScreen = new SplitScreenManager(false);
   const inventory = saved?.inventory
     ? GameInventory.fromJSON(saved.inventory)
     : new GameInventory({ creative: true });
   const objectives = new ObjectiveManager();
-  const npcManager = new NPCManager();
-  await npcManager.spawnInScene(scene, (x: number, z: number) => surfaceHeight(x, z, seed));
 
   const mic = new MicController({
     lang: "pl-PL",
@@ -247,19 +251,15 @@ async function boot(): Promise<void> {
     }
   };
 
-  if (typeof window !== "undefined" && ("ontouchstart" in window || (navigator.maxTouchPoints ?? 0) > 0)) {
-    touch.attachDOM(document.body, () => hud.toggleInventory(inventory), tryPlaceBlock);
-  }
   const world = new WorldRenderer({
     scene,
     seed,
-    worldgenVersion,
     atlasTexture: assets.atlas,
     atlasNormal: assets.atlasNormal,
     atlasOrm: assets.atlasOrm,
     waterNormal: assets.waterNormal,
     onProgress: (loaded, total) => {
-      progress.style.width = `${Math.min(100, (loaded / total) * 100)}%`;
+      progress.style.width = `${Math.min(100, 44 + (loaded / total) * 56)}%`;
       message.textContent = `Ładujemy świat: ${loaded} / ${total}`;
     },
   });
@@ -278,7 +278,29 @@ async function boot(): Promise<void> {
     shadowDistanceFor(camera.far, CHUNK_SIZE * VIEW_RADIUS)
   );
   world.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
+  tycoon.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
   cascadedShadows.registerObject(scene);
+
+  const setOwnTycoonSlot = (slot: number): void => {
+    if (slot === tycoonSlot) return;
+    const progress = tycoon.toJSON();
+    tycoon.dispose();
+    tycoonSlot = slot;
+    tycoon = makeTycoon(slot, player.profile.name);
+    tycoon.restore(progress);
+    tycoon.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
+    if (window.__GIERA__) window.__GIERA__.tycoon = tycoon;
+  };
+
+  const spawnRemoteTycoon = (id: string, name: string, slot: number): void => {
+    if (remoteTycoons.has(id)) return;
+    remoteTycoons.set(id, makeTycoon(slot, name));
+  };
+
+  const clearRemoteTycoons = (): void => {
+    for (const remote of remoteTycoons.values()) remote.dispose();
+    remoteTycoons.clear();
+  };
   const postfx = new PostFX(
     renderer,
     scene,
@@ -349,7 +371,17 @@ async function boot(): Promise<void> {
           room,
           playerName: player.profile.name,
           callbacks: {
-            onWelcome: () => resolve(true),
+            onWelcome: (welcome) => {
+              setOwnTycoonSlot(welcome.slot ?? 0);
+              clearRemoteTycoons();
+              for (const p of welcome.players) spawnRemoteTycoon(p.id, p.name, p.slot ?? 0);
+              resolve(true);
+            },
+            onJoin: (join) => spawnRemoteTycoon(join.id, join.name, join.slot ?? 0),
+            onLeave: (leave) => {
+              remoteTycoons.get(leave.id)?.dispose();
+              remoteTycoons.delete(leave.id);
+            },
             onBlock: (b) => {
               world.setBlock(b.x, b.y, b.z, b.id);
             },
@@ -366,11 +398,158 @@ async function boot(): Promise<void> {
       });
     },
     onCycleMusic: () => {
-      currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
-      const track = playlist[currentTrackIndex];
+      currentTrackIndex = (currentTrackIndex + 1) % LAUNCH_PLAYLIST.length;
+      const track = LAUNCH_PLAYLIST[currentTrackIndex];
       audio.playMusic(track.id).catch(() => {});
       return track.name;
     },
+  });
+
+  const touchAvailable = "ontouchstart" in window || (navigator.maxTouchPoints ?? 0) > 0;
+  let touchControlsAttached = false;
+  const attachTouchControls = (): void => {
+    if (!touchAvailable || touchControlsAttached) return;
+    touchControlsAttached = true;
+    touch.attachDOM(document.body, () => hud.toggleInventory(inventory), tryPlaceBlock);
+  };
+  const hudRoot = document.querySelector<HTMLElement>("#hud-root");
+  if (!qa && hudRoot) {
+    hudRoot.setAttribute("inert", "");
+    hudRoot.style.visibility = "hidden";
+  }
+  else attachTouchControls();
+  const launchRoot = document.querySelector<HTMLElement>("#launch-menu");
+  const launchStart = document.querySelector<HTMLButtonElement>("#launch-start");
+  const launchMode = document.querySelector<HTMLButtonElement>("#launch-mode");
+  const launchMusic = document.querySelector<HTMLSelectElement>("#launch-music");
+  const launchMusicHint = document.querySelector<HTMLElement>("#launch-music-hint");
+  if (!launchRoot || !launchStart || !launchMode || !launchMusic) {
+    throw new Error("Giera launch menu elements are missing");
+  }
+  const launchMenu = new LaunchMenuController({
+    root: launchRoot,
+    startButton: launchStart,
+    modeButton: launchMode,
+    musicSelect: launchMusic,
+    onStart: (settings, source) => {
+      gameStarted = true;
+      suppressGamepadJumpUntilRelease = source === "gamepad";
+      currentTrackIndex = LAUNCH_PLAYLIST.findIndex((track) => track.id === settings.musicTrackId);
+      splitScreen.setSplitScreen(settings.splitScreen);
+      hud.modeBtn.textContent = settings.splitScreen ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
+      hud.setMusicTrack(LAUNCH_PLAYLIST[currentTrackIndex].name);
+      canvas.inert = false;
+      hudRoot?.removeAttribute("inert");
+      if (hudRoot) hudRoot.style.visibility = "";
+      canvas.focus({ preventScroll: true });
+      attachTouchControls();
+      launchMusicHint?.classList.remove("launch-hint-active");
+      audio.playMusic(settings.musicTrackId).catch(() => {});
+      void conciergeSession.close("menu");
+    },
+  });
+
+  const pauseRoot = document.querySelector<HTMLElement>("#pause-menu");
+  const pauseResume = document.querySelector<HTMLButtonElement>("#pause-resume");
+  const pauseMode = document.querySelector<HTMLButtonElement>("#pause-mode");
+  const pauseMusic = document.querySelector<HTMLSelectElement>("#pause-music");
+  const launchConciergeSlot = document.querySelector<HTMLElement>("#launch-concierge-slot");
+  const pauseConciergeSlot = document.querySelector<HTMLElement>("#pause-concierge-slot");
+  const conciergePanel = document.querySelector<HTMLElement>("#concierge-panel");
+  const conciergeCanvas = document.querySelector<HTMLCanvasElement>("#concierge-canvas");
+  const conciergeStatus = document.querySelector<HTMLElement>("#concierge-status");
+  if (!pauseRoot || !pauseResume || !pauseMode || !pauseMusic || !launchConciergeSlot || !pauseConciergeSlot || !conciergePanel || !conciergeCanvas || !conciergeStatus) {
+    throw new Error("Giera pause menu elements are missing");
+  }
+
+  const conciergeHost: ConciergeHost = {
+    status: () => ({
+      started: gameStarted,
+      splitScreen: splitScreen.isSplitScreen,
+      musicTrackId: LAUNCH_PLAYLIST[currentTrackIndex].id,
+      musicName: LAUNCH_PLAYLIST[currentTrackIndex].name,
+      volume: audio.volume,
+      coins: tycoon.vaultCoins,
+      tier: tycoon.dropperTier,
+    }),
+    setMusicTrack: (id) => {
+      const index = LAUNCH_PLAYLIST.findIndex((track) => track.id === id);
+      if (index < 0) return LAUNCH_PLAYLIST[currentTrackIndex].name;
+      currentTrackIndex = index;
+      const track = LAUNCH_PLAYLIST[index];
+      hud.setMusicTrack(track.name);
+      pauseMenu.sync();
+      void audio.playMusic(track.id).catch(() => {});
+      return track.name;
+    },
+    setSplitScreen: (enabled) => {
+      splitScreen.setSplitScreen(enabled);
+      hud.modeBtn.textContent = enabled ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
+      pauseMenu.sync();
+    },
+    setVolume: (level) => audio.setVolume(level),
+    teleportToSpawn: () => {
+      player.position.set(player.spawn[0], player.spawn[1], player.spawn[2]);
+      player.velocity.set(0, 0, 0);
+    },
+    reload: () => window.location.reload(),
+  };
+
+  const pauseMenu = new PauseMenuController({
+    root: pauseRoot,
+    resumeButton: pauseResume,
+    modeButton: pauseMode,
+    musicSelect: pauseMusic,
+    getSplitScreen: () => splitScreen.isSplitScreen,
+    getTrackId: () => LAUNCH_PLAYLIST[currentTrackIndex].id,
+    onResume: () => pauseMenu.close(),
+    onToggleSplit: () => {
+      const isSplit = splitScreen.toggle();
+      hud.modeBtn.textContent = isSplit ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
+      audio.play("ui_open");
+      pauseMenu.sync();
+    },
+    onSelectTrack: (id) => {
+      const index = LAUNCH_PLAYLIST.findIndex((track) => track.id === id);
+      if (index < 0) return;
+      currentTrackIndex = index;
+      hud.setMusicTrack(LAUNCH_PLAYLIST[index].name);
+      void audio.playMusic(id).catch(() => {});
+      pauseMenu.sync();
+    },
+    onOpen: () => {
+      paused = true;
+      keys.clear();
+      isMining = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+      hud.setInventoryOpen(false);
+      void conciergeSession.open("pause");
+    },
+    onClose: () => {
+      paused = false;
+      void conciergeSession.close("menu");
+      canvas.focus({ preventScroll: true });
+    },
+  });
+
+  const conciergeSession = new ConciergeSession({
+    host: conciergeHost,
+    root: conciergePanel,
+    canvas: conciergeCanvas,
+    statusEl: conciergeStatus,
+    slots: { launch: launchConciergeSlot, pause: pauseConciergeSlot },
+    onClosed: (reason) => {
+      if (reason === "hidden") pauseMenu.close();
+    },
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    if (pauseMenu.isOpen) {
+      void conciergeSession.open("pause");
+      return;
+    }
+    if (!launchMenu.isStarted && !launchRoot.hidden) void conciergeSession.open("launch");
   });
 
   const npcHistory = new Map<string, NpcHistoryEntry[]>();
@@ -441,12 +620,58 @@ async function boot(): Promise<void> {
     audio,
     stats,
     tycoon,
+    remoteTycoons,
     postfx,
     qa: qa ? qaState : undefined,
   };
 
+  const startMenuMusic = (): void => {
+    if (gameStarted) return;
+    void audio.playMusic(menuMusicId).catch(() => {});
+  };
+  const resumeMenuMusic = (): void => {
+    window.removeEventListener("pointerdown", resumeMenuMusic);
+    window.removeEventListener("keydown", resumeMenuMusic);
+    window.removeEventListener("touchstart", resumeMenuMusic);
+    startMenuMusic();
+  };
+
   await world.loadArea(0, 0, 2);
   status.classList.add("boot-ready");
+  const notifyHost = (): void => {
+    try {
+      const view = (window as unknown as { chrome?: { webview?: { postMessage: (message: string) => void } } })
+        .chrome?.webview;
+      if (view) {
+        view.postMessage("boot-ready");
+        return;
+      }
+      (window as unknown as { external?: { notify?: (message: string) => void } }).external?.notify?.("boot-ready");
+    } catch {
+      // not hosted in a WebView
+    }
+  };
+  notifyHost();
+  if (!qa) {
+    launchMenu.show();
+    void conciergeSession.open("launch");
+    startMenuMusic();
+    window.addEventListener("pointerdown", resumeMenuMusic);
+    window.addEventListener("keydown", resumeMenuMusic);
+    window.addEventListener("touchstart", resumeMenuMusic);
+    const syncMusicHint = (): void => {
+      if (!launchMusicHint) return;
+      if (launchMenu.isStarted) {
+        window.clearInterval(musicHintTimer);
+        launchMusicHint.classList.remove("launch-hint-active");
+        return;
+      }
+      const audible = audio.playingMusic === menuMusicId && document.visibilityState === "visible";
+      launchMusicHint.classList.toggle("launch-hint-active", !audible);
+    };
+    const musicHintTimer = window.setInterval(syncMusicHint, 700);
+    syncMusicHint();
+  }
   window.__GIERA__.ready = true;
   let streamCx = 0;
   let streamCz = 0;
@@ -479,6 +704,8 @@ async function boot(): Promise<void> {
   };
 
   window.addEventListener("keydown", (e) => {
+    if (!gameStarted) return;
+    if (paused && e.code !== "Escape") return;
     keys.add(e.code);
     if (e.code === "KeyI") {
       const open = hud.toggleInventory(inventory, () => {
@@ -520,8 +747,10 @@ async function boot(): Promise<void> {
       if (hud.isNpcDialogOpen()) {
         hud.closeNpcDialog();
         mic.stop();
-      } else {
+      } else if (hud.isInventoryOpen()) {
         hud.setInventoryOpen(false);
+      } else if (!qa) {
+        pauseMenu.toggle();
       }
       audio.play("ui_click");
     } else if (e.code.startsWith("Digit")) {
@@ -539,25 +768,27 @@ async function boot(): Promise<void> {
   });
 
   canvas.addEventListener("click", () => {
-    audio.playMusic(playlist[currentTrackIndex].id).catch(() => {});
+    if (!gameStarted) return;
+    if (qa) audio.playMusic(LAUNCH_PLAYLIST[currentTrackIndex].id).catch(() => {});
     if (!document.pointerLockElement) {
       canvas.requestPointerLock().catch(() => {});
     }
   });
 
   window.addEventListener("mousemove", (e) => {
-    if (document.pointerLockElement === canvas) {
+    if (gameStarted && document.pointerLockElement === canvas) {
       const gain = lookGain(e.movementX, e.movementY);
       player.rotateCamera(e.movementX * gain, e.movementY * gain);
     }
   });
   window.addEventListener("wheel", (e) => {
+    if (!gameStarted) return;
     inventory.cycleSlot(Math.sign(e.deltaY));
     hud.renderHotbar(inventory);
   });
 
   window.addEventListener("mousedown", (e) => {
-    if (hud.isInventoryOpen()) return;
+    if (!gameStarted || paused || hud.isInventoryOpen()) return;
     if (e.button === 0) {
       isMining = true;
     } else if (e.button === 2) {
@@ -567,9 +798,10 @@ async function boot(): Promise<void> {
   });
 
   const triggerSave = (): void => {
+    if (!gameStarted) return;
     void saveGameState({
       seed,
-      worldgenVersion,
+      tycoon: tycoon.toJSON(),
       inventory: inventory.toJSON(),
       objectives: {
         stepIndex: 0,
@@ -590,13 +822,15 @@ async function boot(): Promise<void> {
   }
 
   window.addEventListener("mouseup", (e) => {
-    if (e.button === 0) {
+    if (gameStarted && e.button === 0) {
       isMining = false;
       resetMiningFeedback();
     }
   });
 
-  window.addEventListener("contextmenu", (e) => e.preventDefault());
+  window.addEventListener("contextmenu", (e) => {
+    if (gameStarted) e.preventDefault();
+  });
 
   let previous = performance.now();
   let elapsed = 150;
@@ -610,11 +844,43 @@ async function boot(): Promise<void> {
     place: false,
   };
 
+  let pauseButtonHeld = false;
+  const pollPauseButton = (): void => {
+    if (!gameStarted || qa) {
+      pauseButtonHeld = false;
+      return;
+    }
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let pressed = false;
+    for (const pad of pads) {
+      if (pad?.buttons[9]?.pressed) {
+        pressed = true;
+        break;
+      }
+    }
+    if (pressed && !pauseButtonHeld) pauseMenu.toggle();
+    pauseButtonHeld = pressed;
+  };
+
   renderer.setAnimationLoop((now) => {
     renderer.info.reset();
+    pollPauseButton();
+    if (!gameStarted) {
+      launchMenu.pollGamepad();
+      camera.position.copy(player.getCameraPosition(5.5));
+      camera.lookAt(player.getCameraTarget());
+      postfx.renderSolo();
+      previous = now;
+      return;
+    }
     if (qa && qaState.pauseAt !== undefined && qaState.frame >= qaState.pauseAt) qaState.paused = true;
     const delta = qa ? (qaState.paused ? 0 : 1 / 60) : Math.min(0.05, Math.max(0, (now - previous) / 1000));
     previous = now;
+    if (paused) {
+      if (splitScreen.isSplitScreen) postfx.renderSplit(camera, camera2);
+      else postfx.renderSolo();
+      return;
+    }
     if (qa && !qaState.paused) {
       qaState.simTime += delta;
       qaState.frame++;
@@ -624,7 +890,11 @@ async function boot(): Promise<void> {
     // P1 Movement and gamepad step (Keyboard + Touch + Xbox Pad 0)
     const tInput = touch.getInput();
     const tLook = touch.consumeLook();
-    const p1Pad = splitScreen.pollGamepad(0);
+    let p1Pad = splitScreen.pollGamepad(0);
+    if (suppressGamepadJumpUntilRelease && p1Pad) {
+      if (p1Pad.jump) p1Pad.jump = false;
+      else suppressGamepadJumpUntilRelease = false;
+    }
 
     if (tLook.lookX !== 0 || tLook.lookY !== 0) {
       player.rotateCamera(tLook.lookX * 0.005, tLook.lookY * 0.005);
@@ -742,7 +1012,6 @@ async function boot(): Promise<void> {
       const statics = [
         ...npcBodies,
         { x: trainingDummy.position.x, y: trainingDummy.position.y, z: trainingDummy.position.z, radius: 0.4, height: 1.6 },
-        { x: tycoon.origin.x, y: tycoon.origin.y, z: tycoon.origin.z, radius: 0.2, height: 2.4 },
       ];
       const resolve = (self: PlayerController, other: PlayerController): void => {
         const bodies = [...statics, { x: other.position.x, y: other.position.y, z: other.position.z, radius: 0.3, height: 1.8 }];
@@ -819,7 +1088,6 @@ async function boot(): Promise<void> {
     }
     sky.update(elapsed, player.position);
     world.updateWater(elapsed);
-    hud.updateTycoon(tycoon.collectedStars, tycoon.dropperTier);
 
     const camSolid = (x: number, y: number, z: number): boolean => {
       const id = world.getBlock(x, y, z);
@@ -948,9 +1216,18 @@ async function boot(): Promise<void> {
     );
 
     if (splitScreen.isSplitScreen) {
-      tycoon.updateSecondaryTrampoline(
+      tycoon.updateSecondary(
         delta,
         player2.position,
+        () => {
+          audio.play("craft_ok", { rate: 1.4 });
+          gameplayVfx.emit("collect", new THREE.Vector3(player2.position.x, player2.position.y + 1.4, player2.position.z));
+          player2.avatar?.playOnce("pickup");
+          audio.play("celebrate_collect");
+        },
+        () => {
+          audio.play("celebrate_win");
+        },
         () => {
           gameplayVfx.emit("bounce", new THREE.Vector3(player2.position.x, player2.position.y + 0.2, player2.position.z));
           player2.velocity.y = 22.0;
@@ -960,6 +1237,8 @@ async function boot(): Promise<void> {
         player2.velocity.y
       );
     }
+    hud.updateTycoon(tycoon.collectedStars, tycoon.vaultCoins, tycoon.dropperTier, tycoon.upgradeCost);
+    for (const remote of remoteTycoons.values()) remote.updateVisuals(delta);
 
     if (isMining && trainingDummy.isHit(player.position, 3.5)) {
       const dir = new THREE.Vector3();

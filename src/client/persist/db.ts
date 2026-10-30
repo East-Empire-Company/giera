@@ -1,8 +1,9 @@
 import type { SerializedInventory } from "../game/inventory";
+import type { SerializedTycoon } from "../game/tycoon";
 
 export type SavedGameState = {
   seed: number;
-  worldgenVersion?: number;
+  tycoon?: SerializedTycoon;
   inventory: SerializedInventory;
   objectives: {
     stepIndex: number;
@@ -11,6 +12,22 @@ export type SavedGameState = {
   edits: Record<string, number>;
   savedAt: string;
 };
+
+function isSerializedTycoon(data: unknown): data is SerializedTycoon {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return false;
+  if (!("vaultCoins" in data) || !("collectedStars" in data) || !("dropperTier" in data)) return false;
+  return (
+    typeof data.vaultCoins === "number" &&
+    Number.isSafeInteger(data.vaultCoins) &&
+    data.vaultCoins >= 0 &&
+    typeof data.collectedStars === "number" &&
+    Number.isSafeInteger(data.collectedStars) &&
+    data.collectedStars >= 0 &&
+    typeof data.dropperTier === "number" &&
+    Number.isSafeInteger(data.dropperTier) &&
+    data.dropperTier >= 1
+  );
+}
 
 const DB_NAME = "giera_save_db";
 const STORE_NAME = "saves";
@@ -28,6 +45,7 @@ function isSavedGameState(data: unknown): data is SavedGameState {
   if (typeof inventory !== "object" || inventory === null || Array.isArray(inventory)) return false;
   if (typeof objectives !== "object" || objectives === null || Array.isArray(objectives)) return false;
   if (typeof edits !== "object" || edits === null || Array.isArray(edits)) return false;
+  if ("tycoon" in data && !isSerializedTycoon(data.tycoon)) return false;
   if (!("hotbar" in inventory) || !("activeSlot" in inventory) || !("blocks" in inventory) || !("items" in inventory)) return false;
   if (!("stepIndex" in objectives)) return false;
   const { hotbar, activeSlot, blocks, items } = inventory;
@@ -43,13 +61,16 @@ function isSavedGameState(data: unknown): data is SavedGameState {
     typeof objectives.stepIndex === "number"
   );
 }
+function normalizeSavedGameState(data: unknown): SavedGameState | null {
+  if (!isSavedGameState(data)) return null;
+  Reflect.deleteProperty(data, "worldgenVersion");
+  return data;
+}
 
 export function parseSaveData(raw: string): SavedGameState | null {
   try {
     const data: unknown = JSON.parse(raw);
-    if (isSavedGameState(data)) {
-      return data;
-    }
+    return normalizeSavedGameState(data);
   } catch {
     // Malformed JSON
   }
@@ -99,7 +120,7 @@ export async function loadGameState(): Promise<SavedGameState | null> {
       const tx = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
       const req = store.get(SAVE_KEY);
-      req.onsuccess = () => resolve(isSavedGameState(req.result) ? req.result : null);
+      req.onsuccess = () => resolve(normalizeSavedGameState(req.result));
       req.onerror = () => reject(req.error);
     });
   } catch {
@@ -109,5 +130,20 @@ export async function loadGameState(): Promise<SavedGameState | null> {
       if (item) return parseSaveData(item);
     }
     return null;
+  }
+}
+
+export async function clearGameState(): Promise<void> {
+  if (typeof localStorage !== "undefined") localStorage.removeItem(SAVE_KEY);
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const req = tx.objectStore(STORE_NAME).delete(SAVE_KEY);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // IndexedDB unavailable: the localStorage key is already gone.
   }
 }

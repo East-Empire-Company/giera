@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import { TycoonManager } from "../../src/client/game/tycoon";
+import { tycoonTheme } from "../../src/shared/tycoon-slots";
 
 describe("TycoonManager", () => {
   it("initializes with 0 collected coins and active tier 1 dropper", () => {
@@ -7,6 +9,18 @@ describe("TycoonManager", () => {
     expect(tycoon.collectedStars).toBe(0);
     expect(tycoon.dropperTier).toBe(1);
     expect(tycoon.vaultCoins).toBe(0);
+  });
+
+  it("restores durable tycoon progress", () => {
+    const saved = { vaultCoins: 3, collectedStars: 17, dropperTier: 4 };
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+
+    tycoon.restore(saved);
+
+    expect(tycoon.toJSON()).toEqual(saved);
+    expect(tycoon.upgradeCost).toBe(20);
+    tycoon.update(0.63, { x: 0, y: 50, z: 0 });
+    expect(tycoon.vaultCoins).toBe(4);
   });
 
   it("drops exactly one coin per 2.5s at tier 1", () => {
@@ -51,6 +65,70 @@ describe("TycoonManager", () => {
     expect(tycoon.upgradeCost).toBe(10);
   });
 
+  it("paints its pads from the slot theme", () => {
+    const scene = new THREE.Scene();
+    const theme = tycoonTheme(2);
+    const tycoon = new TycoonManager({ x: 0, y: 50, z: 0 }, scene, { theme });
+    const pads = (tycoon.object?.children ?? []).filter((c) => (c as THREE.Mesh).isMesh) as THREE.Mesh[];
+    const colors = pads.map((pad) => (pad.material as THREE.MeshStandardMaterial).color.getHex());
+
+    expect(colors.slice(0, 2)).toEqual([theme.collector, theme.upgrade]);
+    expect(colors[2]).toBe(theme.trampoline);
+  });
+
+  it("keeps the default theme on the original pad colours", () => {
+    const scene = new THREE.Scene();
+    const tycoon = new TycoonManager({ x: 0, y: 50, z: 0 }, scene);
+    const pads = (tycoon.object?.children ?? []).filter((c) => (c as THREE.Mesh).isMesh) as THREE.Mesh[];
+    const colors = pads.map((pad) => (pad.material as THREE.MeshStandardMaterial).color.getHex());
+
+    expect(colors).toEqual([0x38a169, 0xd69e2e, 0xe53e3e, 0xf6e05e]);
+  });
+
+  it("animates a remote player's plot without producing or banking coins", () => {
+    const scene = new THREE.Scene();
+    const tycoon = new TycoonManager({ x: 0, y: 50, z: 0 }, scene);
+    tycoon.updateVisuals(10);
+
+    expect([tycoon.vaultCoins, tycoon.collectedStars]).toEqual([0, 0]);
+  });
+
+  it("lets the second player collect the shared vault", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.restore({ vaultCoins: 4, collectedStars: 2, dropperTier: 1 });
+    let collected = 0;
+
+    tycoon.updateSecondary(0.1, { x: -3, y: 50, z: 6 }, (coins) => {
+      collected = coins;
+    });
+
+    expect([collected, tycoon.vaultCoins, tycoon.collectedStars]).toEqual([4, 0, 6]);
+  });
+
+  it("lets the second player buy an upgrade with the same callback", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(10);
+    let upgrades = 0;
+
+    tycoon.updateSecondary(0.1, { x: -1, y: 50, z: 6 }, undefined, () => {
+      upgrades++;
+    });
+
+    expect([upgrades, tycoon.dropperTier, tycoon.collectedStars, tycoon.upgradeCost]).toEqual([1, 2, 5, 10]);
+  });
+
+  it("does not advance the shared drop timer for the second player", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    const offPad = { x: 10, y: 50, z: 10 };
+
+    tycoon.updateSecondary(1.26, offPad);
+    tycoon.update(1.24, offPad);
+    expect(tycoon.vaultCoins).toBe(0);
+
+    tycoon.update(1.26, offPad);
+    expect(tycoon.vaultCoins).toBe(1);
+  });
+
   it("bounces once then waits out the 0.6s cooldown", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     let bounces = 0;
@@ -73,12 +151,12 @@ describe("TycoonManager", () => {
     let bounces = 0;
     const onPad = { x: -5, y: 50, z: 6 };
     for (let frame = 0; frame < 30; frame++) {
-      tycoon.updateSecondaryTrampoline(1 / 60, onPad, () => {
+      tycoon.updateSecondary(1 / 60, onPad, undefined, undefined, () => {
         bounces++;
       });
     }
     expect(bounces).toBe(1);
-    tycoon.updateSecondaryTrampoline(0.6, onPad, () => {
+    tycoon.updateSecondary(0.6, onPad, undefined, undefined, () => {
       bounces++;
     });
     expect(bounces).toBe(2);
@@ -92,7 +170,7 @@ describe("TycoonManager", () => {
     tycoon.update(0.1, onPad, undefined, undefined, () => {
       primary++;
     });
-    tycoon.updateSecondaryTrampoline(0.1, onPad, () => {
+    tycoon.updateSecondary(0.1, onPad, undefined, undefined, () => {
       secondary++;
     });
     expect([primary, secondary]).toEqual([1, 1]);
@@ -101,16 +179,10 @@ describe("TycoonManager", () => {
   it("does not bounce a second player who is off the pad", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     let bounces = 0;
-    tycoon.updateSecondaryTrampoline(0.1, { x: 10, y: 50, z: 10 }, () => {
+    tycoon.updateSecondary(0.1, { x: 10, y: 50, z: 10 }, undefined, undefined, () => {
       bounces++;
     });
     expect(bounces).toBe(0);
-  });
-
-  it("does not advance the shared economy when the second player is processed", () => {
-    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
-    for (let i = 0; i < 100; i++) tycoon.updateSecondaryTrampoline(0.1, { x: 10, y: 50, z: 10 }, () => {});
-    expect(tycoon.vaultCoins).toBe(0);
   });
 
   it("does not re-launch a player who is still rising from the previous bounce", () => {
@@ -130,10 +202,10 @@ describe("TycoonManager", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     let bounces = 0;
     const onPad = { x: -5, y: 50, z: 6 };
-    tycoon.updateSecondaryTrampoline(0.1, onPad, () => {
+    tycoon.updateSecondary(0.1, onPad, undefined, undefined, () => {
       bounces++;
     });
-    tycoon.updateSecondaryTrampoline(0.7, onPad, () => {
+    tycoon.updateSecondary(0.7, onPad, undefined, undefined, () => {
       bounces++;
     }, 2.8);
     expect(bounces).toBe(1);
