@@ -123,7 +123,9 @@ Client tools (execute in the game, return a short result to the agent):
 | `highlightControl` | pulse a HUD button or key hint | none |
 | `teleportToSpawn` | reposition player | none |
 | `spawnProp` | drop a training dummy / star near player | whitelist of ids only |
+| `removeProps` | delete the props the avatar or the child spawned | spawned-this-session only, never world blocks |
 | `saveNow` | `saveGame()` | none |
+| `resetSettings` | settings back to defaults, save untouched | none — reversible |
 | `resetProgress` | wipe save | **two-step**: agent asks, child confirms on-screen, server issues one-time token |
 | `restoreBackup` | load newest backup | same token gate |
 | `reportBug` | screenshot + state → server | none |
@@ -140,6 +142,31 @@ Webhook tools (server side):
 Rule: **destructive tools never run on the agent's word alone.** The confirmation is a big icon button in the game UI,
 and the server mints a single-use token bound to that action. A misheard word or a prompt-injected NPC line cannot
 delete a save.
+
+### Why most of these cannot live on the backend
+
+The obvious wish — "give the avatar backend tools that tweak settings, reset, restore, spawn" — only survives contact
+with the architecture for half the list. The save is client-side (`src/client/persist/db.ts`, IndexedDB `saves` /
+`last_save` with a localStorage fallback) and the world is client-side (scene graph, chunk meshes, player transform).
+A server process has no handle on either, so:
+
+| intent | where it must execute | why |
+|---|---|---|
+| tweak settings (music, volume, quality, split) | client | settings are applied to live objects in `main.ts`/`hud.ts`; nothing is persisted server-side |
+| spawn a prop / dummy / star | client | needs a player position and a scene to add to |
+| reset progress | client, **plus** server-minted token | the wipe target is the IndexedDB record |
+| restore a backup | server reads, client writes | backup blobs belong on the server (survives a cleared browser profile); the write is client-side |
+| save summary, changelog, known issues | server | read-only facts, cheap to serve, keeps the prompt honest |
+
+So the split is: **the agent's tools are client tools for effects, webhook tools for facts and backup custody.** What
+the backend genuinely adds is durability (backups outlive the browser profile), authority (single-use tokens for
+destructive actions), and audit (tool-call log per child). That is worth building; "server changes the graphics
+setting" is not, because there is nothing there to change.
+
+Both menu hosts must call the same executor (`src/client/concierge/actions.ts`), so a tool behaves identically whether
+the child is at the launch menu or paused mid-world. Only the guard differs: `resetProgress` is only offered from the
+pause menu (never from a launch-menu greeting), and `spawnProp` is refused at the launch menu because there is no world
+yet.
 
 ### Struggle detection
 
