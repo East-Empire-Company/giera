@@ -39,7 +39,7 @@ try {
     /v:m
   if ($LASTEXITCODE -ne 0) { throw ("build failed with exit code " + $LASTEXITCODE) }
 
-  Get-ChildItem -Recurse -Path 'AppPackages' -Filter '*.appx' | Select-Object -ExpandProperty FullName
+  Get-ChildItem -Recurse -Path 'AppPackages' -Include '*.appx', '*.msix' | Select-Object -ExpandProperty FullName
 }
 finally {
   Pop-Location

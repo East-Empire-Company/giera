@@ -10,9 +10,10 @@ namespace Giera.Uwp
 {
     public sealed partial class MainPage : Page
     {
-        const string StartUrl = "https://giera.tail5d39b4.ts.net/index.html";
+        const string StartUrl = "https://giera.tail5d39b4.ts.net/";
         const string BootToken = "boot-ready";
         const string LogFile = "boot-log.txt";
+
 
         readonly DispatcherTimer splashTimeout = new DispatcherTimer();
         bool splashHidden;
@@ -85,11 +86,7 @@ namespace Giera.Uwp
                 return;
             }
 
-            await LogAsync("navigation completed");
-            await LogAsync("engine " + await EvalAsync(
-                "JSON.stringify({" +
-                "webgl2:(function(){try{return !!document.createElement('canvas').getContext('webgl2')}catch(e){return false}})()," +
-                "ua:navigator.userAgent})"));
+            await LogAsync("navigation completed " + GameView.Source);
         }
 
         async void OnWebMessageReceived(Microsoft.Web.WebView2.Core.CoreWebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs args)

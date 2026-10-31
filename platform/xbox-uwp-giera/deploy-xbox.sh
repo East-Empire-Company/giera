@@ -12,7 +12,7 @@ CONSOLE="${CONSOLE:?set CONSOLE to the console address shown in Dev Home}"
 PORTAL_USER="${PORTAL_USER:?set PORTAL_USER}"
 PORTAL_PASS="${PORTAL_PASS:?set PORTAL_PASS}"
 BASE="https://${CONSOLE}:11443"
-APPX="${APPX:-AppPackages/Giera.Uwp_1.0.0.0_x64_Test/Giera.Uwp_1.0.0.0_x64.appx}"
+APPX="${APPX:-AppPackages/Giera.Uwp_1.0.0.0_x64_Test/Giera.Uwp_1.0.0.0_x64.msix}"
 PFN_PREFIX="Giera.Uwp_1.0.0.0_x64__"
 
 portal() {
@@ -37,7 +37,7 @@ case "${1:-install}" in
     portal -G "${BASE}/api/filesystem/apps/file" \
       --data-urlencode "knownfolderid=LocalAppData" \
       --data-urlencode "packagefullname=${full}" \
-      --data-urlencode "path=boot-log.txt"
+      --data-urlencode 'filename=LocalState\boot-log.txt'
     echo
     ;;
   *)
