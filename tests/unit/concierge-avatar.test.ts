@@ -49,8 +49,17 @@ describe("ConciergeAvatar pose and lip-sync", () => {
 
     expect(idlePose.morphs.aa).toBe(0);
     expect(idlePose.morphs.open).toBe(0);
-    expect(vowelPose.morphs.aa).toBeGreaterThan(0.35);
-    expect(vowelPose.morphs.open).toBeGreaterThan(0.25);
+    const totalVowelJaw =
+      vowelPose.morphs.aa +
+      vowelPose.morphs.ao +
+      vowelPose.morphs.ee +
+      vowelPose.morphs.ih +
+      vowelPose.morphs.oo +
+      vowelPose.morphs.uu +
+      vowelPose.morphs.open;
+    expect(vowelPose.morphs.aa).toBeGreaterThan(0.18);
+    expect(totalVowelJaw).toBeGreaterThan(0.25);
+    expect(totalVowelJaw).toBeLessThanOrEqual(0.5);
     expect(sibilantPose.morphs.ss).toBeGreaterThan(vowelPose.morphs.ss);
   });
 

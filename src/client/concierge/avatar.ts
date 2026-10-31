@@ -162,20 +162,30 @@ export function computeConciergePose(input: {
       ? clamp01((0.14 - level) * 4.5) * 0.32
       : clamp01((0.25 - cadence) * 2.4) * gate * 0.36;
 
-    morphs.aa = clamp01(low * 0.72 * (0.65 + 0.35 * Math.sin(t * 7.1)));
-    morphs.ao = clamp01(low * 0.48 * (0.6 + 0.4 * Math.cos(t * 5.9)));
-    morphs.open = clamp01(low * 0.38 + mid * 0.16);
-    morphs.ee = clamp01(mid * 0.56 * (0.55 + 0.45 * Math.sin(t * 9.4 + 1.2)));
-    morphs.ih = clamp01(mid * 0.42 * (0.5 + 0.5 * Math.cos(t * 11.1)));
-    morphs.oo = clamp01(mid * 0.46 * Math.max(0, Math.sin(t * 5.3 + 2.0)));
-    morphs.uu = clamp01(low * 0.25 * Math.max(0, Math.cos(t * 6.4)));
-    morphs.ss = clamp01(high * 0.55);
-    morphs.sh = clamp01(high * 0.38 * Math.max(0, Math.sin(t * 12.2)));
-    morphs.fv = clamp01(high * 0.42 * Math.max(0, Math.cos(t * 10.6)));
+    const rawAa = low * (0.65 + 0.35 * Math.sin(t * 7.1));
+    const rawAo = low * 0.55 * Math.max(0, Math.cos(t * 5.9));
+    const rawEe = mid * 0.7 * (0.5 + 0.5 * Math.sin(t * 9.4 + 1.2));
+    const rawIh = mid * 0.45 * Math.max(0, Math.cos(t * 11.1));
+    const rawOo = mid * 0.6 * Math.max(0, Math.sin(t * 5.3 + 2.0));
+    const rawUu = low * 0.3 * Math.max(0, Math.cos(t * 6.4));
+    const vowelSum = rawAa + rawAo + rawEe + rawIh + rawOo + rawUu;
+    const targetJaw = clamp01(Math.max(low * 0.36, mid * 0.28));
+    const scale = vowelSum > 0.001 ? Math.min(1, targetJaw / vowelSum) : 0;
+
+    morphs.aa = rawAa * scale;
+    morphs.ao = rawAo * scale;
+    morphs.open = clamp01(low * 0.08);
+    morphs.ee = rawEe * scale;
+    morphs.ih = rawIh * scale;
+    morphs.oo = rawOo * scale;
+    morphs.uu = rawUu * scale;
+    morphs.ss = clamp01(high * 0.32);
+    morphs.sh = clamp01(high * 0.22 * Math.max(0, Math.sin(t * 12.2)));
+    morphs.fv = clamp01(high * 0.24 * Math.max(0, Math.cos(t * 10.6)));
     morphs.mpb = closure;
     morphs.smile = 0.14;
-    morphs.smileOpen = clamp01(0.16 + level * 0.18);
-    morphs.squint = 0.1;
+    morphs.smileOpen = clamp01(0.05 + level * 0.06);
+    morphs.squint = 0.09;
     morphs.lowLid = 0.08;
     morphs.browUp = clamp01(0.08 + level * 0.24);
 
