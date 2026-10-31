@@ -1,0 +1,168 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  color: #f2f6f4;
+  background: #10231f;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: clamp(1rem, 4vw, 3rem);
+}
+
+[data-probe-root] {
+  --probe-stylesheet: ready;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.hero {
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  color: #79dcb6;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+h1 {
+  margin: 0.4rem 0;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+}
+
+h2 {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+}
+
+p {
+  color: #b8c9c3;
+  line-height: 1.5;
+}
+
+.fps {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #a3f2c9;
+  font: 700 1.25rem ui-monospace, monospace;
+}
+
+section {
+  margin: 1rem 0;
+  padding: 1.25rem;
+  border: 1px solid #315149;
+  border-radius: 1rem;
+  background: #19332d;
+}
+
+.checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.checks div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem;
+  border-radius: 0.65rem;
+  background: #10231f;
+}
+
+dt {
+  font-weight: 650;
+}
+
+dd {
+  margin: 0;
+  color: #f5c96b;
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+dd[data-state="pass"],
+output[data-state="pass"] {
+  color: #79e0a8;
+}
+
+dd[data-state="fail"],
+output[data-state="fail"] {
+  color: #ff8b83;
+}
+
+.detail {
+  margin-bottom: 0;
+  font-size: 0.9rem;
+}
+
+.audio-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+button {
+  min-height: 3rem;
+  padding: 0.7rem 1.1rem;
+  border: 0;
+  border-radius: 0.65rem;
+  color: #0d251f;
+  background: #8de2b8;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #f5c96b;
+  outline-offset: 3px;
+}
+
+output[data-check="audio"] {
+  display: block;
+  min-height: 1.5rem;
+  margin-top: 0.75rem;
+}
+
+figure {
+  margin: 0;
+  text-align: center;
+}
+
+figure img {
+  image-rendering: pixelated;
+  border: 1px solid #467266;
+  border-radius: 0.5rem;
+}
+
+figcaption {
+  margin-top: 0.4rem;
+  color: #b8c9c3;
+  font-size: 0.75rem;
+}
+
+[data-webgl-canvas] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .audio-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

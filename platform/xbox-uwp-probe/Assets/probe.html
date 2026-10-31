@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Giera Xbox Compatibility Probe</title>
+    <link rel="stylesheet" href="/probe.css">
+    <script type="module" src="/probe-main.js"></script>
+  </head>
+  <body>
+    <main data-probe-root>
+      <header class="hero">
+        <p class="eyebrow">GIERA · XBOX RUNTIME PROBE</p>
+        <h1>Packaged WebView checks</h1>
+        <p>Run local capability checks before packaging the full game.</p>
+        <output class="fps" data-probe-fps aria-live="polite">Page rAF pending</output>
+      </header>
+
+      <section aria-labelledby="runtime-title">
+        <h2 id="runtime-title">Runtime</h2>
+        <dl class="checks">
+          <div><dt>WebGL 2</dt><dd data-check="webgl2" data-state="pending">Waiting for module</dd></div>
+          <div><dt>ES2022 module</dt><dd data-check="es2022" data-state="pending">Waiting for module</dd></div>
+          <div><dt>Gamepad API</dt><dd data-check="gamepad" data-state="pending">Waiting for module</dd></div>
+          <div><dt>Page rAF</dt><dd data-check="frame-rate" data-state="pending">Waiting for frames</dd></div>
+        </dl>
+        <p class="detail" data-gamepad-details>Controller status pending.</p>
+      </section>
+
+      <section aria-labelledby="assets-title">
+        <h2 id="assets-title">Packaged resources</h2>
+        <dl class="checks">
+          <div><dt>Root CSS</dt><dd data-check="stylesheet" data-state="pending">Waiting for module</dd></div>
+          <div><dt>Root fetch</dt><dd data-check="root-fetch" data-state="pending">Waiting for module</dd></div>
+          <div><dt>Texture upload</dt><dd data-check="texture" data-state="pending">Waiting for module</dd></div>
+          <div><dt>Module worker</dt><dd data-check="module-worker" data-state="pending">Waiting for module</dd></div>
+        </dl>
+      </section>
+
+      <section class="audio-panel" aria-labelledby="audio-title">
+        <div>
+          <h2 id="audio-title">Audio gesture</h2>
+          <p>Start a short tone after a controller or button gesture.</p>
+          <button type="button" data-play-sound>Play test sound</button>
+          <output data-check="audio" data-state="pending" aria-live="polite">Press to test audio</output>
+        </div>
+        <figure>
+          <img data-texture-preview src="/textures/probe-checker.svg" alt="Checker texture used in WebGL upload" width="64" height="64">
+          <figcaption>WebGL texture source</figcaption>
+        </figure>
+      </section>
+
+      <canvas data-webgl-canvas width="2" height="2" aria-label="WebGL 2 texture upload target"></canvas>
+    </main>
+  </body>
+</html>
