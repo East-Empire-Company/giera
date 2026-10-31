@@ -876,18 +876,15 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   test("npc: starts microphone from KeyE and stops when the dialog closes", async ({ page }) => {
     test.setTimeout(60_000);
     await page.addInitScript(() => {
-      class FakeRecognition {
-        continuous = false;
-        interimResults = false;
-        lang = "";
-        onresult: ((event: unknown) => void) | null = null;
-        onerror: ((event: Event & { error?: string }) => void) | null = null;
-        onend: (() => void) | null = null;
-        start(): void {}
-        stop(): void { this.onend?.(); }
-        abort(): void {}
-      }
-      Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
+      const context = new AudioContext();
+      const oscillator = context.createOscillator();
+      const destination = context.createMediaStreamDestination();
+      oscillator.connect(destination);
+      oscillator.start();
+      Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: { getUserMedia: async () => destination.stream },
+      });
     });
     await boot(page);
     await page.evaluate(() => {

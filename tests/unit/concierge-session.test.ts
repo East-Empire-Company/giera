@@ -61,7 +61,7 @@ const build = (
   document.body.innerHTML = `
     <div id="launch-slot"></div>
     <div id="pause-slot"></div>
-    <div id="panel" hidden><canvas id="canvas"></canvas><p id="status"></p></div>
+    <div id="panel" hidden><canvas id="canvas"></canvas><p id="status"></p><button id="retry" hidden></button></div>
   `;
   const panel = document.querySelector<HTMLElement>("#panel")!;
   const onClosed = vi.fn();
@@ -74,7 +74,9 @@ const build = (
       launch: document.querySelector<HTMLElement>("#launch-slot")!,
       pause: document.querySelector<HTMLElement>("#pause-slot")!,
     },
+    retryEl: document.querySelector<HTMLButtonElement>("#retry"),
     fetchSignedUrl: () => signedUrl,
+    probeMicrophone: async () => ({ ok: true, code: null }),
     onClosed,
     ...overrides,
   });
@@ -257,6 +259,7 @@ describe("ConciergeSession", () => {
       statusEl: document.querySelector<HTMLElement>("#status")!,
       slots: { launch: h.launchSlot, pause: h.pauseSlot },
       fetchSignedUrl: () => Promise.reject(new Error("concierge_session_429")),
+      probeMicrophone: async () => ({ ok: true, code: null }),
     });
     await session.open("launch");
 
@@ -266,6 +269,37 @@ describe("ConciergeSession", () => {
     expect(h.panel.hidden).toBe(false);
     expect(startSession).not.toHaveBeenCalled();
     session.dispose();
+    h.session.dispose();
+  });
+
+  it("explains the microphone problem and never connects when capture is denied", async () => {
+    const h = build(Promise.resolve("wss://signed"), {
+      probeMicrophone: async () => ({ ok: false, code: "denied" }),
+    });
+
+    await h.session.open("launch");
+
+    const status = document.querySelector<HTMLElement>("#status")!;
+    expect(status.dataset.phase).toBe("failed");
+    expect(status.textContent).toContain("mikrofon");
+    expect(startSession).not.toHaveBeenCalled();
+    expect(document.querySelector<HTMLButtonElement>("#retry")!.hidden).toBe(false);
+    h.session.dispose();
+  });
+
+  it("connects on retry once the microphone works", async () => {
+    let micOk = false;
+    const h = build(Promise.resolve("wss://signed"), {
+      probeMicrophone: async () => (micOk ? { ok: true, code: null } : { ok: false, code: "busy" }),
+    });
+    await h.session.open("launch");
+    expect(startSession).not.toHaveBeenCalled();
+
+    micOk = true;
+    document.querySelector<HTMLButtonElement>("#retry")!.click();
+
+    await vi.waitFor(() => expect(startSession).toHaveBeenCalledTimes(1));
+    expect(document.querySelector<HTMLButtonElement>("#retry")!.hidden).toBe(true);
     h.session.dispose();
   });
 
@@ -284,6 +318,7 @@ describe("ConciergeSession", () => {
       statusEl: document.querySelector<HTMLElement>("#status")!,
       slots: { launch: h.launchSlot, pause: h.pauseSlot },
       fetchSignedUrl: () => Promise.resolve("wss://signed"),
+      probeMicrophone: async () => ({ ok: true, code: null }),
     });
     await session.open("launch");
 

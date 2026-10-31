@@ -58,6 +58,7 @@ namespace Giera.Uwp
             core.Settings.IsSwipeNavigationEnabled = false;
 
             core.WebMessageReceived += OnWebMessageReceived;
+            core.PermissionRequested += OnPermissionRequested;
             GameView.NavigationCompleted += OnNavigationCompleted;
 
             await core.AddScriptToExecuteOnDocumentCreatedAsync(
@@ -114,6 +115,15 @@ namespace Giera.Uwp
             }
 
             await LogAsync("message: " + message);
+        }
+
+        async void OnPermissionRequested(Microsoft.Web.WebView2.Core.CoreWebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2PermissionRequestedEventArgs args)
+        {
+            bool microphone = args.PermissionKind == Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Microphone;
+            args.State = microphone
+                ? Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow
+                : Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Deny;
+            await LogAsync("permission " + args.PermissionKind + " " + args.Uri + " -> " + args.State);
         }
 
         async Task SnapshotAsync(string label)

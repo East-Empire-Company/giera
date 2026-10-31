@@ -407,7 +407,7 @@ export class GameHUD {
     role: string;
     quickPrompts: string[];
     onSend: (text: string) => Promise<string>;
-    onMicStart?: () => Promise<boolean>;
+    onMicStart?: () => Promise<{ started: boolean; reason?: string }>;
     onMicStop?: () => void;
   }): void {
     this.npcDialogOpen = true;
@@ -459,9 +459,9 @@ export class GameHUD {
     };
     const startMic = async (): Promise<void> => {
       if (isRecording) return;
-      const started = (await options.onMicStart?.()) ?? false;
-      if (started) updateMic(true, "Słucham... Mów teraz do mikrofonu!");
-      else micStatus.textContent = "Mikrofon niedostępny";
+      const result = await options.onMicStart?.();
+      if (result?.started) updateMic(true, "Słucham... Mów teraz do mikrofonu!");
+      else micStatus.textContent = result?.reason ?? "Mikrofon niedostępny";
     };
     const stopMic = (): void => {
       if (!isRecording) return;

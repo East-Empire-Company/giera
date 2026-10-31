@@ -1,6 +1,7 @@
 import { Conversation, type Conversation as ConversationHandle } from "@elevenlabs/client";
 import { createConciergeTools, type ConciergeHost, type ConciergeToolHandler } from "./actions";
 import { ConciergeAvatar, type ConciergeAvatarState } from "./avatar";
+import { MIC_ERROR_MESSAGES, classifyMicError, type MicErrorCode } from "../../shared/mic-errors";
 
 export type ConciergeMenu = "launch" | "pause";
 export type ConciergePhase = "closed" | "connecting" | "live" | "failed";
@@ -15,14 +16,18 @@ const STATUS_TEXT: Record<ConciergePhase, string> = {
   failed: "Iskra nie może się teraz połączyć.",
 };
 
+export type MicProbeResult = { ok: boolean; code: MicErrorCode | null };
+
 export type ConciergeSessionOptions = {
   host: ConciergeHost;
   root: HTMLElement;
   canvas: HTMLCanvasElement;
   statusEl: HTMLElement;
   slots: Record<ConciergeMenu, HTMLElement>;
+  retryEl?: HTMLElement | null;
   fetchSignedUrl?: () => Promise<string>;
   connectTimeoutMs?: number;
+  probeMicrophone?: () => Promise<MicProbeResult>;
   onClosed?: (reason: ConciergeCloseReason) => void;
   onPhaseChange?: (phase: ConciergePhase) => void;
 };
@@ -31,6 +36,7 @@ export class ConciergeSession {
   private phase: ConciergePhase = "closed";
   private conversation: ConversationHandle | null = null;
   private menu: ConciergeMenu | null = null;
+  private lastMenu: ConciergeMenu | null = null;
   private generation = 0;
   private connectTimer: number | null = null;
   private speechVolume = 1;
@@ -42,6 +48,7 @@ export class ConciergeSession {
     this.tools = createConciergeTools(options.host);
     document.addEventListener("visibilitychange", this.handleVisibility);
     window.addEventListener("pagehide", this.handlePageHide);
+    this.options.retryEl?.addEventListener("click", this.handleRetry);
   }
 
   get isOpen(): boolean {
@@ -61,6 +68,8 @@ export class ConciergeSession {
     const slot = this.options.slots[menu];
     if (this.options.root.parentElement !== slot) slot.append(this.options.root);
     this.menu = menu;
+    this.lastMenu = menu;
+    this.hideRetry();
     this.options.root.hidden = false;
     this.avatar.show(this.phase === "live" ? "listening" : "idle");
     if (this.conversation) return;
@@ -90,6 +99,7 @@ export class ConciergeSession {
   dispose(): void {
     document.removeEventListener("visibilitychange", this.handleVisibility);
     window.removeEventListener("pagehide", this.handlePageHide);
+    this.options.retryEl?.removeEventListener("click", this.handleRetry);
     void this.close("user");
     this.avatar.dispose();
   }
@@ -97,6 +107,18 @@ export class ConciergeSession {
   resize(): void {
     this.avatar.resize();
   }
+
+  async retry(): Promise<void> {
+    if (!this.lastMenu || this.conversation) return;
+    this.menu = this.lastMenu;
+    this.options.root.hidden = false;
+    this.hideRetry();
+    await this.connect();
+  }
+
+  private readonly handleRetry = (): void => {
+    void this.retry();
+  };
 
   private readonly handleVisibility = (): void => {
     if (document.hidden) void this.close("hidden");
@@ -111,6 +133,15 @@ export class ConciergeSession {
     this.setPhase("connecting");
     this.armConnectTimeout(generation);
     try {
+      const mic = await this.probeMicrophone();
+      if (this.isStale(generation)) return;
+      if (!mic.ok) {
+        this.clearConnectTimeout();
+        this.setPhase("failed");
+        this.options.statusEl.textContent = mic.code ? MIC_ERROR_MESSAGES[mic.code] : STATUS_TEXT.failed;
+        this.showRetry();
+        return;
+      }
       const signedUrl = await this.resolveSignedUrl();
       if (this.isStale(generation)) return;
       const firstMessage =
@@ -177,6 +208,29 @@ export class ConciergeSession {
       };
     }
     return wrapped;
+  }
+
+  private async probeMicrophone(): Promise<MicProbeResult> {
+    if (this.options.probeMicrophone) return this.options.probeMicrophone();
+    const media = typeof navigator === "undefined" ? undefined : navigator.mediaDevices;
+    if (!media || typeof media.getUserMedia !== "function") return { ok: false, code: "unsupported" };
+    try {
+      const stream = await media.getUserMedia({ audio: true });
+      for (const track of stream.getTracks()) track.stop();
+      return { ok: true, code: null };
+    } catch (error) {
+      return { ok: false, code: classifyMicError(error) };
+    }
+  }
+
+  private showRetry(): void {
+    const retryEl = this.options.retryEl;
+    if (retryEl) retryEl.hidden = false;
+  }
+
+  private hideRetry(): void {
+    const retryEl = this.options.retryEl;
+    if (retryEl) retryEl.hidden = true;
   }
 
   private async resolveSignedUrl(): Promise<string> {

@@ -490,7 +490,8 @@ async function boot(): Promise<void> {
   const conciergePanel = document.querySelector<HTMLElement>("#concierge-panel");
   const conciergeCanvas = document.querySelector<HTMLCanvasElement>("#concierge-canvas");
   const conciergeStatus = document.querySelector<HTMLElement>("#concierge-status");
-  if (!pauseRoot || !pauseResume || !pauseMode || !launchConciergeSlot || !pauseConciergeSlot || !conciergePanel || !conciergeCanvas || !conciergeStatus) {
+  const conciergeRetry = document.querySelector<HTMLButtonElement>("#concierge-retry");
+  if (!pauseRoot || !pauseResume || !pauseMode || !launchConciergeSlot || !pauseConciergeSlot || !conciergePanel || !conciergeCanvas || !conciergeStatus || !conciergeRetry) {
     throw new Error("Giera pause menu elements are missing");
   }
 
@@ -607,6 +608,7 @@ async function boot(): Promise<void> {
     canvas: conciergeCanvas,
     statusEl: conciergeStatus,
     slots: { launch: launchConciergeSlot, pause: pauseConciergeSlot },
+    retryEl: conciergeRetry,
     onClosed: (reason) => {
       if (reason === "hidden") pauseMenu.close();
     },
@@ -829,7 +831,10 @@ async function boot(): Promise<void> {
               return fallbackLine(nearest.def.id, text);
             }
           },
-          onMicStart: () => mic.start(),
+          onMicStart: async () => {
+            const started = await mic.start();
+            return { started, reason: started ? undefined : (mic.lastError ?? undefined) };
+          },
           onMicStop: () => mic.stop(),
         });
       }

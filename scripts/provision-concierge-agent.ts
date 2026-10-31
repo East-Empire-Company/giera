@@ -82,7 +82,19 @@ const findAgent = async (): Promise<string | null> => {
 };
 
 const toolIds = await upsertTools();
-const payload = { name: AGENT_NAME, conversation_config: conversationConfig(toolIds), platform_settings: {} };
+const payload = {
+  name: AGENT_NAME,
+  conversation_config: conversationConfig(toolIds),
+  platform_settings: {
+    overrides: {
+      conversation_config_override: {
+        agent: {
+          first_message: true,
+        },
+      },
+    },
+  },
+};
 const existingId = await findAgent();
 const res = existingId
   ? await fetch(`${API}/convai/agents/${existingId}`, { method: "PATCH", headers, body: JSON.stringify(payload) })

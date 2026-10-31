@@ -15,6 +15,10 @@ Two layers:
 
 The native layer plays no video. The web app owns the splash animation (`src/client/startup/splash-video.ts`), so only the WebView2 process decodes a video.
 
+## Microphone
+
+WebView2 default-denies page media capture, so `getUserMedia` and the Web Speech API inside the app failed with `NotAllowedError`. `MainPage` handles `CoreWebView2.PermissionRequested` and answers `Allow` for the `Microphone` kind only (every other kind is denied); `Package.appxmanifest` declares the `microphone` device capability. Each decision is written to `boot-log.txt`.
+
 ## Boot log
 
 `MainPage` writes `boot-log.txt` to the app's `LocalFolder`: engine version, WebGL2 support, `boot-ready`, plus state snapshots (ready, playing music, audio context state, fps, launch menu present). Read it on a console with `./deploy-xbox.sh log`.
