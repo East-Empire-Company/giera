@@ -31,6 +31,7 @@ type Giera = {
     syncAvatar: () => void;
     avatar?: { currentMotion?: string; requestedMotion?: string };
   };
+  player2: { position: Vec3; velocity: Vec3; onGround: boolean };
   camera: {
     position: { x: number; y: number; z: number; clone: () => { x: number; y: number; z: number } };
     getWorldDirection: (target: { x: number; y: number; z: number }) => void;
@@ -50,6 +51,7 @@ type Giera = {
     collectedStars: number;
     dropperTier: number;
     vaultCoins: number;
+    origin: { x: number; y: number; z: number };
     addStars: (n: number) => void;
     collectorPadPos: { x: number; z: number };
     upgradePadPos: { x: number; z: number };
@@ -574,23 +576,6 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(errors).toEqual([]);
   });
 
-  test("music: five clicks cycle exact label list and emit playMusic events", async ({ page }) => {
-    test.setTimeout(60_000);
-    const errors = collectErrors(page);
-    await boot(page);
-    const musicBtn = page.locator(".hud-music-btn");
-    const labels: string[] = [];
-    for (let i = 0; i < 5; i++) {
-      await musicBtn.click();
-      labels.push((await musicBtn.textContent())?.replace("🎵 ", "") ?? "");
-    }
-    expect(labels).toEqual([...SPEC.musicLabels.slice(1), SPEC.musicLabels[0]]);
-    const musicEvents = await page.evaluate(() =>
-      (window as unknown as G).__GIERA__.qa.events.filter((e) => e.ev === "playMusic").map((e) => e.id)
-    );
-    expect(musicEvents).toEqual(SPEC.musicIdsAfterFirstClick);
-    expect(errors).toEqual([]);
-  });
 
   test("tycoon: collector pays out, upgrade pad tiers up at spec cost, trampoline launches at spec velocity", async ({ page }) => {
     test.setTimeout(120_000);
@@ -667,6 +652,112 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     );
     expect(maxVy).toBeGreaterThanOrEqual(SPEC.trampolineVy - SPEC.trampolineVyTolerance);
     expect(maxVy).toBeLessThanOrEqual(SPEC.trampolineVy);
+    expect(errors).toEqual([]);
+  });
+
+  test("collision: first player cannot overlap an NPC", async ({ page }) => {
+    const errors = collectErrors(page);
+    await boot(page);
+    const before = await page.evaluate(() => {
+      const g = (window as unknown as G).__GIERA__;
+      const npc = g.npcManager.npcs[0].position;
+      return { x: g.player.position.x, z: g.player.position.z, npcX: npc.x, npcZ: npc.z, frame: g.qa.frame };
+    });
+
+    await page.keyboard.down("a");
+    await page.keyboard.down("s");
+    const minimumDistance = await page.evaluate(({ frame }) => new Promise<number>((resolve) => {
+      const g = (window as unknown as G).__GIERA__;
+      const npc = g.npcManager.npcs[0].position;
+      let minimum = Infinity;
+      const sample = (): void => {
+        minimum = Math.min(minimum, Math.hypot(g.player.position.x - npc.x, g.player.position.z - npc.z));
+        if (g.qa.frame < frame + 45) requestAnimationFrame(sample);
+        else resolve(minimum);
+      };
+      sample();
+    }), { frame: before.frame });
+    await page.keyboard.up("a");
+    await page.keyboard.up("s");
+
+    const beforeDistance = Math.hypot(before.x - before.npcX, before.z - before.npcZ);
+    expect(minimumDistance).toBeGreaterThanOrEqual(0.65);
+    expect(minimumDistance).toBeLessThan(beforeDistance - 0.2);
+    expect(errors).toEqual([]);
+  });
+
+  test("collision: second player cannot overlap an NPC", async ({ page }) => {
+    const errors = collectErrors(page);
+    await boot(page);
+    await page.locator(".hud-mode-btn").click();
+    await page.waitForFunction(() => (window as unknown as G).__GIERA__.splitScreen.isSplitScreen);
+    const before = await page.evaluate(() => {
+      const g = (window as unknown as G).__GIERA__;
+      const npc = g.npcManager.npcs[0].position;
+      return { x: g.player2.position.x, z: g.player2.position.z, npcX: npc.x, npcZ: npc.z, frame: g.qa.frame };
+    });
+
+    await page.keyboard.down("ArrowRight");
+    await page.keyboard.down("ArrowDown");
+    const minimumDistance = await page.evaluate(({ frame }) => new Promise<number>((resolve) => {
+      const g = (window as unknown as G).__GIERA__;
+      const npc = g.npcManager.npcs[0].position;
+      let minimum = Infinity;
+      const sample = (): void => {
+        minimum = Math.min(minimum, Math.hypot(g.player2.position.x - npc.x, g.player2.position.z - npc.z));
+        if (g.qa.frame < frame + 30) requestAnimationFrame(sample);
+        else resolve(minimum);
+      };
+      sample();
+    }), { frame: before.frame });
+    await page.keyboard.up("ArrowRight");
+    await page.keyboard.up("ArrowDown");
+
+    const beforeDistance = Math.hypot(before.x - before.npcX, before.z - before.npcZ);
+    expect(minimumDistance).toBeGreaterThanOrEqual(0.65);
+    expect(minimumDistance).toBeLessThan(beforeDistance - 0.2);
+    expect(errors).toEqual([]);
+  });
+
+  test("collision: player cannot walk through the tycoon machine", async ({ page }) => {
+    const errors = collectErrors(page);
+    await boot(page);
+    await page.waitForFunction(() => {
+      const g = (window as unknown as G).__GIERA__;
+      let loaded = false;
+      g.scene.traverse((node) => {
+        if (node.name === "tycoon-plot" && node.children.length > 10) loaded = true;
+      });
+      return loaded;
+    }, null, { timeout: 15_000 });
+
+    const start = await page.evaluate(() => {
+      const g = (window as unknown as G).__GIERA__;
+      return {
+        x: g.player.position.x,
+        z: g.player.position.z,
+        frame: g.qa.frame,
+        targetX: g.tycoon.origin.x - 3.2,
+        targetZ: g.tycoon.origin.z - 4.6,
+      };
+    });
+
+    await page.keyboard.down("a");
+    await page.waitForFunction((frame) => (window as unknown as G).__GIERA__.qa.frame >= frame + 82, start.frame);
+    await page.keyboard.up("a");
+    const approach = await page.evaluate(() => {
+      const g = (window as unknown as G).__GIERA__;
+      return { x: g.player.position.x, frame: g.qa.frame };
+    });
+    expect(approach.x).toBeGreaterThan(start.targetX - 0.5);
+    expect(approach.x).toBeLessThan(start.targetX + 0.5);
+
+    await page.keyboard.down("w");
+    await page.waitForFunction((frame) => (window as unknown as G).__GIERA__.qa.frame >= frame + 45, approach.frame);
+    await page.keyboard.up("w");
+    const after = await page.evaluate(() => (window as unknown as G).__GIERA__.player.position.z);
+
+    expect(after).toBeLessThan(start.targetZ - 0.2);
     expect(errors).toEqual([]);
   });
 
@@ -752,6 +843,68 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await expect(page.locator(".hud-npc-card")).not.toBeVisible();
     expect(errors).toEqual([]);
   });
+  test("npc: releases pointer lock so conversation controls can be clicked", async ({ page }) => {
+    test.setTimeout(60_000);
+    await boot(page);
+    await page.evaluate(() => {
+      const game = window.__GIERA__;
+      if (!game) throw new Error("Giera did not boot");
+      const mina = game.npcManager.npcs.find((n) => n.def.name === "Mina");
+      if (!mina) throw new Error("Mina is unavailable");
+      game.player.position.set(mina.position.x, mina.position.y + 0.5, mina.position.z + 0.8);
+      game.player.velocity.set(0, 0, 0);
+      game.player.syncAvatar();
+    });
+
+    await page.evaluate(() => {
+      const canvas = document.querySelector("#game");
+      let locked: Element | null = canvas;
+      Object.defineProperty(document, "pointerLockElement", { configurable: true, get: () => locked });
+      document.exitPointerLock = () => { locked = null; };
+    });
+    await page.keyboard.press("KeyE");
+    await expect(page.locator(".hud-npc-card")).toBeVisible();
+    expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
+    await page.locator(".hud-quick-btn").first().click();
+    await expect(page.locator("#npc-reply-bubble")).not.toHaveText("Mina myśli...", { timeout: 5_000 });
+  });
+  test("npc: starts microphone from KeyE and stops when the dialog closes", async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.addInitScript(() => {
+      class FakeRecognition {
+        continuous = false;
+        interimResults = false;
+        lang = "";
+        onresult: ((event: unknown) => void) | null = null;
+        onerror: ((event: Event & { error?: string }) => void) | null = null;
+        onend: (() => void) | null = null;
+        start(): void {}
+        stop(): void { this.onend?.(); }
+        abort(): void {}
+      }
+      Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeRecognition });
+    });
+    await boot(page);
+    await page.evaluate(() => {
+      const game = window.__GIERA__;
+      if (!game) throw new Error("Giera did not boot");
+      const mina = game.npcManager.npcs.find((n) => n.def.name === "Mina");
+      if (!mina) throw new Error("Mina is unavailable");
+      game.player.position.set(mina.position.x, mina.position.y + 0.5, mina.position.z + 0.8);
+      game.player.velocity.set(0, 0, 0);
+      game.player.syncAvatar();
+    });
+
+    await page.keyboard.press("KeyE");
+    await expect(page.locator(".hud-npc-card")).toBeVisible();
+    await expect(page.locator("#npc-mic-status")).toHaveText(/Słucham/);
+    expect(await page.evaluate(() => window.__GIERA__?.mic.isRecording)).toBe(true);
+
+    await page.locator(".hud-npc-card .hud-modal-close").click();
+    await expect(page.locator(".hud-npc-card")).not.toBeVisible();
+    expect(await page.evaluate(() => window.__GIERA__?.mic.isRecording)).toBe(false);
+  });
+
 
   test("persistence: active slot and crafted item survive reload as real deltas", async ({ page }) => {
     test.setTimeout(90_000);

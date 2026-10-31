@@ -1,22 +1,24 @@
-import { LAUNCH_PLAYLIST } from "../startup/launch-menu";
 import { CONCIERGE_TOOLS, type ConciergeToolName } from "../../shared/concierge-tools";
 import { createBackup, readBackups, restoreBackup, clearProgress, summarize, type BackupSummary } from "./backups";
 
 export type ConciergeStatus = {
   started: boolean;
   splitScreen: boolean;
-  musicTrackId: string;
-  musicName: string;
   volume: number;
   coins: number;
   tier: number;
 };
 
+export type ConciergePlayer = "ziemek" | "gniewko";
+export type ConciergeHouse = { blocks: number; style: "wood" | "stone" };
+
 export type ConciergeHost = {
   status(): ConciergeStatus;
-  setMusicTrack(id: string): string;
   setSplitScreen(enabled: boolean): void;
   setVolume(level: number): number;
+  setJumpHeight(player: ConciergePlayer, height: number): number;
+  setFlying(player: ConciergePlayer, enabled: boolean): boolean;
+  buildHouse(player: ConciergePlayer): ConciergeHouse | null;
   teleportToSpawn(): void;
   reload(): void;
 };
@@ -30,20 +32,39 @@ const clampVolume = (value: unknown): number => {
 
 const describeBackup = (backup: BackupSummary): string => `${backup.label} (${backup.id})`;
 
+const resolveCheatPlayer = (params: Record<string, unknown>, splitScreen: boolean): ConciergePlayer | null => {
+  if (params.player === "ziemek") return "ziemek";
+  if (params.player === "gniewko") return splitScreen ? "gniewko" : null;
+  return splitScreen ? null : "ziemek";
+};
 export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolName, ConciergeToolHandler> {
   return {
     async get_status() {
       const status = host.status();
       return JSON.stringify(status);
     },
+    async set_jump_height(params) {
+      const target = resolveCheatPlayer(params, host.status().splitScreen);
+      if (!target) return "Zapytaj, czy chodzi o Ziemka czy Gniewka.";
+      const height = params.height_blocks;
+      if (typeof height !== "number" || !Number.isFinite(height)) return "Zapytaj, jak wysoko ma skakać.";
+      host.setJumpHeight(target, height);
+      return target === "ziemek" ? "Ziemek skacze teraz wyżej!" : "Gniewko skacze teraz wyżej!";
+    },
 
-    async set_music_track(params) {
-      const trackId = typeof params.track_id === "string" ? params.track_id : "";
-      if (!LAUNCH_PLAYLIST.some((track) => track.id === trackId)) {
-        return `Nie znam takiego utworu. Dostępne: ${LAUNCH_PLAYLIST.map((track) => track.id).join(", ")}`;
-      }
-      const name = host.setMusicTrack(trackId);
-      return `Gram teraz: ${name}`;
+    async set_flight(params) {
+      const target = resolveCheatPlayer(params, host.status().splitScreen);
+      if (!target) return "Zapytaj, czy chodzi o Ziemka czy Gniewka.";
+      if (typeof params.enabled !== "boolean") return "Zapytaj, czy włączyć latanie.";
+      const enabled = host.setFlying(target, params.enabled);
+      return enabled ? "Latanie włączone! Spacja w górę, Shift w dół." : "Latanie wyłączone.";
+    },
+
+    async build_house(params) {
+      const target = resolveCheatPlayer(params, host.status().splitScreen);
+      if (!target) return "Zapytaj, czy domek zbudować dla Ziemka czy Gniewka.";
+      const house = host.buildHouse(target);
+      return house ? "Domek z klocków już stoi!" : "Nie ma bezpiecznego miejsca na domek.";
     },
 
     async set_split_screen(params) {

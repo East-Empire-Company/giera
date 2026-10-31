@@ -1,15 +1,10 @@
-import { LAUNCH_PLAYLIST } from "../startup/launch-menu";
-
 export type PauseMenuOptions = {
   root: HTMLElement;
   resumeButton: HTMLButtonElement;
   modeButton: HTMLButtonElement;
-  musicSelect: HTMLSelectElement;
   getSplitScreen: () => boolean;
-  getTrackId: () => string;
   onResume: () => void;
   onToggleSplit: () => void;
-  onSelectTrack: (id: string) => void;
   onOpen: () => void;
   onClose: () => void;
 };
@@ -18,18 +13,9 @@ export class PauseMenuController {
   private opened = false;
 
   constructor(private readonly options: PauseMenuOptions) {
-    const { musicSelect, resumeButton, modeButton, root } = options;
-    musicSelect.replaceChildren(
-      ...LAUNCH_PLAYLIST.map(({ id, name }) => {
-        const option = document.createElement("option");
-        option.value = id;
-        option.textContent = name;
-        return option;
-      })
-    );
+    const { resumeButton, modeButton, root } = options;
     resumeButton.addEventListener("click", () => this.options.onResume());
     modeButton.addEventListener("click", () => this.options.onToggleSplit());
-    musicSelect.addEventListener("change", () => this.options.onSelectTrack(musicSelect.value));
     root.addEventListener("keydown", (event) => {
       if (event.key === "Tab") return;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") event.preventDefault();
@@ -66,6 +52,5 @@ export class PauseMenuController {
     this.options.modeButton.setAttribute("aria-pressed", String(split));
     this.options.modeButton.setAttribute("aria-label", split ? "Tryb dla 2 graczy" : "Tryb dla 1 gracza");
     this.options.modeButton.textContent = split ? "2 gracze" : "1 gracz";
-    this.options.musicSelect.value = this.options.getTrackId();
   }
 }

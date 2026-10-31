@@ -199,7 +199,7 @@
             <div class="launch-title">
               <h1 id="launch-title">Przygoda czeka!</h1>
             </div>
-            <p id="launch-description">Wybierz ustawienia i ruszaj do świata.</p>
+            <p id="launch-description">Wybierz tryb gry i ruszaj do świata.</p>
             <button id="launch-start" class="launch-start" type="button" aria-label="Rozpocznij grę" disabled>
               <img class="launch-start-icon" src="/assets/ui/kenney-adventure/minimap_icon_star_yellow.png" alt="" aria-hidden="true" />
               <span>Zaczynamy!</span>
@@ -210,18 +210,19 @@
                 <div class="launch-option-label">Gracze</div>
                 <button id="launch-mode" class="launch-mode" type="button" aria-label="Tryb dla 1 gracza" aria-pressed="false" disabled>1 gracz</button>
               </div>
-              <div class="launch-option">
-                <label class="launch-option-label" for="launch-music">Muzyka</label>
-                <select id="launch-music" class="launch-music" aria-label="Wybierz muzykę" disabled></select>
-              </div>
             </div>
-            <div id="launch-concierge-slot" class="concierge-slot"></div>
+            <details id="launch-audio-category" class="launch-audio-category">
+              <summary>🔊 Audio</summary>
+              <div class="launch-audio-controls">
+                <label for="launch-music-volume"><span aria-hidden="true">🎵</span> Muzyka</label>
+                <input id="launch-music-volume" data-audio-volume="music" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność muzyki" />
+                <label for="launch-speech-volume"><span aria-hidden="true">🗣️</span> Głosy</label>
+                <input id="launch-speech-volume" data-audio-volume="speech" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność głosów" />
+              </div>
+            </details>
             <p class="launch-hint"><kbd>↑</kbd><kbd>↓</kbd> wybierz <span aria-hidden="true">·</span> <kbd>←</kbd><kbd>→</kbd> zmień <span aria-hidden="true">·</span> <kbd>A</kbd> start</p>
           </div>
-        </div>
-        <div id="launch-music-hint" class="launch-music-hint" role="status" aria-live="polite">
-          <span class="launch-music-hint-note" aria-hidden="true">♪</span>
-          <span class="launch-music-hint-text">Dotknij ekranu, aby włączyć muzykę</span>
+          <div id="launch-concierge-slot" class="concierge-slot"></div>
         </div>
       </section>
       <section id="pause-menu" class="launch-menu pause-menu" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
@@ -245,13 +246,18 @@
                 <div class="launch-option-label">Gracze</div>
                 <button id="pause-mode" class="launch-mode" type="button" aria-label="Tryb dla 1 gracza" aria-pressed="false">1 gracz</button>
               </div>
-              <div class="launch-option">
-                <label class="launch-option-label" for="pause-music">Muzyka</label>
-                <select id="pause-music" class="launch-music" aria-label="Wybierz muzykę"></select>
-              </div>
             </div>
-            <div id="pause-concierge-slot" class="concierge-slot"></div>
+            <details id="pause-audio-category" class="launch-audio-category">
+              <summary>🔊 Audio</summary>
+              <div class="launch-audio-controls">
+                <label for="pause-music-volume"><span aria-hidden="true">🎵</span> Muzyka</label>
+                <input id="pause-music-volume" data-audio-volume="music" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność muzyki" />
+                <label for="pause-speech-volume"><span aria-hidden="true">🗣️</span> Głosy</label>
+                <input id="pause-speech-volume" data-audio-volume="speech" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność głosów" />
+              </div>
+            </details>
           </div>
+          <div id="pause-concierge-slot" class="concierge-slot"></div>
         </div>
       </section>
       <div id="concierge-panel" class="concierge" role="group" aria-label="Iskra" hidden>
@@ -259,9 +265,8 @@
         <p id="concierge-status" class="concierge-status" role="status" aria-live="polite"></p>
       </div>
       <section id="boot-status" class="boot-status" role="status" aria-live="polite">
-        <video id="boot-video" class="boot-video" muted playsinline preload="auto" aria-hidden="true" hidden>
-          <source src="/assets/video/splash.webm" type="video/webm" />
-          <source src="/assets/video/splash.mp4" type="video/mp4" />
+        <video id="boot-video" class="boot-video" playsinline preload="auto" aria-hidden="true" hidden>
+          <source src="/assets/video/jakub-team-signal-4k60.mp4" type="video/mp4" />
         </video>
         <div class="boot-card">
           <div class="boot-mark" aria-hidden="true">G</div>

@@ -10,6 +10,8 @@ export function attachSplashVideo(status: HTMLElement): SplashVideoHandle {
   if (!video) {
     return { settle: async () => {}, stop: () => {} };
   }
+  video.removeAttribute("muted");
+  video.muted = false;
 
   let settled = false;
   let release: () => void = () => {};
@@ -53,8 +55,34 @@ export function attachSplashVideo(status: HTMLElement): SplashVideoHandle {
   video.addEventListener("ended", finish);
   video.addEventListener("error", showCard, true);
 
+  const unmuteOnGesture = (): void => {
+    video.muted = false;
+    window.removeEventListener("pointerdown", unmuteOnGesture);
+    window.removeEventListener("keydown", unmuteOnGesture);
+    window.removeEventListener("touchstart", unmuteOnGesture);
+  };
+
+  const startMuted = (): void => {
+    video.muted = true;
+    video.play().then(() => {
+      showVideo();
+      window.addEventListener("pointerdown", unmuteOnGesture);
+      window.addEventListener("keydown", unmuteOnGesture);
+      window.addEventListener("touchstart", unmuteOnGesture);
+    }).catch(() => {
+      video.controls = true;
+      showVideo();
+    });
+  };
+
   const started = video.play();
-  if (started) started.catch(showCard);
+  if (started) started.catch((error: unknown) => {
+    if (typeof error === "object" && error !== null && "name" in error && error.name === "NotAllowedError") {
+      startMuted();
+      return;
+    }
+    showCard();
+  });
 
   return {
     settle: () => done,
@@ -63,6 +91,7 @@ export function attachSplashVideo(status: HTMLElement): SplashVideoHandle {
       video.removeEventListener("playing", showVideo);
       video.removeEventListener("ended", finish);
       video.removeEventListener("error", showCard, true);
+      unmuteOnGesture();
       finish();
     },
   };

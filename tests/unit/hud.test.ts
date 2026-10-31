@@ -20,17 +20,20 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(firstIcon).not.toBeNull();
     expect(firstIcon.src).toContain(".png");
   });
-  it("shows the launch-selected music and keeps the HUD cycle label current", () => {
-    const hud = new GameHUD({
-      inventory: new GameInventory(),
-      objectives: new ObjectiveManager(),
-      onCycleMusic: () => "Adventure",
-    });
+  it("keeps music controls out of the HUD", () => {
+    new GameHUD({ inventory: new GameInventory(), objectives: new ObjectiveManager() });
+    expect(document.querySelector(".hud-music-btn")).toBeNull();
+  });
 
-    hud.setMusicTrack("Combat Phonk");
-    expect(document.querySelector(".hud-music-btn")?.textContent).toBe("🎵 Combat Phonk");
-    document.querySelector<HTMLButtonElement>(".hud-music-btn")?.click();
-    expect(document.querySelector(".hud-music-btn")?.textContent).toBe("🎵 Adventure");
+  it("opens recipes from a visible backpack button", () => {
+    const hud = new GameHUD({ inventory: new GameInventory(), objectives: new ObjectiveManager() });
+    const button = document.querySelector<HTMLButtonElement>(".hud-inventory-btn");
+    expect(button).not.toBeNull();
+    button?.click();
+
+    expect(hud.isInventoryOpen()).toBe(true);
+    expect(document.querySelector(".hud-inventory-modal")?.classList.contains("hud-modal-open")).toBe(true);
+    expect(document.querySelectorAll(".hud-recipe-row").length).toBeGreaterThan(0);
   });
 
   it("provides visual Xbox controller mapping modal", () => {

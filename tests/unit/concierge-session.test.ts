@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const endSession = vi.fn(async () => {});
+const setConversationVolume = vi.fn();
 const startSession = vi.fn();
 
 vi.mock("@elevenlabs/client", () => ({
@@ -29,15 +30,15 @@ const host: ConciergeHost = {
   status: () => ({
     started: false,
     splitScreen: false,
-    musicTrackId: "sigma",
-    musicName: "Sigma Phonk",
     volume: 0.8,
     coins: 0,
     tier: 0,
   }),
-  setMusicTrack: () => "Sigma Phonk",
   setSplitScreen: () => {},
   setVolume: (level) => level,
+  setJumpHeight: () => 0,
+  setFlying: () => false,
+  buildHouse: () => null,
   teleportToSpawn: () => {},
   reload: () => {},
 };
@@ -87,9 +88,52 @@ const setHidden = (hidden: boolean): void => {
 describe("ConciergeSession", () => {
   beforeEach(() => {
     endSession.mockClear();
+    setConversationVolume.mockClear();
     startSession.mockReset();
-    startSession.mockImplementation(async () => ({ endSession }));
+    startSession.mockImplementation(async () => ({ endSession, type: "voice", setVolume: setConversationVolume }));
     setHidden(false);
+  });
+  it("keeps speech volume changes made while connecting", async () => {
+    const { promise: pending, resolve: resolveStart } = Promise.withResolvers<unknown>();
+    startSession.mockImplementation(() => pending);
+    const h = build();
+    const opening = h.session.open("launch");
+    await vi.waitFor(() => expect(startSession).toHaveBeenCalledTimes(1));
+
+    h.session.setSpeechVolume(0.35);
+    resolveStart({ endSession, type: "voice", setVolume: setConversationVolume });
+    await opening;
+
+    expect(setConversationVolume).toHaveBeenLastCalledWith({ volume: 0.35 });
+    h.session.setSpeechVolume(0.65);
+    expect(setConversationVolume).toHaveBeenLastCalledWith({ volume: 0.65 });
+    h.session.dispose();
+  });
+
+  it("does not apply speech volume to text-only conversations", async () => {
+    const unsupportedVolume = vi.fn(() => {
+      throw new Error("text conversations do not support volume");
+    });
+    startSession.mockImplementationOnce(async () => ({ endSession, type: "text", setVolume: unsupportedVolume }));
+    const h = build();
+
+    await h.session.open("launch");
+    h.session.setSpeechVolume(0.5);
+
+    expect(unsupportedVolume).not.toHaveBeenCalled();
+    h.session.dispose();
+  });
+
+  it("restores selected speech volume after reopening", async () => {
+    const h = build();
+    await h.session.open("launch");
+    h.session.setSpeechVolume(0.35);
+    await h.session.close("menu");
+
+    await h.session.open("pause");
+
+    expect(setConversationVolume).toHaveBeenLastCalledWith({ volume: 0.35 });
+    h.session.dispose();
   });
 
   it("mounts the panel into the open menu slot and starts one session", async () => {

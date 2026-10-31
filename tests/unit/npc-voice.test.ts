@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AudioManager } from "../../src/client/audio/sound";
 
 type FakeGain = {
-  gain: { value: number; ramps: [number, number][]; cancelScheduledValues: () => void; setValueAtTime: (v: number, t: number) => void; linearRampToValueAtTime: (v: number, t: number) => void };
+  gain: { value: number; ramps: [number, number][]; targets: [number, number, number][]; cancelScheduledValues: () => void; setValueAtTime: (v: number, t: number) => void; linearRampToValueAtTime: (v: number, t: number) => void; setTargetAtTime: (v: number, t: number, c: number) => void };
   connect: (target: unknown) => unknown;
 };
-type FakeSource = { buffer?: { duration: number }; loop: boolean; starts: number[]; connect: (t: unknown) => unknown; start: (t?: number) => void; stop: () => void; onended: (() => void) | null; playbackRate: { value: number } };
+type FakeSource = { buffer?: { duration: number }; loop: boolean; starts: number[]; stopped: boolean; connect: (t: unknown) => unknown; start: (t?: number) => void; stop: () => void; onended: (() => void) | null; playbackRate: { value: number } };
 
 let gains: FakeGain[];
 let sources: FakeSource[];
@@ -25,9 +25,11 @@ class FakeAudioContext {
       gain: {
         value: 1,
         ramps: [],
+        targets: [],
         cancelScheduledValues() {},
         setValueAtTime(v) { gain.gain.value = v; },
-        linearRampToValueAtTime(v, t) { gain.gain.ramps.push([v, t]); },
+        linearRampToValueAtTime(v, t) { gain.gain.value = v; gain.gain.ramps.push([v, t]); },
+        setTargetAtTime(v, t, c) { gain.gain.value = v; gain.gain.targets.push([v, t, c]); },
       },
       connect: (target) => target,
     };
@@ -35,7 +37,7 @@ class FakeAudioContext {
     return gain;
   }
   createBufferSource(): FakeSource {
-    const source: FakeSource = { loop: false, starts: [], connect: (t) => t, start: (t = 0) => void source.starts.push(t), stop() {}, onended: null, playbackRate: { value: 1 } };
+    const source: FakeSource = { loop: false, starts: [], stopped: false, connect: (t) => t, start: (t = 0) => void source.starts.push(t), stop() { source.stopped = true; }, onended: null, playbackRate: { value: 1 } };
     sources.push(source);
     return source;
   }
@@ -71,7 +73,7 @@ beforeEach(() => {
         ttsCalls++;
         return ttsOk ? new Response(new Uint8Array([1])) : new Response("x", { status: 502 });
       }
-      if (String(url).includes("manifest.json")) return new Response(JSON.stringify({ entries: {} }));
+      if (String(url).includes("manifest.json")) return new Response(JSON.stringify({ entries: { ui_click: { path: "assets/audio/generated/ui_click.mp3" } } }));
       return new Response(new Uint8Array([1, 2]));
     })
   );
@@ -80,7 +82,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 async function readyManager(): Promise<AudioManager> {
   const manager = new AudioManager();
-  await manager.playMusic("sigma_protocol");
+  await manager.playPlaylist();
   return manager;
 }
 
@@ -88,11 +90,11 @@ describe("AudioManager.speak", () => {
   it("plays the synthesized line at the distance-scaled volume and ducks the music under it", async () => {
     const manager = await readyManager();
     await manager.speak("mina", "Cześć!", 0.6);
-    const voice = sources.find((s) => !s.loop)!;
+    const voice = sources[1];
     expect(voice.starts).toEqual([10]);
     const voiceGain = gains[gains.length - 1];
     expect(voiceGain.gain.value).toBeCloseTo(0.6);
-    const musicGain = gains.find((g) => g.gain.ramps.some(([v]) => v === 0.3));
+    const musicGain = gains.find((g) => g.gain.ramps.some(([v]) => v === 0.075));
     expect(musicGain).toBeDefined();
   });
 
@@ -100,7 +102,7 @@ describe("AudioManager.speak", () => {
     const manager = await readyManager();
     await manager.speak("mina", "Pierwsza linia", 1);
     await manager.speak("staszek", "Druga linia", 1);
-    const [first, second] = sources.filter((s) => !s.loop);
+    const [first, second] = sources.slice(1);
     expect(second.starts[0]).toBeGreaterThanOrEqual(first.starts[0] + 2);
   });
 
@@ -127,42 +129,84 @@ describe("AudioManager.speak", () => {
   });
 });
 
-describe("AudioManager.playMusic", () => {
-  it("starts a track only once when requested repeatedly while loading", async () => {
+describe("AudioManager.playPlaylist", () => {
+  it("starts one playlist track when activated concurrently", async () => {
     const manager = new AudioManager();
-    await Promise.all([manager.playMusic("sigma_protocol"), manager.playMusic("sigma_protocol")]);
-    expect(sources.filter((s) => s.loop)).toHaveLength(1);
+    await Promise.all([manager.playPlaylist(), manager.playPlaylist()]);
+    expect(manager.playingMusic).toBe("sigma_protocol");
+    expect(sources).toHaveLength(1);
   });
 
-  it("lets the latest requested track win over an earlier one still loading", async () => {
+  it("keeps music and speech volume controls independent", async () => {
     const manager = new AudioManager();
-    await Promise.all([manager.playMusic("sigma_protocol"), manager.playMusic("drift_phonk")]);
-    const started = sources.filter((s) => s.loop);
-    expect(started).toHaveLength(1);
+    expect(manager.setMusicVolume(0.35)).toBeCloseTo(0.35);
+    expect(manager.setSpeechVolume(0.6)).toBeCloseTo(0.6);
+    await manager.playPlaylist();
+    await manager.speak("mina", "Cześć!", 1);
+
+    expect(gains[0].gain.value).toBeCloseTo(0.8);
+    expect(gains[1].gain.value).toBeCloseTo(0.35);
+    expect(gains[2].gain.value).toBeCloseTo(0.6);
   });
-  it("restarts selected music after visibility returns", async () => {
+  it("keeps background music quieter than foreground sound effects", async () => {
     const manager = await readyManager();
-    const playMusic = vi.spyOn(manager, "playMusic");
+    await manager.play("ui_click");
 
+    const musicGain = gains.find((g) => g.gain.ramps.some(([value]) => value === 0.25));
+    const effectsGain = gains[gains.length - 1];
+    expect(musicGain?.gain.value).toBeLessThan(effectsGain.gain.value * 0.5);
+  });
+  it("stops the current track while paused and resumes the same track", async () => {
+    const manager = await readyManager();
+    const current = sources[0];
+
+    manager.pausePlaylist();
+
+    expect(manager.playingMusic).toBeUndefined();
+    expect(current.stopped).toBe(true);
+    expect(current.onended).toBeNull();
+
+    await manager.playPlaylist();
+    expect(manager.playingMusic).toBe("sigma_protocol");
+    expect(sources).toHaveLength(2);
+  });
+
+
+
+  it("advances through the music order and wraps after the final track", async () => {
+    const manager = new AudioManager();
+    await manager.playPlaylist();
+    const expected = ["sigma_protocol", "drift_phonk", "combat_phonk", "adventure_island", "little_farm", "sigma_protocol"];
+
+    for (const id of expected.slice(1)) {
+      const current = sources[sources.length - 1];
+      expect(current.loop).toBe(false);
+      current.onended?.();
+      await vi.waitFor(() => expect(manager.playingMusic).toBe(id));
+    }
+
+    expect(sources).toHaveLength(expected.length);
+  });
+
+  it("restarts the current track when visibility returns", async () => {
+    const manager = await readyManager();
     documentHidden = true;
     visibilityChange?.();
     documentHidden = false;
     visibilityChange?.();
-    await playMusic.mock.results[0].value;
 
-    expect(sources.filter((source) => source.loop)).toHaveLength(2);
+    await vi.waitFor(() => expect(manager.playingMusic).toBe("sigma_protocol"));
+    expect(sources).toHaveLength(2);
   });
-  it("restarts selected music on the first audio unlock after visibility loss", async () => {
-    const manager = await readyManager();
-    const playMusic = vi.spyOn(manager, "playMusic");
 
+  it("restarts the playlist on the first audio unlock after visibility loss", async () => {
+    const manager = await readyManager();
     documentHidden = true;
     visibilityChange?.();
     documentHidden = false;
     await manager.play("ui_click");
-    await playMusic.mock.results[0].value;
 
-    expect(sources.filter((source) => source.loop)).toHaveLength(2);
+    await vi.waitFor(() => expect(manager.playingMusic).toBe("sigma_protocol"));
+    expect(sources).toHaveLength(3);
   });
-
 });

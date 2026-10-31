@@ -23,8 +23,11 @@ export const PROTAGONISTS: Record<PlayerId, ProtagonistProfile> = {
   },
 };
 
-
 const MAX_PITCH = (85 * Math.PI) / 180; // ~1.4835 rad
+const GRAVITY = 32;
+const MIN_JUMP_HEIGHT = 1;
+const MAX_JUMP_HEIGHT = 12;
+const DEFAULT_JUMP_HEIGHT = (9 * 9) / (2 * GRAVITY);
 const HEAD_PIVOT_Y = 1.55;
 const ARM_OFFSET = new THREE.Vector3(0.65, 0.15, 0);
 
@@ -38,6 +41,8 @@ export class PlayerController {
   pitch: number = 0;
   onGround: boolean = false;
   isActing: boolean = false;
+  jumpHeight = DEFAULT_JUMP_HEIGHT;
+  flying = false;
   avatar?: Avatar;
 
   constructor(options: { id: PlayerId; spawn: [number, number, number]; yaw?: number }) {
@@ -56,6 +61,17 @@ export class PlayerController {
     return avatar;
   }
 
+  setJumpHeight(height: number): number {
+    this.jumpHeight = Math.min(MAX_JUMP_HEIGHT, Math.max(MIN_JUMP_HEIGHT, Number.isFinite(height) ? height : this.jumpHeight));
+    return this.jumpHeight;
+  }
+
+  setFlying(enabled: boolean): boolean {
+    this.flying = enabled;
+    this.velocity.set(0, 0, 0);
+    if (enabled) this.onGround = false;
+    return this.flying;
+  }
 
   rotateCamera(deltaYaw: number, deltaPitch: number): void {
     this.yaw = (this.yaw - deltaYaw) % (Math.PI * 2);
@@ -115,27 +131,38 @@ export class PlayerController {
     world: (x: number, y: number, z: number) => boolean,
     moveInput: { forward: number; right: number; jump: boolean; sprint: boolean }
   ): void {
-    const speed = moveInput.sprint ? 5.6 : 4.3;
-    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+    const speed = this.flying ? 4.3 : moveInput.sprint ? 5.6 : 4.3;
+    const cosPitch = Math.cos(this.pitch);
+    const forward = new THREE.Vector3(
+      -Math.sin(this.yaw) * cosPitch,
+      this.flying ? -Math.sin(this.pitch) : 0,
+      -Math.cos(this.yaw) * cosPitch
+    ).normalize();
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).normalize();
 
     const wishDir = new THREE.Vector3();
     wishDir.addScaledVector(forward, moveInput.forward);
     wishDir.addScaledVector(right, moveInput.right);
+    if (this.flying) {
+      if (moveInput.jump) wishDir.y += 1;
+      if (moveInput.sprint) wishDir.y -= 1;
+    }
     if (wishDir.lengthSq() > 0.001) wishDir.normalize();
 
-    if (this.onGround) {
+    if (this.flying) {
+      this.velocity.copy(wishDir).multiplyScalar(speed);
+    } else if (this.onGround) {
       this.velocity.x = wishDir.x * speed;
       this.velocity.z = wishDir.z * speed;
       this.velocity.y = -1.0;
       if (moveInput.jump) {
-        this.velocity.y = 9.0;
+        this.velocity.y = Math.sqrt(2 * GRAVITY * this.jumpHeight);
         this.onGround = false;
       }
     } else {
       this.velocity.x += wishDir.x * speed * 0.3 * delta;
       this.velocity.z += wishDir.z * speed * 0.3 * delta;
-      this.velocity.y -= 32 * delta;
+      this.velocity.y -= GRAVITY * delta;
     }
 
     const box = this.getBoundingBox();
@@ -172,7 +199,7 @@ export class PlayerController {
     this.position.z = result.position.z + 0.3;
     const wasAirborne = !this.onGround;
     const impactSpeed = -this.velocity.y;
-    this.onGround = result.onGround;
+    this.onGround = this.flying ? false : result.onGround;
     if (wasAirborne && this.onGround && impactSpeed > 6) this.avatar?.playOnce("land");
 
     if (result.hitAxis === "y") this.velocity.y = 0;

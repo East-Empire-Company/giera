@@ -7,16 +7,14 @@ function createMenu() {
     <section id="launch-menu" hidden>
       <button id="launch-start" disabled>Start</button>
       <button id="launch-mode" disabled aria-pressed="false"></button>
-      <select id="launch-music" disabled></select>
     </section>
   `;
   const root = document.querySelector<HTMLElement>("#launch-menu")!;
   const startButton = document.querySelector<HTMLButtonElement>("#launch-start")!;
   const modeButton = document.querySelector<HTMLButtonElement>("#launch-mode")!;
-  const musicSelect = document.querySelector<HTMLSelectElement>("#launch-music")!;
   const onStart = vi.fn();
-  const menu = new LaunchMenuController({ root, startButton, modeButton, musicSelect, onStart });
-  return { root, startButton, modeButton, musicSelect, onStart, menu };
+  const menu = new LaunchMenuController({ root, startButton, modeButton, onStart });
+  return { root, startButton, modeButton, onStart, menu };
 }
 
 function gamepad(pressedButtons: number[] = [], axes: number[] = []): Gamepad {
@@ -32,27 +30,24 @@ describe("LaunchMenuController", () => {
     document.body.innerHTML = "";
   });
 
-  it("waits for explicit start and applies the selected real settings", () => {
-    const { root, startButton, modeButton, musicSelect, onStart, menu } = createMenu();
+  it("waits for start and applies player mode", () => {
+    const { root, startButton, modeButton, onStart, menu } = createMenu();
     expect(root.hidden).toBe(true);
     expect(onStart).not.toHaveBeenCalled();
 
     menu.show();
     modeButton.click();
-    musicSelect.value = "combat_phonk";
-    musicSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
-    expect(menu.settings).toEqual({ splitScreen: true, musicTrackId: "combat_phonk" });
+    expect(menu.settings).toEqual({ splitScreen: true });
     expect(onStart).not.toHaveBeenCalled();
+    startButton.click();
 
-    startButton.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
-
-    expect(onStart).toHaveBeenCalledWith({ splitScreen: true, musicTrackId: "combat_phonk" }, "control");
+    expect(onStart).toHaveBeenCalledWith({ splitScreen: true }, "control");
     expect(root.hidden).toBe(true);
   });
 
   it("moves gamepad focus once per d-pad press", () => {
-    const { menu, modeButton, musicSelect } = createMenu();
+    const { menu, startButton, modeButton } = createMenu();
     menu.show();
     const down = gamepad([13]);
 
@@ -62,10 +57,11 @@ describe("LaunchMenuController", () => {
 
     menu.pollGamepad([gamepad()]);
     menu.pollGamepad([down]);
-    expect(document.activeElement).toBe(musicSelect);
+    expect(document.activeElement).toBe(startButton);
   });
+
   it("edge-triggers analog stick navigation", () => {
-    const { menu, modeButton, musicSelect } = createMenu();
+    const { menu, startButton, modeButton } = createMenu();
     menu.show();
     const down = gamepad([], [0, 0.8]);
 
@@ -75,7 +71,7 @@ describe("LaunchMenuController", () => {
 
     menu.pollGamepad([gamepad()]);
     menu.pollGamepad([down]);
-    expect(document.activeElement).toBe(musicSelect);
+    expect(document.activeElement).toBe(startButton);
   });
 
   it("starts once from the Xbox A button edge", () => {
@@ -87,22 +83,19 @@ describe("LaunchMenuController", () => {
     menu.pollGamepad([confirm]);
 
     expect(onStart).toHaveBeenCalledTimes(1);
-    expect(onStart).toHaveBeenCalledWith({ splitScreen: false, musicTrackId: "sigma_protocol" }, "gamepad");
+    expect(onStart).toHaveBeenCalledWith({ splitScreen: false }, "gamepad");
     expect(root.hidden).toBe(true);
   });
 
   it("starts from the first connected gamepad", () => {
     const { menu, onStart } = createMenu();
     menu.show();
-
     menu.pollGamepad([null, gamepad([0])]);
-
-    expect(onStart).toHaveBeenCalledWith({ splitScreen: false, musicTrackId: "sigma_protocol" }, "gamepad");
+    expect(onStart).toHaveBeenCalledWith({ splitScreen: false }, "gamepad");
   });
 
-
-  it("supports keyboard focus and setting changes", () => {
-    const { menu, modeButton, musicSelect } = createMenu();
+  it("supports keyboard focus and player-mode changes", () => {
+    const { menu, modeButton, startButton } = createMenu();
     menu.show();
 
     document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
@@ -111,8 +104,6 @@ describe("LaunchMenuController", () => {
     expect(menu.settings.splitScreen).toBe(true);
 
     document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
-    expect(document.activeElement).toBe(musicSelect);
-    musicSelect.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
-    expect(menu.settings.musicTrackId).toBe("drift_phonk");
+    expect(document.activeElement).toBe(startButton);
   });
 });

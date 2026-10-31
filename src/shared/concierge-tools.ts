@@ -1,8 +1,8 @@
-import { LAUNCH_PLAYLIST } from "../client/startup/launch-menu";
-
 export type ConciergeToolName =
   | "get_status"
-  | "set_music_track"
+  | "set_jump_height"
+  | "set_flight"
+  | "build_house"
   | "set_split_screen"
   | "set_volume"
   | "teleport_to_spawn"
@@ -21,28 +21,43 @@ export type ConciergeToolSpec = {
   };
 };
 
-const trackIds = LAUNCH_PLAYLIST.map((track) => track.id);
-
 export const CONCIERGE_TOOLS: readonly ConciergeToolSpec[] = [
   {
     name: "get_status",
     description:
-      "Odczytaj aktualny stan gry: czy gra trwa, czy jest podzielony ekran, jaki utwór gra, głośność, monety i poziom. Użyj tego, zanim odpowiesz na pytanie o stan gry.",
+      "Odczytaj aktualny stan gry: czy gra trwa, czy jest podzielony ekran, głośność, monety i poziom. Użyj tego, zanim odpowiesz na pytanie o stan gry.",
     parameters: { type: "object", properties: {} },
   },
   {
-    name: "set_music_track",
-    description: "Zmień muzykę w grze na wybrany utwór.",
+    name: "set_jump_height",
+    description: "Ustaw skok gracza. W trybie dwóch graczy zapytaj, czy chodzi o Ziemka czy Gniewka.",
     parameters: {
       type: "object",
       properties: {
-        track_id: {
-          type: "string",
-          enum: trackIds,
-          description: "Identyfikator utworu. Nazwy: " + LAUNCH_PLAYLIST.map((t) => `${t.id} = ${t.name}`).join(", "),
-        },
+        height_blocks: { type: "number", minimum: 1, maximum: 12, description: "Wysokość skoku w blokach, od 1 do 12" },
+        player: { type: "string", enum: ["ziemek", "gniewko"], description: "Gracz; wymagany w trybie dwóch graczy" },
       },
-      required: ["track_id"],
+      required: ["height_blocks"],
+    },
+  },
+  {
+    name: "set_flight",
+    description: "Włącz albo wyłącz latanie gracza. W trybie dwóch graczy zapytaj, kto chce latać.",
+    parameters: {
+      type: "object",
+      properties: {
+        enabled: { type: "boolean", description: "true = latanie włączone, false = wyłączone" },
+        player: { type: "string", enum: ["ziemek", "gniewko"], description: "Gracz; wymagany w trybie dwóch graczy" },
+      },
+      required: ["enabled"],
+    },
+  },
+  {
+    name: "build_house",
+    description: "Zbuduj mały losowy domek z bloków na wolnym miejscu. Nie niszcz istniejących bloków.",
+    parameters: {
+      type: "object",
+      properties: { player: { type: "string", enum: ["ziemek", "gniewko"], description: "Gracz, w pobliżu którego powstanie domek" } },
     },
   },
   {

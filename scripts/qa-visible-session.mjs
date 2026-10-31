@@ -337,12 +337,8 @@ check(
 await page.keyboard.press("Escape");
 await pause(500);
 
-// MUSIC
-const musicBefore = await page.evaluate(() => document.querySelector(".hud-music-btn")?.textContent?.trim());
-await page.click(".hud-music-btn");
-await pause(800);
-const musicAfter = await page.evaluate(() => document.querySelector(".hud-music-btn")?.textContent?.trim());
-check("music cycling", musicBefore !== musicAfter, `${musicBefore} -> ${musicAfter}`);
+const playlistTrack = await page.evaluate(() => window.__GIERA__.audio.playingMusic);
+check("background music playlist", playlistTrack === "sigma_protocol", playlistTrack ?? "silent");
 
 // SPLIT SCREEN
 await page.click(".hud-mode-btn");

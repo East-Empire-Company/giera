@@ -126,4 +126,32 @@ describe("PlayerController", () => {
     expect(player.onGround).toBe(true);
     expect(player.position.y).toBeGreaterThanOrEqual(40);
   });
+  it("sets a bounded jump height and derives jump impulse from it", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
+    expect(player.setJumpHeight(4)).toBe(4);
+    expect(player.setJumpHeight(100)).toBe(12);
+    expect(player.setJumpHeight(-1)).toBe(1);
+    player.setJumpHeight(4);
+    player.onGround = true;
+
+    player.step(1 / 60, air, { forward: 0, right: 0, jump: true, sprint: false });
+
+    expect(player.velocity.y).toBeCloseTo(16);
+    expect(player.jumpHeight).toBe(4);
+  });
+
+  it("flies without gravity and uses jump and sprint to ascend and descend", () => {
+    const player = new PlayerController({ id: "p1", spawn: [0, 40, 0] });
+    const startY = player.position.y;
+    player.setFlying(true);
+
+    player.step(0.1, air, { forward: 0, right: 0, jump: false, sprint: false });
+    expect(player.position.y).toBe(startY);
+    expect(player.onGround).toBe(false);
+
+    player.step(0.1, air, { forward: 0, right: 0, jump: true, sprint: false });
+    expect(player.position.y).toBeGreaterThan(startY);
+    player.step(0.1, air, { forward: 0, right: 0, jump: false, sprint: true });
+    expect(player.position.y).toBeCloseTo(startY);
+  });
 });

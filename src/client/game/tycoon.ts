@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { TycoonPlot } from "./tycoon-plot";
 import type { TycoonTheme } from "../../shared/tycoon-slots";
+import type { Cylinder } from "../../shared/entity-collision";
 
 export type TycoonUpgrade = {
   tier: number;
@@ -14,6 +15,8 @@ export type TycoonOptions = {
   theme?: TycoonTheme;
   label?: string;
 };
+
+const EMPTY_COLLISION_BODIES: readonly Cylinder[] = [];
 
 const DEFAULT_THEME: TycoonTheme = {
   accent: 0x38a169,
@@ -165,6 +168,9 @@ export class TycoonManager {
       });
       scene.add(this.plot.group);
     }
+  }
+  getCollisionBodies(): readonly Cylinder[] {
+    return this.plot?.getCollisionBodies() ?? EMPTY_COLLISION_BODIES;
   }
   registerShadowMaterials(register: (material: THREE.Material) => void): void {
     this.plot?.registerShadowMaterials(register);

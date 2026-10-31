@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { MUSIC_TRACKS, VOICE_PATHS, parseAudioManifest } from "../src/client/audio/sound";
+import { MUSIC_PLAYLIST, MUSIC_TRACKS, VOICE_PATHS, parseAudioManifest } from "../src/client/audio/sound";
 import { getItemIcon } from "../src/client/game/hud";
 
 const ROOT = resolve(import.meta.dir, "..");
@@ -32,10 +32,8 @@ if (!existsSync(generatedManifestPath)) {
   for (const [id, path] of Object.entries(generated)) checkPublic(path, `generated-manifest.${id}`);
 }
 
-const mainSrc = readFileSync(resolve(ROOT, "src/main.ts"), "utf-8");
-const playlistBlock = mainSrc.slice(mainSrc.indexOf("const playlist = ["), mainSrc.indexOf("];", mainSrc.indexOf("const playlist = [")));
-for (const m of playlistBlock.matchAll(/id:\s*"([a-z0-9_]+)"/g)) {
-  if (!(m[1] in MUSIC_TRACKS)) missing.push(`playlist id "${m[1]}" is not a MUSIC_TRACKS key`);
+for (const id of MUSIC_PLAYLIST) {
+  if (!(id in MUSIC_TRACKS)) missing.push(`playlist id "${id}" is not a MUSIC_TRACKS key`);
 }
 
 const hudSrc = readFileSync(resolve(ROOT, "src/client/game/hud.ts"), "utf-8");

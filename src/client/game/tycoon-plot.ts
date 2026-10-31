@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import assetManifest from "../../shared/asset-manifest.json";
 import { withRetry } from "../../shared/retry";
+import type { Cylinder } from "../../shared/entity-collision";
 
 export type TycoonPlotOptions = {
   surfaceAt: (x: number, z: number) => number;
@@ -50,6 +51,10 @@ export class TycoonPlot {
   private readonly templates = new Map<FactoryModel, THREE.Group>();
   private readonly clips = new Map<FactoryModel, THREE.AnimationClip[]>();
   private readonly stages: Stage[] = [];
+  private readonly colliderRoots: THREE.Object3D[] = [];
+  private readonly collisionBodies: Cylinder[] = [];
+  private readonly collisionBounds = new THREE.Box3();
+  private readonly collisionSize = new THREE.Vector3();
   private readonly gears: THREE.Group[] = [];
   private readonly buttons: AnimatedButton[] = [];
   private readonly products: Product[] = [];
@@ -61,6 +66,41 @@ export class TycoonPlot {
   private tier = 1;
   private lastTier = 0;
   private disposed = false;
+  private collisionDirty = true;
+
+  private registerCollider(root: THREE.Object3D): void {
+    this.colliderRoots.push(root);
+    this.collisionDirty = true;
+  }
+
+  getCollisionBodies(): readonly Cylinder[] {
+    if (!this.collisionDirty) return this.collisionBodies;
+    this.group.updateWorldMatrix(true, true);
+    let count = 0;
+    for (const root of this.colliderRoots) {
+      if (!root.visible) continue;
+      this.collisionBounds.makeEmpty();
+      this.collisionBounds.setFromObject(root);
+      if (this.collisionBounds.isEmpty()) continue;
+      const size = this.collisionBounds.getSize(this.collisionSize);
+      const radius = Math.max(size.x, size.z) * 0.5;
+      if (radius <= 0.05 || size.y <= 0.05) continue;
+      let body = this.collisionBodies[count];
+      if (!body) {
+        body = { x: 0, y: 0, z: 0, radius: 0, height: 0 };
+        this.collisionBodies.push(body);
+      }
+      body.x = (this.collisionBounds.min.x + this.collisionBounds.max.x) * 0.5;
+      body.y = this.collisionBounds.min.y;
+      body.z = (this.collisionBounds.min.z + this.collisionBounds.max.z) * 0.5;
+      body.radius = radius;
+      body.height = size.y;
+      count++;
+    }
+    this.collisionBodies.length = count;
+    this.collisionDirty = false;
+    return this.collisionBodies;
+  }
 
   constructor(origin: THREE.Vector3, options: TycoonPlotOptions) {
     this.surfaceAt = options.surfaceAt;
@@ -156,6 +196,7 @@ export class TycoonPlot {
     );
     instance.scale.setScalar(scale);
     parent.add(instance);
+    if (parent === this.group) this.registerCollider(instance);
     if (name === "factoryButton") this.addButtonAnimation(instance);
     return instance;
   }
@@ -173,6 +214,7 @@ export class TycoonPlot {
     wheel.scale.setScalar(1.2);
     pivot.add(wheel);
     parent.add(pivot);
+    if (parent === this.group) this.registerCollider(pivot);
     this.gears.push(pivot);
   }
 
@@ -195,6 +237,7 @@ export class TycoonPlot {
     this.group.add(root);
     build(root);
     this.stages.push({ tier, object: root, age: 0 });
+    this.registerCollider(root);
   }
 
   private buildFactory(): void {
@@ -301,6 +344,7 @@ export class TycoonPlot {
         if (stage.tier <= tier && !stage.object.visible) {
           stage.object.visible = true;
           stage.age = 0;
+          this.collisionDirty = true;
         }
       }
       this.lastTier = tier;
@@ -322,8 +366,10 @@ export class TycoonPlot {
         stage.age = Math.min(0.45, stage.age + delta);
         const progress = stage.age / 0.45;
         stage.object.scale.setScalar(Math.min(1.05, progress * (1 + Math.sin(progress * Math.PI) * 0.16)));
+        this.collisionDirty = true;
       } else if (stage.object.scale.x !== 1) {
         stage.object.scale.setScalar(1);
+        this.collisionDirty = true;
       }
     }
   }
@@ -365,6 +411,8 @@ export class TycoonPlot {
     this.clips.clear();
     this.gears.length = 0;
     this.products.length = 0;
+    this.colliderRoots.length = 0;
+    this.collisionBodies.length = 0;
     this.pendingProducts = 0;
     this.stages.length = 0;
   }

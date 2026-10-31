@@ -10,6 +10,12 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
       timeout: 25_000,
     });
     await expect(page.locator("#launch-menu")).toBeVisible();
+    const splash = await page.locator("#boot-video").evaluate((node) => ({
+      muted: (node as HTMLVideoElement).muted,
+      source: node.querySelector("source")?.getAttribute("src"),
+    }));
+    expect(splash.muted).toBe(false);
+    expect(splash.source).toBe("/assets/video/jakub-team-signal-4k60.mp4");
 
     const hasCanvas = await page.evaluate(() => !!document.querySelector("canvas#game"));
     expect(hasCanvas).toBe(true);
@@ -19,7 +25,24 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
 
     expect(errors).toEqual([]);
   });
-  test("launch: waits for start and applies selected settings", async ({ page }) => {
+
+  test("launch scene places the concierge beside the settings panel", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/?seed=424242");
+    await page.waitForFunction(() => window.__GIERA__?.ready === true);
+    await page.waitForSelector("#concierge-panel:not([hidden])");
+
+    const bounds = await page.evaluate(() => {
+      const panel = document.querySelector(".launch-panel")!.getBoundingClientRect();
+      const robot = document.querySelector("#concierge-panel")!.getBoundingClientRect();
+      const canvas = document.querySelector("#concierge-canvas")!.getBoundingClientRect();
+      return { panelRight: panel.right, robotLeft: robot.left, canvasWidth: canvas.width };
+    });
+
+    expect(bounds.robotLeft).toBeGreaterThanOrEqual(bounds.panelRight);
+    expect(bounds.canvasWidth).toBeGreaterThan(300);
+  });
+  test("launch: starts background playlist without music controls", async ({ page }) => {
     const musicRequests: string[] = [];
     page.on("request", (request) => {
       const path = new URL(request.url()).pathname;
@@ -29,38 +52,101 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
     await page.goto("/?seed=424242");
     await page.waitForFunction(() => window.__GIERA__?.ready === true);
     await expect(page.locator("#launch-menu")).toBeVisible();
-    expect(musicRequests).toContain("/assets/audio/music/sigma_protocol.mp3");
+    await expect(page.locator("#launch-music, #pause-music, #launch-music-hint, .hud-music-btn")).toHaveCount(0);
+
     await page.keyboard.press("ArrowDown");
     await page.waitForFunction(() => window.__GIERA__?.audio.playingMusic === "sigma_protocol");
-
-    const before = await page.evaluate(() => {
-      const game = window.__GIERA__;
-      if (!game) throw new Error("Game bridge missing after boot");
-      return [game.player.position.x, game.player.position.y, game.player.position.z];
-    });
-    await page.keyboard.down("w");
-    await page.waitForTimeout(200);
-    await page.keyboard.up("w");
-    const after = await page.evaluate(() => {
-      const game = window.__GIERA__;
-      if (!game) throw new Error("Game bridge missing after boot");
-      return [game.player.position.x, game.player.position.y, game.player.position.z];
-    });
-    expect(after).toEqual(before);
+    expect(musicRequests).toContain("/assets/audio/music/sigma_protocol.mp3");
 
     await page.locator("#launch-mode").click();
-    await page.locator("#launch-music").selectOption("combat_phonk");
-    const splitBeforeStart = await page.evaluate(() => window.__GIERA__?.splitScreen.isSplitScreen);
-    expect(splitBeforeStart).toBe(false);
-    const menuTrackAfterSelect = await page.evaluate(() => window.__GIERA__?.audio.playingMusic);
-    expect(menuTrackAfterSelect).toBe("sigma_protocol");
-
     await page.getByRole("button", { name: "Rozpocznij grę" }).click();
     await page.waitForFunction(() => window.__GIERA__?.splitScreen.isSplitScreen === true);
-    await page.waitForFunction(() => window.__GIERA__?.audio.playingMusic === "combat_phonk");
-    expect(musicRequests).toContain("/assets/audio/music/combat_phonk.mp3");
     await expect(page.locator("#launch-menu")).toBeHidden();
+    await expect(page.locator("#hud-root .hud-music-btn")).toHaveCount(0);
+    expect(await page.evaluate(() => window.__GIERA__?.audio.playingMusic)).toBe("sigma_protocol");
   });
+
+  test("launch audio category changes music and speech volume separately", async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.goto("/?seed=424242");
+    await page.waitForFunction(() => window.__GIERA__?.ready === true);
+    await page.locator("#launch-audio-category summary").click();
+    await expect(page.locator("#launch-music-volume")).toBeVisible();
+    await expect(page.locator("#launch-speech-volume")).toBeVisible();
+
+    const before = await page.evaluate(() => ({
+      music: window.__GIERA__?.audio.musicVolume,
+      speech: window.__GIERA__?.audio.speechVolume,
+    }));
+    await page.locator("#launch-music-volume").focus();
+    await page.keyboard.press("ArrowLeft");
+    const afterMusic = await page.evaluate(() => ({
+      music: window.__GIERA__?.audio.musicVolume,
+      speech: window.__GIERA__?.audio.speechVolume,
+    }));
+    expect(afterMusic.music).toBeLessThan(before.music ?? 1);
+    expect(afterMusic.speech).toBe(before.speech);
+
+    await page.locator("#launch-speech-volume").focus();
+    await page.keyboard.press("ArrowLeft");
+    const after = await page.evaluate(() => ({
+      music: window.__GIERA__?.audio.musicVolume,
+      speech: window.__GIERA__?.audio.speechVolume,
+    }));
+    expect(after.music).toBe(afterMusic.music);
+    expect(after.speech).toBeLessThan(before.speech ?? 1);
+    await expect(page.locator("#pause-speech-volume")).toHaveValue(String(after.speech));
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("persistence: voxel edits survive a reload", async ({ page }) => {
+    await page.goto("/?seed=424242");
+    await page.waitForFunction(() => window.__GIERA__?.ready === true);
+    await page.getByRole("button", { name: "Rozpocznij grę" }).click();
+    const edit = await page.evaluate(() => {
+      const g = window.__GIERA__!;
+      const x = 3;
+      const z = 5;
+      let y = Math.floor(g.player.position.y) + 2;
+      while (g.world.getBlock(x, y, z) !== 0) y++;
+      g.world.setBlock(x, y, z, 10);
+      window.dispatchEvent(new Event("pagehide"));
+      return { x, y, z, key: `${x},${y},${z}` };
+    });
+    await page.waitForFunction(async (key) => {
+      const request = indexedDB.open("giera_save_db", 1);
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const saved = await new Promise<{ edits?: Record<string, number> } | undefined>((resolve, reject) => {
+        const get = db.transaction("saves", "readonly").objectStore("saves").get("last_save");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      });
+      return saved?.edits?.[key] === 10;
+    }, edit.key, { timeout: 5_000 });
+
+    await page.reload();
+    await page.waitForFunction(() => window.__GIERA__?.ready === true);
+    expect(await page.evaluate(({ x, y, z }) => window.__GIERA__!.world.getBlock(x, y, z), edit)).toBe(10);
+  });
+  test("pause: silences background music until the game resumes", async ({ page }) => {
+    await page.goto("/?seed=424242");
+    await page.waitForFunction(() => window.__GIERA__?.ready === true);
+    await page.getByRole("button", { name: "Rozpocznij grę" }).click();
+    await page.waitForFunction(() => window.__GIERA__?.audio.playingMusic === "sigma_protocol");
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#pause-menu")).toBeVisible();
+    await page.waitForFunction(() => window.__GIERA__?.audio.playingMusic === undefined, null, { timeout: 2_000 });
+
+    await page.getByRole("button", { name: "Wracam do gry" }).click();
+    await expect(page.locator("#pause-menu")).toBeHidden();
+    await page.waitForFunction(() => window.__GIERA__?.audio.playingMusic === "sigma_protocol");
+  });
+
 
 
 
@@ -76,9 +162,7 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
       g.inventory.addMinedBlock("oak_log", 8);
     });
 
-    // Focus canvas and press I to open inventory
-    await page.click("canvas#game");
-    await page.keyboard.press("KeyI");
+    await page.locator(".hud-inventory-btn").click();
     await page.waitForSelector(".hud-inventory-modal.hud-modal-open", { timeout: 10_000 });
 
     const modalOpen = await page.evaluate(() => document.querySelector(".hud-inventory-modal")?.classList.contains("hud-modal-open"));

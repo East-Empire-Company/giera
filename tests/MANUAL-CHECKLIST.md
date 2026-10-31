@@ -30,8 +30,8 @@ Software-covered items are regression-tested by `bun run pipeline` — manual pa
 
 ### Microphone (real mic, pl-PL)
 
-- [ ] Mic button requests permission; speaking a Polish word shows recognized text.
-- [ ] NPC dialog accepts voice input and echoes into the reply bubble.
+- [ ] Press E near Mina. The mic starts automatically; allow browser/OS permission if prompted.
+- [ ] Speaking Polish submits text; closing the dialog stops the mic.
 
 ### Touch (iPad / phone)
 
@@ -55,7 +55,7 @@ Software-covered items are regression-tested by `bun run pipeline` — manual pa
 | 5 | hotbar | 1-5 keys + click select slot, icon shows item |
 | 6 | craft | I opens modal, recipes craft, Esc closes |
 | 7 | split | mode button splits viewport, both players move |
-| 8 | music | music button cycles 5 tracks, audio audible |
+| 8 | music | quiet background during play; silent in pause menu; resumes on return |
 | 9 | tycoon collect | stars appear in HUD chip when standing on collector |
 | 10 | tycoon upgrade | upgrade pad consumes stars, tier chip increments |
 | 11 | trampoline | bounce launches to fixed height, repeatable |

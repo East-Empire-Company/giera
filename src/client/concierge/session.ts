@@ -29,6 +29,7 @@ export class ConciergeSession {
   private conversation: ConversationHandle | null = null;
   private menu: ConciergeMenu | null = null;
   private generation = 0;
+  private speechVolume = 1;
   private readonly avatar: ConciergeAvatar;
   private readonly tools: Record<string, ConciergeToolHandler>;
 
@@ -137,6 +138,7 @@ export class ConciergeSession {
         return;
       }
       this.conversation = conversation;
+      if (conversation.type === "voice") conversation.setVolume({ volume: this.speechVolume });
     } catch {
       if (this.isStale(generation)) return;
       this.setPhase("failed");
@@ -178,6 +180,11 @@ export class ConciergeSession {
     this.options.statusEl.textContent = STATUS_TEXT[phase];
     this.options.statusEl.dataset.phase = phase;
     this.options.onPhaseChange?.(phase);
+  }
+
+  setSpeechVolume(volume: number): void {
+    this.speechVolume = volume;
+    if (this.conversation?.type === "voice") this.conversation.setVolume({ volume });
   }
 
   setAvatarState(state: ConciergeAvatarState): void {

@@ -30,31 +30,46 @@ export const MUSIC_TRACKS: Record<string, string> = {
   celebration: "/assets/audio/music/celebration.mp3",
   landing_ambient: "/assets/audio/music/landing_ambient.mp3",
 };
+export const MUSIC_PLAYLIST = [
+  "sigma_protocol",
+  "drift_phonk",
+  "combat_phonk",
+  "adventure_island",
+  "little_farm",
+] as const satisfies readonly (keyof typeof MUSIC_TRACKS)[];
+const BACKGROUND_MUSIC_GAIN = 0.25;
 
 export class AudioManager {
   private context?: AudioContext;
   private master?: GainNode;
+  private musicBus?: GainNode;
+  private speechBus?: GainNode;
   private manifest?: Promise<void>;
   private readonly paths: Record<string, string> = {};
   private readonly buffers = new Map<string, Promise<AudioBuffer | null>>();
   private readonly sources = new Set<AudioBufferSourceNode>();
   private currentMusic?: { id: string; source: AudioBufferSourceNode; gain: GainNode };
-  private wantedMusic?: string;
+  private playlistActive = false;
+  private playlistIndex = 0;
+  private musicToken = 0;
   private voiceBusyUntil = 0;
   private masterVolume = 0.8;
-
+  private musicLevel = 1;
+  private speechLevel = 1;
   constructor() {
     Object.assign(this.paths, VOICE_PATHS);
     Object.assign(this.paths, MUSIC_TRACKS);
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden) {
-          if (this.wantedMusic) void this.playMusic(this.wantedMusic).catch(() => {});
+          if (this.playlistActive) void this.startPlaylistTrack(this.playlistIndex).catch(() => {});
           return;
         }
+        this.musicToken += 1;
+        if (this.currentMusic) this.currentMusic.source.onended = null;
+        this.currentMusic = undefined;
         for (const source of this.sources) source.stop();
         this.sources.clear();
-        this.currentMusic = undefined;
         void this.context?.suspend();
       });
     }
@@ -66,6 +81,12 @@ export class AudioManager {
       this.master = this.context.createGain();
       this.master.gain.value = this.masterVolume;
       this.master.connect(this.context.destination);
+      this.musicBus = this.context.createGain();
+      this.musicBus.gain.value = this.musicLevel;
+      this.musicBus.connect(this.master);
+      this.speechBus = this.context.createGain();
+      this.speechBus.gain.value = this.speechLevel;
+      this.speechBus.connect(this.master);
     }
     return this.context;
   }
@@ -95,6 +116,28 @@ export class AudioManager {
     if (this.master && this.context) {
       this.master.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
     }
+    return value;
+  }
+
+  get musicVolume(): number {
+    return this.musicLevel;
+  }
+
+  setMusicVolume(level: number): number {
+    const value = Math.min(1, Math.max(0, Number.isFinite(level) ? level : this.musicLevel));
+    this.musicLevel = value;
+    if (this.musicBus && this.context) this.musicBus.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
+    return value;
+  }
+
+  get speechVolume(): number {
+    return this.speechLevel;
+  }
+
+  setSpeechVolume(level: number): number {
+    const value = Math.min(1, Math.max(0, Number.isFinite(level) ? level : this.speechLevel));
+    this.speechLevel = value;
+    if (this.speechBus && this.context) this.speechBus.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
     return value;
   }
 
@@ -128,8 +171,8 @@ export class AudioManager {
   async play(id: string, options: { volume?: number; rate?: number } = {}): Promise<void> {
     if (document.hidden) return;
     const context = await this.unlock();
-    if (this.wantedMusic && !this.currentMusic && !document.hidden) {
-      void this.playMusic(this.wantedMusic).catch(() => {});
+    if (this.playlistActive && !this.currentMusic && !document.hidden) {
+      void this.startPlaylistTrack(this.playlistIndex).catch(() => {});
     }
     const buffer = await this.loadBuffer(id);
     if (!buffer || !this.master) return;
@@ -144,34 +187,48 @@ export class AudioManager {
     source.start();
   }
 
-  async playMusic(id: string): Promise<void> {
-    this.wantedMusic = id;
-    if (document.hidden || this.currentMusic?.id === id) return;
+  async playPlaylist(): Promise<void> {
+    this.playlistActive = true;
+    if (document.hidden || this.currentMusic) return;
+    await this.startPlaylistTrack(this.playlistIndex);
+  }
+  pausePlaylist(): void {
+    this.playlistActive = false;
+    this.musicToken += 1;
+    const music = this.currentMusic;
+    if (!music) return;
+    this.currentMusic = undefined;
+    music.source.onended = null;
+    this.sources.delete(music.source);
+    music.source.stop();
+  }
+
+  private async startPlaylistTrack(index: number): Promise<void> {
+    const token = ++this.musicToken;
+    const slot = index % MUSIC_PLAYLIST.length;
+    this.playlistIndex = slot;
+    if (document.hidden || !this.playlistActive) return;
     const context = await this.unlock();
-    if (document.hidden || this.wantedMusic !== id || this.currentMusic?.id === id) return;
+    if (token !== this.musicToken) return;
+    const id = MUSIC_PLAYLIST[slot];
     const buffer = await this.loadBuffer(id);
-    if (document.hidden || this.wantedMusic !== id || this.currentMusic?.id === id) return;
-    if (!buffer || !this.master) return;
+    if (token !== this.musicToken || document.hidden || !this.playlistActive) return;
+    if (!buffer || !this.musicBus) return;
     const now = context.currentTime;
     const source = context.createBufferSource();
     const gain = context.createGain();
     source.buffer = buffer;
-    source.loop = true;
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(1, now + 1.5);
-    source.connect(gain).connect(this.master);
-    const previous = this.currentMusic;
-    if (previous) {
-      previous.gain.gain.cancelScheduledValues(now);
-      previous.gain.gain.setValueAtTime(previous.gain.gain.value, now);
-      previous.gain.gain.linearRampToValueAtTime(0, now + 1.5);
-      previous.source.stop(now + 1.51);
-    }
+    gain.gain.linearRampToValueAtTime(BACKGROUND_MUSIC_GAIN, now + 1.2);
+    source.connect(gain).connect(this.musicBus);
     this.currentMusic = { id, source, gain };
     this.sources.add(source);
     source.onended = () => {
       this.sources.delete(source);
-      if (this.currentMusic?.source === source) this.currentMusic = undefined;
+      if (this.currentMusic?.source !== source) return;
+      this.currentMusic = undefined;
+      if (!this.playlistActive || document.hidden) return;
+      void this.startPlaylistTrack(slot + 1).catch(() => {});
     };
     source.start();
   }
@@ -183,14 +240,14 @@ export class AudioManager {
     const now = context.currentTime;
     music.gain.gain.cancelScheduledValues(now);
     music.gain.gain.setValueAtTime(music.gain.gain.value, now);
-    music.gain.gain.linearRampToValueAtTime(0.3, now + 0.25);
-    music.gain.gain.setValueAtTime(0.3, now + seconds);
-    music.gain.gain.linearRampToValueAtTime(1, now + seconds + 0.8);
+    music.gain.gain.linearRampToValueAtTime(BACKGROUND_MUSIC_GAIN * 0.3, now + 0.25);
+    music.gain.gain.setValueAtTime(BACKGROUND_MUSIC_GAIN * 0.3, now + seconds);
+    music.gain.gain.linearRampToValueAtTime(BACKGROUND_MUSIC_GAIN, now + seconds + 0.8);
   }
 
   async speak(npcId: string, text: string, volume = 1): Promise<void> {
-    if (document.hidden || volume <= 0.05) return;
-    if (!this.context || this.context.state !== "running" || !this.master) return;
+    if (document.hidden || volume <= 0.05 || this.speechVolume <= 0.05) return;
+    if (!this.context || this.context.state !== "running" || !this.speechBus) return;
     const context = this.context;
     let buffer: AudioBuffer | null = null;
     try {
@@ -215,7 +272,7 @@ export class AudioManager {
     const gain = context.createGain();
     source.buffer = buffer;
     gain.gain.value = Math.min(1, volume);
-    source.connect(gain).connect(this.master);
+    source.connect(gain).connect(this.speechBus);
     this.sources.add(source);
     source.onended = () => this.sources.delete(source);
     source.start(startAt);
@@ -226,7 +283,7 @@ export class AudioManager {
     if (typeof speechSynthesis === "undefined") return;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "pl-PL";
-    utterance.volume = Math.min(1, volume);
+    utterance.volume = Math.min(1, volume * this.speechVolume * this.masterVolume);
     const voice = speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith("pl"));
     if (voice) utterance.voice = voice;
     speechSynthesis.speak(utterance);

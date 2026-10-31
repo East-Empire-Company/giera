@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import "./style.css";
-import { AudioManager } from "./client/audio/sound";
+import { AudioManager, MUSIC_PLAYLIST } from "./client/audio/sound";
 import { MicController } from "./client/audio/mic";
 import { LanClient } from "./client/net/client";
 import { PlayerController } from "./client/entities/player";
@@ -12,6 +12,7 @@ import { ItemDropManager } from "./client/entities/drops";
 import { TrainingDummy } from "./client/entities/dummy";
 import { GameHUD } from "./client/game/hud";
 import { GameInventory } from "./client/game/inventory";
+import { createHousePlan, placeHousePlan } from "./client/game/house-builder";
 import { OBJECTIVE_STEPS, ObjectiveManager } from "./client/game/objectives";
 import { TycoonManager } from "./client/game/tycoon";
 import { tycoonSlotOrigin, tycoonTheme } from "./shared/tycoon-slots";
@@ -31,10 +32,10 @@ import { getSplitViewports, SplitScreenManager } from "./client/render/split-scr
 import { PostFX } from "./client/render/postfx";
 import { WorldRenderer } from "./client/render/worldRenderer";
 import { resolveWorldSeed } from "./client/startup/world-seed";
-import { LAUNCH_PLAYLIST, LaunchMenuController } from "./client/startup/launch-menu";
+import { LaunchMenuController } from "./client/startup/launch-menu";
 import { PauseMenuController } from "./client/game/pause-menu";
 import { ConciergeSession } from "./client/concierge/session";
-import type { ConciergeHost } from "./client/concierge/actions";
+import type { ConciergeHost, ConciergePlayer } from "./client/concierge/actions";
 import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "./shared/blocks";
 import { CHUNK_SIZE, chunkKey } from "./shared/chunk";
 import { raycastInteract } from "./shared/raycast";
@@ -130,13 +131,11 @@ function showBootError(error: unknown): void {
 }
 
 async function boot(): Promise<void> {
-  let currentTrackIndex = 0;
   let gameStarted = qa;
   let paused = false;
   let suppressGamepadJumpUntilRelease = false;
   const audio = new AudioManager();
-  const menuMusicId = LAUNCH_PLAYLIST[0].id;
-  void audio.preload([menuMusicId]).catch(() => {});
+  void audio.preload(MUSIC_PLAYLIST).catch(() => {});
   const renderer = createRenderer(canvas);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 900);
@@ -163,7 +162,6 @@ async function boot(): Promise<void> {
   scene.environment = assets.environment;
   scene.add(avatar.object);
   scene.add(avatar2.object);
-  void audio.preload(LAUNCH_PLAYLIST.slice(1).map((track) => track.id)).catch(() => {});
   let lanClient: LanClient | null = null;
   const crackTexture = new THREE.TextureLoader().load("/assets/textures/crackover.png");
   crackTexture.magFilter = THREE.NearestFilter;
@@ -322,14 +320,9 @@ async function boot(): Promise<void> {
   };
   if (qa) {
     const origPlay = audio.play.bind(audio);
-    const origPlayMusic = audio.playMusic.bind(audio);
     audio.play = (id: string, options: { volume?: number; rate?: number } = {}) => {
       qaState.events.push({ ev: "play", id, t: qaState.simTime });
       return origPlay(id, options);
-    };
-    audio.playMusic = (id: string) => {
-      qaState.events.push({ ev: "playMusic", id, t: qaState.simTime });
-      return origPlayMusic(id);
     };
   }
 
@@ -401,12 +394,6 @@ async function boot(): Promise<void> {
         setTimeout(() => resolve(false), 4000);
       });
     },
-    onCycleMusic: () => {
-      currentTrackIndex = (currentTrackIndex + 1) % LAUNCH_PLAYLIST.length;
-      const track = LAUNCH_PLAYLIST[currentTrackIndex];
-      audio.playMusic(track.id).catch(() => {});
-      return track.name;
-    },
   });
 
   const touchAvailable = "ontouchstart" in window || (navigator.maxTouchPoints ?? 0) > 0;
@@ -425,30 +412,24 @@ async function boot(): Promise<void> {
   const launchRoot = document.querySelector<HTMLElement>("#launch-menu");
   const launchStart = document.querySelector<HTMLButtonElement>("#launch-start");
   const launchMode = document.querySelector<HTMLButtonElement>("#launch-mode");
-  const launchMusic = document.querySelector<HTMLSelectElement>("#launch-music");
-  const launchMusicHint = document.querySelector<HTMLElement>("#launch-music-hint");
-  if (!launchRoot || !launchStart || !launchMode || !launchMusic) {
+  if (!launchRoot || !launchStart || !launchMode) {
     throw new Error("Giera launch menu elements are missing");
   }
   const launchMenu = new LaunchMenuController({
     root: launchRoot,
     startButton: launchStart,
     modeButton: launchMode,
-    musicSelect: launchMusic,
     onStart: (settings, source) => {
       gameStarted = true;
       suppressGamepadJumpUntilRelease = source === "gamepad";
-      currentTrackIndex = LAUNCH_PLAYLIST.findIndex((track) => track.id === settings.musicTrackId);
       splitScreen.setSplitScreen(settings.splitScreen);
       hud.modeBtn.textContent = settings.splitScreen ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
-      hud.setMusicTrack(LAUNCH_PLAYLIST[currentTrackIndex].name);
       canvas.inert = false;
       hudRoot?.removeAttribute("inert");
       if (hudRoot) hudRoot.style.visibility = "";
       canvas.focus({ preventScroll: true });
       attachTouchControls();
-      launchMusicHint?.classList.remove("launch-hint-active");
-      audio.playMusic(settings.musicTrackId).catch(() => {});
+      void audio.playPlaylist().catch(() => {});
       void conciergeSession.close("menu");
     },
   });
@@ -456,42 +437,79 @@ async function boot(): Promise<void> {
   const pauseRoot = document.querySelector<HTMLElement>("#pause-menu");
   const pauseResume = document.querySelector<HTMLButtonElement>("#pause-resume");
   const pauseMode = document.querySelector<HTMLButtonElement>("#pause-mode");
-  const pauseMusic = document.querySelector<HTMLSelectElement>("#pause-music");
   const launchConciergeSlot = document.querySelector<HTMLElement>("#launch-concierge-slot");
   const pauseConciergeSlot = document.querySelector<HTMLElement>("#pause-concierge-slot");
   const conciergePanel = document.querySelector<HTMLElement>("#concierge-panel");
   const conciergeCanvas = document.querySelector<HTMLCanvasElement>("#concierge-canvas");
   const conciergeStatus = document.querySelector<HTMLElement>("#concierge-status");
-  if (!pauseRoot || !pauseResume || !pauseMode || !pauseMusic || !launchConciergeSlot || !pauseConciergeSlot || !conciergePanel || !conciergeCanvas || !conciergeStatus) {
+  if (!pauseRoot || !pauseResume || !pauseMode || !launchConciergeSlot || !pauseConciergeSlot || !conciergePanel || !conciergeCanvas || !conciergeStatus) {
     throw new Error("Giera pause menu elements are missing");
   }
+
+  let houseBuildSequence = 0;
+  const playerForConcierge = (target: ConciergePlayer): PlayerController => target === "gniewko" ? player2 : player;
+  const houseSiteOccupied = (x: number, z: number, radius: number): boolean => {
+    const overlaps = (otherX: number, otherZ: number, otherRadius: number): boolean =>
+      Math.hypot(x - otherX, z - otherZ) < radius + otherRadius;
+    if (overlaps(player.position.x, player.position.z, 0.8) || overlaps(player2.position.x, player2.position.z, 0.8)) return true;
+    if (overlaps(trainingDummy.position.x, trainingDummy.position.z, 0.7)) return true;
+    for (const npc of npcManager.npcs) {
+      if (overlaps(npc.position.x, npc.position.z, npc.def.id === "papuga" ? 0.3 : 0.6)) return true;
+    }
+    const tycoonOccupied = (plot: TycoonManager): boolean => {
+      if (
+        overlaps(plot.collectorPadPos.x, plot.collectorPadPos.z, 1.2) ||
+        overlaps(plot.upgradePadPos.x, plot.upgradePadPos.z, 1.2) ||
+        overlaps(plot.trampolinePos.x, plot.trampolinePos.z, 1.2)
+      ) return true;
+      for (const body of plot.getCollisionBodies()) {
+        if (overlaps(body.x, body.z, body.radius)) return true;
+      }
+      return false;
+    };
+    if (tycoonOccupied(tycoon)) return true;
+    for (const plot of remoteTycoons.values()) if (tycoonOccupied(plot)) return true;
+    return false;
+  };
 
   const conciergeHost: ConciergeHost = {
     status: () => ({
       started: gameStarted,
       splitScreen: splitScreen.isSplitScreen,
-      musicTrackId: LAUNCH_PLAYLIST[currentTrackIndex].id,
-      musicName: LAUNCH_PLAYLIST[currentTrackIndex].name,
       volume: audio.volume,
       coins: tycoon.vaultCoins,
       tier: tycoon.dropperTier,
     }),
-    setMusicTrack: (id) => {
-      const index = LAUNCH_PLAYLIST.findIndex((track) => track.id === id);
-      if (index < 0) return LAUNCH_PLAYLIST[currentTrackIndex].name;
-      currentTrackIndex = index;
-      const track = LAUNCH_PLAYLIST[index];
-      hud.setMusicTrack(track.name);
-      pauseMenu.sync();
-      void audio.playMusic(track.id).catch(() => {});
-      return track.name;
-    },
     setSplitScreen: (enabled) => {
       splitScreen.setSplitScreen(enabled);
       hud.modeBtn.textContent = enabled ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
       pauseMenu.sync();
     },
     setVolume: (level) => audio.setVolume(level),
+    setJumpHeight: (target, height) => playerForConcierge(target).setJumpHeight(height),
+    setFlying: (target, enabled) => playerForConcierge(target).setFlying(enabled),
+    buildHouse: (target) => {
+      const actor = playerForConcierge(target);
+      const houseSeed = seed + houseBuildSequence++;
+      const plan = createHousePlan(
+        world,
+        { x: actor.position.x, z: actor.position.z, yaw: actor.yaw },
+        houseSeed,
+        houseSiteOccupied
+      );
+      if (!plan) return null;
+      const placed = placeHousePlan(plan, world, inventory);
+      if (!placed) return null;
+      for (const block of plan.blocks) lanClient?.sendBlockEdit(block.x, block.y, block.z, block.id);
+      if (objectives.recordAction("build_house", plan.blocks.length)) {
+        audio.play("objective_done");
+        audio.play("celebrate_win");
+      } else {
+        audio.play("craft_ok");
+      }
+      hud.updateObjective(objectives);
+      return { blocks: plan.blocks.length, style: plan.style };
+    },
     teleportToSpawn: () => {
       player.position.set(player.spawn[0], player.spawn[1], player.spawn[2]);
       player.velocity.set(0, 0, 0);
@@ -503,9 +521,7 @@ async function boot(): Promise<void> {
     root: pauseRoot,
     resumeButton: pauseResume,
     modeButton: pauseMode,
-    musicSelect: pauseMusic,
     getSplitScreen: () => splitScreen.isSplitScreen,
-    getTrackId: () => LAUNCH_PLAYLIST[currentTrackIndex].id,
     onResume: () => pauseMenu.close(),
     onToggleSplit: () => {
       const isSplit = splitScreen.toggle();
@@ -513,16 +529,9 @@ async function boot(): Promise<void> {
       audio.play("ui_open");
       pauseMenu.sync();
     },
-    onSelectTrack: (id) => {
-      const index = LAUNCH_PLAYLIST.findIndex((track) => track.id === id);
-      if (index < 0) return;
-      currentTrackIndex = index;
-      hud.setMusicTrack(LAUNCH_PLAYLIST[index].name);
-      void audio.playMusic(id).catch(() => {});
-      pauseMenu.sync();
-    },
     onOpen: () => {
       paused = true;
+      audio.pausePlaylist();
       keys.clear();
       isMining = false;
       if (document.pointerLockElement) document.exitPointerLock();
@@ -531,6 +540,7 @@ async function boot(): Promise<void> {
     },
     onClose: () => {
       paused = false;
+      void audio.playPlaylist().catch(() => {});
       void conciergeSession.close("menu");
       canvas.focus({ preventScroll: true });
     },
@@ -546,6 +556,23 @@ async function boot(): Promise<void> {
       if (reason === "hidden") pauseMenu.close();
     },
   });
+  const musicVolumeInputs = Array.from(document.querySelectorAll<HTMLInputElement>('[data-audio-volume="music"]'));
+  const speechVolumeInputs = Array.from(document.querySelectorAll<HTMLInputElement>('[data-audio-volume="speech"]'));
+  for (const input of musicVolumeInputs) {
+    input.value = String(audio.musicVolume);
+    input.addEventListener("input", () => {
+      const value = audio.setMusicVolume(input.valueAsNumber);
+      for (const sibling of musicVolumeInputs) sibling.value = String(value);
+    });
+  }
+  for (const input of speechVolumeInputs) {
+    input.value = String(audio.speechVolume);
+    input.addEventListener("input", () => {
+      const value = audio.setSpeechVolume(input.valueAsNumber);
+      conciergeSession.setSpeechVolume(value);
+      for (const sibling of speechVolumeInputs) sibling.value = String(value);
+    });
+  }
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
@@ -629,16 +656,6 @@ async function boot(): Promise<void> {
     qa: qa ? qaState : undefined,
   };
 
-  const startMenuMusic = (): void => {
-    if (gameStarted) return;
-    void audio.playMusic(menuMusicId).catch(() => {});
-  };
-  const resumeMenuMusic = (): void => {
-    window.removeEventListener("pointerdown", resumeMenuMusic);
-    window.removeEventListener("keydown", resumeMenuMusic);
-    window.removeEventListener("touchstart", resumeMenuMusic);
-    startMenuMusic();
-  };
 
   await world.loadArea(0, 0, 2);
   await splashVideo.settle();
@@ -661,22 +678,15 @@ async function boot(): Promise<void> {
   if (!qa) {
     launchMenu.show();
     void conciergeSession.open("launch");
-    startMenuMusic();
-    window.addEventListener("pointerdown", resumeMenuMusic);
-    window.addEventListener("keydown", resumeMenuMusic);
-    window.addEventListener("touchstart", resumeMenuMusic);
-    const syncMusicHint = (): void => {
-      if (!launchMusicHint) return;
-      if (launchMenu.isStarted) {
-        window.clearInterval(musicHintTimer);
-        launchMusicHint.classList.remove("launch-hint-active");
-        return;
-      }
-      const audible = audio.playingMusic === menuMusicId && document.visibilityState === "visible";
-      launchMusicHint.classList.toggle("launch-hint-active", !audible);
+    const enablePlaylist = (): void => {
+      window.removeEventListener("pointerdown", enablePlaylist);
+      window.removeEventListener("keydown", enablePlaylist);
+      window.removeEventListener("touchstart", enablePlaylist);
+      void audio.playPlaylist().catch(() => {});
     };
-    const musicHintTimer = window.setInterval(syncMusicHint, 700);
-    syncMusicHint();
+    window.addEventListener("pointerdown", enablePlaylist, { once: true });
+    window.addEventListener("keydown", enablePlaylist, { once: true });
+    window.addEventListener("touchstart", enablePlaylist, { once: true });
   }
   window.__GIERA__.ready = true;
   let streamCx = 0;
@@ -723,6 +733,7 @@ async function boot(): Promise<void> {
     } else if (e.code === "KeyE") {
       const nearest = npcManager.getNearestNPC(player.position.x, player.position.y, player.position.z, 3.0);
       if (nearest && !hud.isNpcDialogOpen()) {
+        if (document.pointerLockElement) document.exitPointerLock();
         audio.play("npc_chat_pop");
         hud.openNpcDialog({
           npcName: nearest.def.name,
@@ -775,7 +786,7 @@ async function boot(): Promise<void> {
 
   canvas.addEventListener("click", () => {
     if (!gameStarted) return;
-    if (qa) audio.playMusic(LAUNCH_PLAYLIST[currentTrackIndex].id).catch(() => {});
+    if (qa) void audio.playPlaylist().catch(() => {});
     if (!document.pointerLockElement) {
       canvas.requestPointerLock().catch(() => {});
     }
@@ -1019,6 +1030,10 @@ async function boot(): Promise<void> {
         ...npcBodies,
         { x: trainingDummy.position.x, y: trainingDummy.position.y, z: trainingDummy.position.z, radius: 0.4, height: 1.6 },
       ];
+      for (const body of tycoon.getCollisionBodies()) statics.push(body);
+      for (const remote of remoteTycoons.values()) {
+        for (const body of remote.getCollisionBodies()) statics.push(body);
+      }
       const resolve = (self: PlayerController, other: PlayerController): void => {
         const bodies = [...statics, { x: other.position.x, y: other.position.y, z: other.position.z, radius: 0.3, height: 1.8 }];
         const r = pushOutOfCylinders(self.position, 0.3, 1.8, bodies);

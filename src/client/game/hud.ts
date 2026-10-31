@@ -43,7 +43,7 @@ export class GameHUD {
   private readonly recipeList: HTMLElement;
   private inventoryOpen = false;
   readonly modeBtn: HTMLButtonElement;
-  private readonly musicBtn: HTMLButtonElement;
+  readonly inventoryBtn: HTMLButtonElement;
   readonly lanBtn: HTMLButtonElement;
   readonly controlsBtn: HTMLButtonElement;
   private readonly lanModal: HTMLElement;
@@ -68,7 +68,6 @@ export class GameHUD {
     onCraft?: (recipeId: string) => void;
     onToggleSplitScreen?: () => boolean;
     onConnectLan?: (url: string, room: string) => Promise<boolean>;
-    onCycleMusic?: () => string;
   }) {
     let root = document.querySelector<HTMLElement>("#hud-root");
     if (!root) {
@@ -170,15 +169,6 @@ export class GameHUD {
     this.lanBtn.textContent = "🌐 LAN";
     this.lanBtn.addEventListener("click", () => this.toggleLanModal(options.onConnectLan));
     this.container.appendChild(this.lanBtn);
-    // Music track button
-    this.musicBtn = document.createElement("button");
-    this.musicBtn.className = "hud-music-btn";
-    this.musicBtn.textContent = "🎵 Sigma Phonk";
-    this.musicBtn.addEventListener("click", () => {
-      const next = options.onCycleMusic?.() ?? "Sigma Phonk";
-      this.setMusicTrack(next);
-    });
-    this.container.appendChild(this.musicBtn);
 
     // LAN Modal
     this.lanModal = document.createElement("div");
@@ -217,6 +207,15 @@ export class GameHUD {
     this.controlsBtn.textContent = "🎮 Pad / Xbox";
     this.controlsBtn.addEventListener("click", () => this.toggleControlsModal());
     this.container.appendChild(this.controlsBtn);
+    this.inventoryBtn = document.createElement("button");
+    this.inventoryBtn.type = "button";
+    this.inventoryBtn.className = "hud-inventory-btn";
+    this.inventoryBtn.textContent = "🎒";
+    this.inventoryBtn.setAttribute("aria-label", "Ekwipunek i rzemiosło");
+    this.inventoryBtn.addEventListener("mousedown", (event) => event.stopPropagation());
+    this.inventoryBtn.addEventListener("touchstart", (event) => event.stopPropagation());
+    this.inventoryBtn.addEventListener("click", () => this.toggleInventory(options.inventory, options.onCraft));
+    this.container.appendChild(this.inventoryBtn);
 
     // Controls Modal
     this.controlsModal = document.createElement("div");
@@ -290,10 +289,6 @@ export class GameHUD {
     this.renderHotbar(options.inventory);
     this.updateObjective(options.objectives);
   }
-  setMusicTrack(name: string): void {
-    this.musicBtn.textContent = `🎵 ${name}`;
-  }
-
   isInventoryOpen(): boolean {
     return this.inventoryOpen;
   }
@@ -407,7 +402,6 @@ export class GameHUD {
     `;
 
     const closeBtn = this.npcModal.querySelector(".hud-modal-close");
-    closeBtn?.addEventListener("click", () => this.closeNpcDialog());
 
     const replyBubble = this.npcModal.querySelector<HTMLElement>("#npc-reply-bubble")!;
     const input = this.npcModal.querySelector<HTMLInputElement>("#npc-input")!;
@@ -416,23 +410,37 @@ export class GameHUD {
     const micStatus = this.npcModal.querySelector<HTMLElement>("#npc-mic-status")!;
 
     let isRecording = false;
-    micBtn.addEventListener("click", async () => {
-      if (!isRecording) {
-        const started = (await options.onMicStart?.()) ?? false;
-        if (started) {
-          isRecording = true;
-          micBtn.classList.add("recording");
-          micBtn.textContent = "🛑 Zatrzymaj mikrofon";
-          micStatus.textContent = "Słucham... Mów teraz do mikrofonu!";
-        }
-      } else {
-        isRecording = false;
-        options.onMicStop?.();
-        micBtn.classList.remove("recording");
-        micBtn.textContent = "🎙️ Mów teraz przez mikrofon";
-        micStatus.textContent = "Mikrofon zatrzymany";
-      }
+    const updateMic = (recording: boolean, status: string): void => {
+      isRecording = recording;
+      micBtn.classList.toggle("recording", recording);
+      micBtn.textContent = recording ? "🛑 Zatrzymaj mikrofon" : "🎙️ Mów teraz przez mikrofon";
+      micStatus.textContent = status;
+    };
+    const startMic = async (): Promise<void> => {
+      if (isRecording) return;
+      const started = (await options.onMicStart?.()) ?? false;
+      if (started) updateMic(true, "Słucham... Mów teraz do mikrofonu!");
+      else micStatus.textContent = "Mikrofon niedostępny";
+    };
+    const stopMic = (): void => {
+      if (!isRecording) return;
+      options.onMicStop?.();
+      updateMic(false, "Mikrofon zatrzymany");
+    };
+
+    closeBtn?.addEventListener("click", () => {
+      stopMic();
+      this.closeNpcDialog();
     });
+    micBtn.addEventListener("click", () => {
+      if (isRecording) stopMic();
+      else void startMic();
+    });
+    if (options.onMicStart) {
+      void startMic().then(() => {
+        if (isRecording && !this.npcDialogOpen) stopMic();
+      });
+    }
 
     const send = async (text: string) => {
       if (!text.trim()) return;
