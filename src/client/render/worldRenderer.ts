@@ -507,7 +507,11 @@ export class WorldRenderer {
         if ("error" in result) throw new Error(result.error);
         const chunk: ChunkView = { data: result.data, cx: position.cx, cy: position.cy, cz: position.cz };
         this.chunks.set(key, chunk);
-        if (this.applyChunkEdits(chunk)) {
+        const hasEdits = this.applyChunkEdits(chunk);
+        if (hasEdits) {
+          this.remeshChunk(position.cx, position.cy, position.cz);
+          this.remeshLoadedNeighbours(position.cx, position.cy, position.cz);
+        } else if (this.hasEditedNeighbour(position.cx, position.cy, position.cz)) {
           this.remeshChunk(position.cx, position.cy, position.cz);
         } else if (result.mesh.indices.length > 0) {
           this.attachChunkMesh(chunk, result.mesh, position);
@@ -685,6 +689,26 @@ export class WorldRenderer {
     if (ly >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy + 1, cz);
     if (lz < SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy, cz - 1);
     if (lz >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy, cz + 1);
+  }
+
+  private remeshLoadedNeighbours(cx: number, cy: number, cz: number): void {
+    this.remeshChunk(cx - 1, cy, cz);
+    this.remeshChunk(cx + 1, cy, cz);
+    this.remeshChunk(cx, cy - 1, cz);
+    this.remeshChunk(cx, cy + 1, cz);
+    this.remeshChunk(cx, cy, cz - 1);
+    this.remeshChunk(cx, cy, cz + 1);
+  }
+
+  private hasEditedNeighbour(cx: number, cy: number, cz: number): boolean {
+    return (
+      this.edits.has(chunkKey(cx - 1, cy, cz)) ||
+      this.edits.has(chunkKey(cx + 1, cy, cz)) ||
+      this.edits.has(chunkKey(cx, cy - 1, cz)) ||
+      this.edits.has(chunkKey(cx, cy + 1, cz)) ||
+      this.edits.has(chunkKey(cx, cy, cz - 1)) ||
+      this.edits.has(chunkKey(cx, cy, cz + 1))
+    );
   }
 
   remeshChunk(cx: number, cy: number, cz: number): void {

@@ -157,6 +157,29 @@ describe("worldRenderer edit ledger", () => {
     expect(world.getBlock(1, 2, 3)).not.toBe(10);
     world.dispose();
   });
+
+  it("keeps LAN edits out of the saved game", () => {
+    const world = buildWorld();
+    world.setBlock(1, 2, 3, 10, false);
+    expect(world.getBlock(1, 2, 3)).toBe(10);
+    expect(world.exportEdits()).toEqual({});
+    world.dispose();
+  });
+
+  it("saves mined air blocks", () => {
+    const world = buildWorld();
+    world.setBlock(1, 2, 3, 0);
+    expect(world.exportEdits()).toEqual({ "1,2,3": 0 });
+    world.dispose();
+  });
+
+  it("keeps local edits persisted when the LAN server echoes them back", () => {
+    const world = buildWorld();
+    world.setBlock(1, 2, 3, 10);
+    world.setBlock(1, 2, 3, 10, false);
+    expect(world.exportEdits()).toEqual({ "1,2,3": 10 });
+    world.dispose();
+  });
 });
 
 describe("worldRenderer smooth-normal neighbour remesh", () => {
