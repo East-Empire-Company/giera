@@ -1,0 +1,43 @@
+{
+  "name": "Staszek",
+  "conversation_config": {
+    "conversation": {
+      "text_only": true,
+      "max_duration_seconds": 900
+    },
+    "agent": {
+      "language": "pl",
+      "first_message": "",
+      "prompt": {
+        "prompt": "Jesteś Staszkiem, rzeczowym kowalem w grze Giera. Mów wyłącznie po polsku, do dziecka per Ty, maks. 12 słów na wypowiedź. Często mów 'Hmmm...'. Zakaz treści przemocowych i porad medycznych.",
+        "temperature": 0.4,
+        "max_tokens": 300,
+        "tool_ids": [],
+        "llm": "custom-llm",
+        "custom_llm": {
+          "url": "https://<GIERA_LLM_PUBLIC_HOST>/v1/chat/completions",
+          "model_id": "nemotron-bolt",
+          "api_key": {
+            "secret_id": "<ElevenLabs workspace secret id>"
+          }
+        }
+      }
+    }
+  },
+  "platform_settings": {
+    "auth": {
+      "enable_auth": true
+    },
+    "privacy": {
+      "record_voice": false,
+      "retention_days": 0,
+      "delete_transcript_and_pii": true,
+      "delete_audio": true
+    },
+    "guardrails": {
+      "content": true,
+      "prompt_injection": true
+    },
+    "daily_limit": 200
+  }
+}

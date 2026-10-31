@@ -1,0 +1,52 @@
+{
+  "name": "giera",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "assets:fetch": "bun scripts/fetch-assets.ts",
+    "assets:package": "bun scripts/fetch-assets.ts --package-only",
+    "assets:atlas": "bun scripts/build-atlas.ts",
+    "audio:generate": "bun scripts/generate-audio.ts",
+    "audio:validate": "bun scripts/generate-audio.ts --validate",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "serve": "bun server/index.ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "shots": "playwright test tests/e2e/shots.spec.ts",
+    "qa:session": "bun scripts/qa-visible-session.mjs",
+    "concierge:provision": "bun scripts/provision-concierge-agent.ts",
+    "pipeline": "bun scripts/pipeline.ts",
+    "pipeline:fast": "bun scripts/pipeline.ts --fast",
+    "goldens:init": "bun scripts/pipeline.ts --goldens-init",
+    "accept": "bun scripts/pipeline.ts --accept",
+    "manual": "bun scripts/pipeline.ts --manual",
+    "deploy": "bun scripts/deploy-homelab.ts"
+  },
+  "dependencies": {
+    "@elevenlabs/client": "^1.32.1",
+    "@openavatar/three": "^0.1.0",
+    "@types/three": "^0.186.0",
+    "n8ao": "^2.0.1",
+    "postprocessing": "^6.39.5",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.5.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "@types/pngjs": "^6.0.5",
+    "@vitest/coverage-v8": "^5.0.5",
+    "bun-types": "^1.4.4",
+    "ffmpeg-static": "^5.3.0",
+    "happy-dom": "^21.0.4",
+    "pixelmatch": "^8.0.0",
+    "pngjs": "^7.0.0",
+    "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

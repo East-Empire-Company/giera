@@ -1,0 +1,15 @@
+{
+  "type": "client",
+  "name": "share_map_hint",
+  "description": "Zwraca podpowiedź o najbliższym interesującym miejscu lub surowcu w okolicy.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "topic": {
+        "type": "string",
+        "description": "Temat pytania o okolicę (drzewa, kamień, woda, dom)."
+      }
+    },
+    "required": ["topic"]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Giera",
+  "short_name": "Giera",
+  "description": "Przeglądarkowa gra voxelowa 3D dla dzieci z kooperacją",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#132b26",
+  "theme_color": "#183b35",
+  "icons": [
+    {
+      "src": "/assets/ui/kenney/star.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    }
+  ]
+}

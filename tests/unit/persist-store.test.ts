@@ -1,0 +1,93 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  formatSaveData,
+  loadGameState,
+  parseSaveData,
+  saveGameState,
+  type SavedGameState,
+} from "../../src/client/persist/db";
+
+const state: SavedGameState = {
+  seed: 424242,
+  inventory: {
+    creative: false,
+    activeSlot: 4,
+    hotbar: [3, 9, 4, 10, 7, 6, 8, 2, 5],
+    blocks: { oak_log: 5, stone: 12 },
+    items: { stick: 4 },
+    chunkEdits: { "0,0,0": 9 },
+  },
+  objectives: { stepIndex: 2, currentProgress: 1 },
+  tycoon: { vaultCoins: 3, collectedStars: 17, dropperTier: 4 },
+  edits: { "0,0,0": 9 },
+  savedAt: "2026-10-24T18:30:00.000Z",
+};
+
+describe("save store", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("round-trips every save field through the storage fallback", async () => {
+    await saveGameState(state);
+    expect(await loadGameState()).toEqual(state);
+  });
+
+  it("accepts saves written before tycoon progress existed", () => {
+    const legacyState = { ...state };
+    delete legacyState.tycoon;
+
+    expect(parseSaveData(JSON.stringify(legacyState))).toEqual(legacyState);
+  });
+
+  it("rejects saves with malformed tycoon expansions", () => {
+    const malformed = {
+      ...state,
+      tycoon: { vaultCoins: 3, collectedStars: 17, dropperTier: 4, expansions: "invalid" as unknown as number[] },
+    };
+    expect(parseSaveData(JSON.stringify(malformed))).toBeNull();
+  });
+
+  it.each([1, 2])("loads prior saves without terrain metadata (%i)", (worldgenVersion) => {
+    const previousSave = { ...state, worldgenVersion };
+    expect(parseSaveData(JSON.stringify(previousSave))).toEqual(state);
+  });
+
+  it("returns null when nothing was saved", async () => {
+    expect(await loadGameState()).toBeNull();
+  });
+
+  it("does not throw when no storage backend exists", async () => {
+    vi.stubGlobal("localStorage", undefined);
+
+    await expect(saveGameState(state)).resolves.toBeUndefined();
+    expect(await loadGameState()).toBeNull();
+  });
+
+  it("rejects malformed and incomplete save payloads", () => {
+    expect(parseSaveData("{not json")).toBeNull();
+    expect(parseSaveData(JSON.stringify({ inventory: state.inventory }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ seed: "424242", inventory: state.inventory }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ seed: 1 }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ seed: 1, inventory: {} }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ seed: 1, inventory: state.inventory, objectives: {} }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ seed: 1, inventory: state.inventory, edits: "nope" }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, edits: [9] }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, inventory: [state.inventory] }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, inventory: { ...state.inventory, blocks: [1] } }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, inventory: { ...state.inventory, items: [1] } }))).toBeNull();
+    expect(parseSaveData(JSON.stringify({ ...state, tycoon: { ...state.tycoon, dropperTier: "4" } }))).toBeNull();
+  });
+
+  it("serializes save state without worldgen metadata", () => {
+    const raw = formatSaveData(state);
+    expect(JSON.parse(raw)).toEqual(state);
+    expect(JSON.parse(raw)).not.toHaveProperty("worldgenVersion");
+    expect(parseSaveData(raw)).toEqual(state);
+  });
+});

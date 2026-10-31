@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#183b35" />
+    <title>Giera</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="/assets/ui/kenney/star.png" />
+    <link rel="apple-touch-icon" href="/assets/ui/kenney/star.png" />
+    <link rel="preload" href="/assets/fonts/pixelify-sans-3.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/assets/fonts/pixelify-sans-1.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/assets/textures/atlas.webp" as="image" type="image/webp" crossorigin="anonymous" fetchpriority="high" />
+    <link rel="preload" href="/assets/textures/atlas-normal.webp" as="image" type="image/webp" crossorigin="anonymous" />
+    <link rel="preload" href="/assets/textures/atlas-orm.webp" as="image" type="image/webp" crossorigin="anonymous" />
+    <link rel="stylesheet" href="/assets/fonts/pixelify-sans.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body,
+      #app {
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        font-family: "Pixelify Sans", ui-monospace, monospace;
+        color: #f6eed7;
+        background:
+          radial-gradient(ellipse at 50% 30%, rgba(110, 156, 113, 0.36), transparent 58%),
+          linear-gradient(145deg, #102a29 0%, #315446 52%, #172f2a 100%);
+      }
+
+      #app {
+        position: relative;
+        isolation: isolate;
+      }
+
+      #game {
+        position: absolute;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+
+      .boot-status {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        visibility: visible;
+        background:
+          radial-gradient(ellipse at 50% 38%, rgba(40, 84, 71, 0.5), transparent 62%),
+          linear-gradient(160deg, #0f2823 0%, #1d4038 55%, #0d2320 100%);
+        transition: opacity 420ms ease, visibility 0s linear 420ms;
+      }
+
+      .boot-status.boot-ready {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .boot-video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        background: #0d2320;
+      }
+
+      .boot-status.boot-video-ready {
+        background: #0d2320;
+      }
+
+      .boot-status.boot-video-ready .boot-card {
+        display: none;
+      }
+
+      .boot-card {
+        display: grid;
+        justify-items: center;
+        gap: 14px;
+        width: min(430px, 100%);
+        padding: 28px clamp(20px, 5vw, 40px) 24px;
+        border: 2px solid #d6c79e;
+        border-radius: 18px;
+        background: linear-gradient(135deg, rgba(28, 62, 48, 0.97), rgba(18, 43, 39, 0.94));
+        box-shadow: 0 20px 48px rgba(7, 18, 15, 0.45), inset 0 1px rgba(255, 255, 255, 0.12);
+        text-align: center;
+      }
+
+      .boot-mark {
+        display: grid;
+        width: 78px;
+        height: 78px;
+        place-items: center;
+        border: 2px solid #f0dc9f;
+        border-radius: 16px;
+        background: linear-gradient(155deg, #dfa753, #a95f37);
+        box-shadow: inset 0 2px rgba(255, 255, 255, 0.24), 0 5px 0 #75432f;
+        color: #fff3cf;
+        font-size: 46px;
+        line-height: 1;
+        text-shadow: 2px 2px #6b3c32;
+      }
+
+      .boot-copy h1 {
+        margin: 0 0 6px;
+        color: #f8e4a9;
+        font-size: clamp(26px, 6vw, 34px);
+        letter-spacing: 0.04em;
+        line-height: 1.1;
+        text-shadow: 2px 2px #153126;
+      }
+
+      .boot-copy p {
+        min-height: 1.4em;
+        margin: 0;
+        color: #e3ecd8;
+        font-size: 15px;
+        line-height: 1.4;
+      }
+
+      .boot-track {
+        width: 100%;
+        height: 10px;
+        margin-top: 14px;
+        overflow: hidden;
+        border: 1px solid rgba(232, 225, 193, 0.8);
+        border-radius: 999px;
+        background: rgba(7, 23, 21, 0.72);
+      }
+
+      .boot-track span {
+        display: block;
+        width: 6%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #eab461, #d6df8f 70%, #a9d097);
+        box-shadow: 0 0 12px rgba(229, 193, 117, 0.6);
+        transition: width 180ms ease-out;
+      }
+
+      .boot-error {
+        pointer-events: auto;
+      }
+
+      .boot-error .boot-card {
+        border-color: #dc9273;
+        background: linear-gradient(135deg, rgba(74, 46, 39, 0.98), rgba(40, 34, 31, 0.96));
+      }
+
+      .boot-retry {
+        margin-top: 12px;
+        padding: 12px 22px;
+        font: inherit;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #2a1d12;
+        background: #eab461;
+        border: 0;
+        border-radius: 14px;
+        cursor: pointer;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-status {
+          transition-duration: 0.01ms;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app" aria-label="Giera">
+      <canvas id="game" tabindex="0" aria-label="Voxelowy świat Giera"></canvas>
+      <section id="launch-menu" class="launch-menu" role="dialog" aria-modal="true" aria-labelledby="launch-title" aria-describedby="launch-description" hidden>
+        <div class="launch-layout">
+          <div class="launch-panel">
+            <div class="launch-brand">
+              <img src="/assets/ui/kenney-adventure/minimap_icon_star_yellow.png" alt="" aria-hidden="true" />
+              <span>Giera</span>
+            </div>
+            <div class="launch-title">
+              <h1 id="launch-title">Przygoda czeka!</h1>
+            </div>
+            <p id="launch-description">Wybierz tryb gry i ruszaj do świata.</p>
+            <button id="launch-start" class="launch-start" type="button" aria-label="Rozpocznij grę" disabled>
+              <img class="launch-start-icon" src="/assets/ui/kenney-adventure/minimap_icon_star_yellow.png" alt="" aria-hidden="true" />
+              <span>Zaczynamy!</span>
+              <kbd aria-hidden="true">A</kbd>
+            </button>
+            <div class="launch-options">
+              <div class="launch-option">
+                <div class="launch-option-label">Gracze</div>
+                <button id="launch-mode" class="launch-mode" type="button" aria-label="Tryb dla 1 gracza" aria-pressed="false" disabled>1 gracz</button>
+              </div>
+            </div>
+            <details id="launch-audio-category" class="launch-audio-category">
+              <summary>🔊 Audio</summary>
+              <div class="launch-audio-controls">
+                <label for="launch-music-volume"><span aria-hidden="true">🎵</span> Muzyka</label>
+                <input id="launch-music-volume" data-audio-volume="music" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność muzyki" />
+                <label for="launch-speech-volume"><span aria-hidden="true">🗣️</span> Głosy</label>
+                <input id="launch-speech-volume" data-audio-volume="speech" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność głosów" />
+              </div>
+            </details>
+            <p class="launch-hint"><kbd>↑</kbd><kbd>↓</kbd> wybierz <span aria-hidden="true">·</span> <kbd>←</kbd><kbd>→</kbd> zmień <span aria-hidden="true">·</span> <kbd>A</kbd> start</p>
+          </div>
+          <div id="launch-concierge-slot" class="concierge-slot"></div>
+        </div>
+      </section>
+      <section id="pause-menu" class="launch-menu pause-menu" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
+        <div class="launch-layout">
+          <div class="launch-panel">
+            <div class="launch-brand">
+              <img src="/assets/ui/kenney-adventure/minimap_icon_star_yellow.png" alt="" aria-hidden="true" />
+              <span>Giera</span>
+            </div>
+            <div class="launch-title">
+              <h1 id="pause-title">Pauza</h1>
+            </div>
+            <p>Iskra czeka. Możesz jej coś powiedzieć.</p>
+            <button id="pause-resume" class="launch-start" type="button" aria-label="Wracam do gry">
+              <img class="launch-start-icon" src="/assets/ui/kenney-adventure/minimap_icon_star_yellow.png" alt="" aria-hidden="true" />
+              <span>Wracam do gry</span>
+              <kbd aria-hidden="true">Esc</kbd>
+            </button>
+            <div class="launch-options">
+              <div class="launch-option">
+                <div class="launch-option-label">Gracze</div>
+                <button id="pause-mode" class="launch-mode" type="button" aria-label="Tryb dla 1 gracza" aria-pressed="false">1 gracz</button>
+              </div>
+            </div>
+            <details id="pause-audio-category" class="launch-audio-category">
+              <summary>🔊 Audio</summary>
+              <div class="launch-audio-controls">
+                <label for="pause-music-volume"><span aria-hidden="true">🎵</span> Muzyka</label>
+                <input id="pause-music-volume" data-audio-volume="music" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność muzyki" />
+                <label for="pause-speech-volume"><span aria-hidden="true">🗣️</span> Głosy</label>
+                <input id="pause-speech-volume" data-audio-volume="speech" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność głosów" />
+              </div>
+            </details>
+          </div>
+          <div id="pause-concierge-slot" class="concierge-slot"></div>
+        </div>
+      </section>
+      <div id="concierge-panel" class="concierge" role="group" aria-label="Iskra" hidden>
+        <canvas id="concierge-canvas" class="concierge-canvas"></canvas>
+        <p id="concierge-status" class="concierge-status" role="status" aria-live="polite"></p>
+        <button type="button" id="concierge-retry" class="concierge-retry" hidden>Spróbuj ponownie</button>
+      </div>
+      <section id="boot-status" class="boot-status" role="status" aria-live="polite">
+        <video id="boot-video" class="boot-video" playsinline preload="auto" aria-hidden="true" hidden>
+          <source src="/assets/video/jakub-team-signal-4k60.mp4" type="video/mp4" />
+        </video>
+        <div class="boot-card">
+          <div class="boot-mark" aria-hidden="true">G</div>
+          <div class="boot-copy">
+            <h1>Giera</h1>
+            <p id="boot-message">Przygotowujemy świat do wspólnej zabawy.</p>
+            <div class="boot-track" aria-hidden="true"><span id="boot-progress"></span></div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
