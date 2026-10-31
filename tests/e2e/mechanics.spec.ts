@@ -44,6 +44,7 @@ type Giera = {
     activeSlot: number;
     toJSON: () => { activeSlot: number; blocks: Record<string, number>; items: Record<string, number> };
     addMinedBlock: (key: string, count?: number) => void;
+    setHotbarSlot: (index: number, blockId: number) => void;
   };
   npcManager: { npcs: { position: { x: number; y: number; z: number }; name: string }[] };
   splitScreen: { isSplitScreen: boolean };
@@ -423,6 +424,10 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     test.setTimeout(90_000);
     const errors = collectErrors(page);
     await boot(page);
+    await page.evaluate(([cId]) => {
+      const inv = (window as unknown as G).__GIERA__.inventory;
+      inv.setHotbarSlot(0, cId);
+    }, [COBBLESTONE_ID]);
     const spots = await findFlatSpots(page);
     const canvas = page.locator("canvas#game");
     let armed: ArmedTarget | null = null;
@@ -539,7 +544,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(errors).toEqual([]);
   });
 
-  test("craft: modal opens, five recipes, stick craft consumes inputs and yields output, Esc closes", async ({ page }) => {
+  test("craft: modal opens, nine recipes, stick craft consumes inputs and yields output, Esc closes", async ({ page }) => {
     test.setTimeout(60_000);
     const errors = collectErrors(page);
     await boot(page);
@@ -547,7 +552,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await page.keyboard.press("KeyI");
     await expect(page.locator(".hud-inventory-modal")).toHaveClass(/hud-modal-open/);
     const recipeButtons = page.locator(".hud-recipe-row .hud-craft-btn");
-    await expect(recipeButtons).toHaveCount(5);
+    await expect(recipeButtons).toHaveCount(9);
     await page.locator('.hud-craft-btn[data-id="stick"]').click();
     await page.waitForTimeout(200);
     const inv = await invOf(page);

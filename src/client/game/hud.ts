@@ -1,4 +1,4 @@
-import { BLOCK_BY_ID, type BlockId } from "../../shared/blocks";
+import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "../../shared/blocks";
 import type { GameInventory } from "./inventory";
 import type { ObjectiveManager } from "./objectives";
 import { RECIPES, canCraft, craftRecipe } from "./recipes";
@@ -19,8 +19,12 @@ export function getItemIcon(key: string): string {
     iron_ore: "/assets/textures/tiles/default_mineral_iron.png",
     gold_ore: "/assets/textures/tiles/default_mineral_gold.png",
     stick: "/assets/textures/tiles/oak_planks.png",
+    wooden_pickaxe: "/assets/ui/icons/pick_iron.png",
+    wooden_sword: "/assets/ui/icons/axe_iron.png",
+    stone_pickaxe: "/assets/ui/icons/pick_iron.png",
     stone_axe: "/assets/ui/icons/axe_iron.png",
     iron_pickaxe: "/assets/ui/icons/pick_iron.png",
+    iron_axe: "/assets/ui/icons/axe_iron.png",
     iron_sword: "/assets/ui/icons/axe_iron.png",
   };
   return icons[key] ?? "/assets/ui/kenney/star.png";
@@ -41,6 +45,8 @@ export class GameHUD {
   private readonly inventoryModal: HTMLElement;
   private readonly inventoryGrid: HTMLElement;
   private readonly recipeList: HTMLElement;
+  private readonly equipmentSlotsEl: HTMLElement;
+  private readonly equipmentItemsEl: HTMLElement;
   private inventoryOpen = false;
   readonly modeBtn: HTMLButtonElement;
   readonly inventoryBtn: HTMLButtonElement;
@@ -254,17 +260,32 @@ export class GameHUD {
     this.inventoryModal.innerHTML = `
       <div class="hud-modal-card">
         <header class="hud-modal-header">
-          <h2>Ekwipunek i Rzemiosło</h2>
+          <div class="hud-modal-tabs">
+            <button type="button" class="hud-modal-tab hud-tab-crafting active" data-tab="crafting">🛠️ Rzemiosło</button>
+            <button type="button" class="hud-modal-tab hud-tab-equipment" data-tab="equipment">🛡️ Ekwipunek i Narzędzia</button>
+          </div>
           <button class="hud-modal-close" aria-label="Zamknij [Esc]">✕</button>
         </header>
         <div class="hud-modal-body">
-          <div class="hud-section">
-            <h3>Zasoby</h3>
-            <div class="hud-resources-grid"></div>
+          <div class="hud-tab-pane hud-pane-crafting active">
+            <div class="hud-section">
+              <h3>Zasoby</h3>
+              <div class="hud-resources-grid"></div>
+            </div>
+            <div class="hud-section">
+              <h3>Receptury</h3>
+              <div class="hud-recipes-list"></div>
+            </div>
           </div>
-          <div class="hud-section">
-            <h3>Receptury</h3>
-            <div class="hud-recipes-list"></div>
+          <div class="hud-tab-pane hud-pane-equipment" style="display: none;">
+            <div class="hud-section">
+              <h3>Założony Ekwipunek</h3>
+              <div class="hud-equipment-slots"></div>
+            </div>
+            <div class="hud-section">
+              <h3>Dostępne Narzędzia i Broń</h3>
+              <div class="hud-equipment-items"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -282,10 +303,24 @@ export class GameHUD {
 
     this.inventoryGrid = this.inventoryModal.querySelector(".hud-resources-grid")!;
     this.recipeList = this.inventoryModal.querySelector(".hud-recipes-list")!;
-
+    this.equipmentSlotsEl = this.inventoryModal.querySelector(".hud-equipment-slots")!;
+    this.equipmentItemsEl = this.inventoryModal.querySelector(".hud-equipment-items")!;
     const closeBtn = this.inventoryModal.querySelector(".hud-modal-close");
     closeBtn?.addEventListener("click", () => this.setInventoryOpen(false));
 
+    const tabs = this.inventoryModal.querySelectorAll<HTMLButtonElement>(".hud-modal-tab");
+    const panes = this.inventoryModal.querySelectorAll<HTMLElement>(".hud-tab-pane");
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const target = tab.dataset.tab;
+        tabs.forEach((t) => t.classList.toggle("active", t === tab));
+        panes.forEach((pane) => {
+          const isTarget = pane.classList.contains(`hud-pane-${target}`);
+          pane.style.display = isTarget ? "" : "none";
+          pane.classList.toggle("active", isTarget);
+        });
+      });
+    });
     this.renderHotbar(options.inventory);
     this.updateObjective(options.objectives);
   }
@@ -532,17 +567,41 @@ export class GameHUD {
     inventory.hotbar.forEach((blockId, index) => {
       const slot = document.createElement("div");
       slot.className = `hud-hotbar-slot ${index === inventory.activeSlot ? "active" : ""}`;
+      slot.setAttribute("draggable", "true");
+      slot.dataset.slotIndex = String(index);
       const def = BLOCK_BY_ID[blockId as BlockId];
       const tileName = def?.tiles.top ?? def?.tiles.side ?? "dirt";
+      const isEmpty = !blockId || (blockId as number) === 0;
       slot.innerHTML = `
         <span class="hud-slot-num">${index + 1}</span>
-        <img class="hud-slot-icon" src="/assets/textures/tiles/${tileName}.png" alt="" />
-        <span class="hud-slot-name">${def?.name ?? "Blok"}</span>
+        ${isEmpty ? "" : `<img class="hud-slot-icon" src="/assets/textures/tiles/${tileName}.png" alt="" />`}
+        <span class="hud-slot-name">${isEmpty ? "" : (def?.name ?? "Blok")}</span>
       `;
       slot.addEventListener("click", () => {
         inventory.selectSlot(index);
         this.renderHotbar(inventory);
       });
+
+      slot.addEventListener("dragstart", (e) => {
+        e.dataTransfer?.setData("text/plain", String(index));
+      });
+
+      slot.addEventListener("dragover", (e) => {
+        e.preventDefault();
+      });
+
+      slot.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const fromStr = e.dataTransfer?.getData("text/plain");
+        if (fromStr !== undefined && fromStr !== "") {
+          const fromIdx = parseInt(fromStr, 10);
+          if (!Number.isNaN(fromIdx) && fromIdx !== index) {
+            inventory.swapHotbarSlots(fromIdx, index);
+            this.renderHotbar(inventory);
+          }
+        }
+      });
+
       this.hotbar.appendChild(slot);
     });
   }
@@ -615,6 +674,62 @@ export class GameHUD {
 
       this.recipeList.appendChild(recipeEl);
     });
+
+    // Equipment items (wearable tools/weapons)
+    if (this.equipmentItemsEl && this.equipmentSlotsEl) {
+      this.equipmentSlotsEl.innerHTML = "";
+      this.equipmentItemsEl.innerHTML = "";
+
+      const WEARABLE_ITEMS = [
+        { id: "wooden_pickaxe", name: "Drewniany Kilof", type: "Narzędzie" },
+        { id: "wooden_sword", name: "Drewniany Miecz", type: "Broń" },
+        { id: "stone_pickaxe", name: "Kamienny Kilof", type: "Narzędzie" },
+        { id: "stone_axe", name: "Kamienny Toporek", type: "Narzędzie" },
+        { id: "iron_pickaxe", name: "Żelazny Kilof", type: "Narzędzie" },
+        { id: "iron_axe", name: "Żelazny Topór", type: "Narzędzie" },
+        { id: "iron_sword", name: "Żelazny Miecz", type: "Broń" },
+      ];
+
+      const availableEquipment = WEARABLE_ITEMS.filter((item) => (state.items[item.id] ?? 0) > 0);
+
+      // Active in-hand equipment slot
+      const inHandDef = WEARABLE_ITEMS.find((w) => (state.items[w.id] ?? 0) > 0);
+      const equippedSlot = document.createElement("div");
+      equippedSlot.className = "hud-equip-slot";
+      equippedSlot.innerHTML = `
+        <span class="hud-equip-label">W ręce:</span>
+        <div class="hud-equip-box">
+          ${inHandDef ? `<img src="${getItemIcon(inHandDef.id)}" alt="${inHandDef.name}" /><span>${inHandDef.name}</span>` : `<span class="hud-equip-empty">Pusta ręka</span>`}
+        </div>
+      `;
+      this.equipmentSlotsEl.appendChild(equippedSlot);
+
+      if (availableEquipment.length === 0) {
+        this.equipmentItemsEl.innerHTML = `<p class="hud-empty">Brak wytworzonych narzędzi. Wytwórz kilof lub miecz w zakładce Rzemiosło!</p>`;
+      } else {
+        availableEquipment.forEach((tool) => {
+          const itemEl = document.createElement("div");
+          itemEl.className = "hud-equip-item-card";
+          itemEl.innerHTML = `
+            <img class="hud-equip-icon" src="${getItemIcon(tool.id)}" alt="" />
+            <div class="hud-equip-info">
+              <span class="hud-equip-name">${tool.name}</span>
+              <span class="hud-equip-type">${tool.type} (x${state.items[tool.id]})</span>
+            </div>
+            <button type="button" class="hud-equip-btn">Załóż</button>
+          `;
+          itemEl.querySelector(".hud-equip-btn")?.addEventListener("click", () => {
+            // Put in active hotbar slot
+            const blockId = (BLOCK_ID as Record<string, number>)[tool.id] ?? BLOCK_ID.air;
+            if (blockId > 0) {
+              inventory.setHotbarSlot(inventory.activeSlot, blockId as BlockId);
+              this.renderHotbar(inventory);
+            }
+          });
+          this.equipmentItemsEl.appendChild(itemEl);
+        });
+      }
+    }
   }
 
   showNpcSpeech(npcId: string, name: string, text: string, durationSec = 5): void {

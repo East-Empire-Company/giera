@@ -8,11 +8,11 @@ describe("GameHUD child-friendly visual interface", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
   });
-  it("renders large image icons for every hotbar slot without requiring reading", () => {
+  it("renders large image icons for occupied hotbar slots without requiring reading", () => {
     const inventory = new GameInventory();
+    inventory.addMinedBlock("oak_log", 1);
     const objectives = new ObjectiveManager();
     const hud = new GameHUD({ inventory, objectives });
-
     const slots = document.querySelectorAll(".hud-hotbar-slot");
     expect(slots.length).toBe(9);
 
@@ -35,7 +35,46 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(document.querySelector(".hud-inventory-modal")?.classList.contains("hud-modal-open")).toBe(true);
     expect(document.querySelectorAll(".hud-recipe-row").length).toBeGreaterThan(0);
   });
+  it("renders equipment tab in the inventory/crafting modal", () => {
+    const inventory = new GameInventory();
+    const objectives = new ObjectiveManager();
+    const hud = new GameHUD({ inventory, objectives });
 
+    const tabs = document.querySelectorAll(".hud-modal-tab");
+    expect(tabs.length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelector(".hud-tab-crafting")).not.toBeNull();
+    expect(document.querySelector(".hud-tab-equipment")).not.toBeNull();
+  });
+
+  it("supports dragging and dropping items between hotbar slots", () => {
+    const inventory = new GameInventory();
+    inventory.addMinedBlock("oak_log", 2);
+    inventory.addMinedBlock("stone", 2);
+    const objectives = new ObjectiveManager();
+    const hud = new GameHUD({ inventory, objectives });
+
+    const slots = document.querySelectorAll(".hud-hotbar-slot");
+    expect(slots[0].getAttribute("draggable")).toBe("true");
+
+    // Simulate drag start on slot 0 and drop on slot 2
+    const dataTransfer = {
+      data: {} as Record<string, string>,
+      setData(k: string, v: string) { this.data[k] = v; },
+      getData(k: string) { return this.data[k]; },
+    };
+
+    const dragStartEvent = new Event("dragstart", { bubbles: true }) as any;
+    dragStartEvent.dataTransfer = dataTransfer;
+    slots[0].dispatchEvent(dragStartEvent);
+
+    const dropEvent = new Event("drop", { bubbles: true }) as any;
+    dropEvent.dataTransfer = dataTransfer;
+    dropEvent.preventDefault = () => {};
+    slots[2].dispatchEvent(dropEvent);
+
+    expect(inventory.hotbar[2]).toBe(7); // oak_log moved to slot 2
+    expect(inventory.hotbar[0]).toBe(0); // slot 0 now empty
+  });
   it("provides visual Xbox controller mapping modal", () => {
     const inventory = new GameInventory();
     const objectives = new ObjectiveManager();

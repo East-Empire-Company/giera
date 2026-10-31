@@ -13,15 +13,15 @@ export type SerializedInventory = {
 };
 
 export const DEFAULT_HOTBAR: BlockId[] = [
-  BLOCK_ID.cobblestone,
-  BLOCK_ID.planks,
-  BLOCK_ID.dirt,
-  BLOCK_ID.glass,
-  BLOCK_ID.oak_log,
-  BLOCK_ID.sand,
-  BLOCK_ID.oak_leaves,
-  BLOCK_ID.stone,
-  BLOCK_ID.grass,
+  BLOCK_ID.air,
+  BLOCK_ID.air,
+  BLOCK_ID.air,
+  BLOCK_ID.air,
+  BLOCK_ID.air,
+  BLOCK_ID.air,
+  BLOCK_ID.air,
+  BLOCK_ID.air,
+  BLOCK_ID.air,
 ];
 
 export class GameInventory {
@@ -49,7 +49,7 @@ export class GameInventory {
   }
 
   get activeBlockId(): BlockId {
-    return this.hotbar[this.activeSlot] ?? BLOCK_ID.dirt;
+    return this.hotbar[this.activeSlot] ?? BLOCK_ID.air;
   }
 
   selectSlot(slotIndex: number): void {
@@ -69,6 +69,25 @@ export class GameInventory {
     }
   }
 
+  swapHotbarSlots(fromIndex: number, toIndex: number): void {
+    if (
+      fromIndex >= 0 &&
+      fromIndex < this.hotbar.length &&
+      toIndex >= 0 &&
+      toIndex < this.hotbar.length
+    ) {
+      const temp = this.hotbar[fromIndex];
+      this.hotbar[fromIndex] = this.hotbar[toIndex];
+      this.hotbar[toIndex] = temp;
+    }
+  }
+
+  clearHotbarSlot(slotIndex: number): void {
+    if (slotIndex >= 0 && slotIndex < this.hotbar.length) {
+      this.hotbar[slotIndex] = BLOCK_ID.air;
+    }
+  }
+
   getBlockCount(key: string): number {
     return this.blocks[key] ?? 0;
   }
@@ -79,6 +98,13 @@ export class GameInventory {
 
   addMinedBlock(key: string, count = 1): void {
     this.blocks[key] = (this.blocks[key] ?? 0) + count;
+    const blockId = (BLOCK_ID as Record<string, number>)[key];
+    if (blockId && blockId > 0 && !this.hotbar.includes(blockId as BlockId)) {
+      const emptyIdx = this.hotbar.indexOf(BLOCK_ID.air);
+      if (emptyIdx !== -1) {
+        this.hotbar[emptyIdx] = blockId as BlockId;
+      }
+    }
   }
 
   consumeBlockForPlacement(key: string): boolean {

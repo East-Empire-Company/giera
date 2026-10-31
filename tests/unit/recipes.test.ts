@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import { RECIPES, canCraft, craftRecipe, type InventoryState } from "../../src/client/game/recipes";
 
 describe("crafting recipes", () => {
-  it("defines all 5 Polish sandbox recipes with correct costs and outputs", () => {
-    expect(RECIPES.map((r) => r.id)).toEqual([
-      "stick",
-      "planks",
-      "stone_axe",
-      "iron_pickaxe",
-      "iron_sword",
-    ]);
+  it("defines expanded Polish sandbox recipes with correct costs and outputs", () => {
+    const ids = RECIPES.map((r) => r.id);
+    expect(ids).toContain("stick");
+    expect(ids).toContain("planks");
+    expect(ids).toContain("stone_pickaxe");
+    expect(ids).toContain("stone_axe");
+    expect(ids).toContain("iron_pickaxe");
+    expect(ids).toContain("iron_axe");
+    expect(ids).toContain("iron_sword");
+    expect(ids).toContain("wooden_pickaxe");
+    expect(ids).toContain("wooden_sword");
 
     const stick = RECIPES.find((r) => r.id === "stick")!;
     expect(stick.name).toBe("Patyk");

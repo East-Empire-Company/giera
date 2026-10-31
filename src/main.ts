@@ -247,13 +247,13 @@ async function boot(): Promise<void> {
         placeZ < pBox.maxZ;
 
       const activeBlock = inventory.activeBlockId;
+      if (!activeBlock || (activeBlock as number) === 0) return;
       const cx = Math.floor(placeX / 16);
       const cz = Math.floor(placeZ / 16);
       const cKey = chunkKey(cx, 0, cz);
 
       if (!blockCollides && inventory.canEditChunk(cKey)) {
         world.setBlock(placeX, placeY, placeZ, activeBlock);
-        inventory.recordChunkEdit(cKey);
         lanClient?.sendBlockEdit(placeX, placeY, placeZ, activeBlock);
         audio.play("place_block");
         gameplayVfx.emit("place", new THREE.Vector3(placeX + 0.5, placeY + 0.5, placeZ + 0.5));

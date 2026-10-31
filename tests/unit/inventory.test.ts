@@ -2,11 +2,37 @@ import { describe, expect, it } from "vitest";
 import { GameInventory } from "../../src/client/game/inventory";
 
 describe("GameInventory", () => {
-  it("initializes default 9 hotbar slots with starter blocks", () => {
-    const inv = new GameInventory({ creative: true });
+  it("initializes 9 empty hotbar slots by default", () => {
+    const inv = new GameInventory();
     expect(inv.hotbar.length).toBe(9);
-    expect(inv.activeSlot).toBe(0);
-    expect(inv.activeBlockId).toBeGreaterThan(0);
+    expect(inv.hotbar.every((slot) => slot === 0)).toBe(true);
+    expect(inv.activeBlockId).toBe(0);
+  });
+
+  it("fills hotbar slots when gathering materials", () => {
+    const inv = new GameInventory();
+    inv.addMinedBlock("oak_log", 1);
+    expect(inv.hotbar[0]).toBe(7); // oak_log block id = 7
+    inv.addMinedBlock("stone", 1);
+    expect(inv.hotbar[1]).toBe(2); // stone block id = 2
+    // duplicate mined block does not occupy another hotbar slot
+    inv.addMinedBlock("oak_log", 3);
+    expect(inv.hotbar[0]).toBe(7);
+    expect(inv.hotbar[1]).toBe(2);
+    expect(inv.hotbar[2]).toBe(0);
+  });
+
+  it("swaps items between hotbar slots", () => {
+    const inv = new GameInventory({ hotbar: [7, 2, 0, 0, 0, 0, 0, 0, 0] as any });
+    inv.swapHotbarSlots(0, 1);
+    expect(inv.hotbar[0]).toBe(2);
+    expect(inv.hotbar[1]).toBe(7);
+  });
+
+  it("clears a hotbar slot (dragging out)", () => {
+    const inv = new GameInventory({ hotbar: [7, 2, 0, 0, 0, 0, 0, 0, 0] as any });
+    inv.clearHotbarSlot(0);
+    expect(inv.hotbar[0]).toBe(0);
   });
 
   it("cycles hotbar slots via scroll or direct selection", () => {

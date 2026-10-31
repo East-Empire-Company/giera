@@ -756,6 +756,109 @@ body {
   gap: 8px;
   min-height: 48px;
 }
+.hud-modal-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.hud-modal-tab {
+  background: rgba(20, 36, 30, 0.6);
+  border: 1px solid #2e4d3f;
+  border-radius: 8px 8px 0 0;
+  color: #8faea0;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.hud-modal-tab.active {
+  background: rgba(30, 56, 46, 0.95);
+  border-color: #578a70;
+  color: #ffde8a;
+  border-bottom: 2px solid #79d79a;
+}
+
+.hud-equipment-slots {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.hud-equip-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hud-equip-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(18, 34, 28, 0.8);
+  border: 2px solid #578a70;
+  border-radius: 8px;
+  color: #ffde8a;
+}
+
+.hud-equip-box img {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+}
+
+.hud-equipment-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hud-equip-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(22, 42, 35, 0.8);
+  border: 1px solid #2e4d3f;
+  border-radius: 8px;
+}
+
+.hud-equip-icon {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+}
+
+.hud-equip-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  margin-left: 12px;
+}
+
+.hud-equip-name {
+  color: #ffde8a;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.hud-equip-type {
+  color: #799a88;
+  font-size: 12px;
+}
+
+.hud-equip-btn {
+  background: #2e7d32;
+  border: 1px solid #81c784;
+  border-radius: 6px;
+  color: #ffffff;
+  padding: 6px 14px;
+  font-weight: bold;
+  cursor: pointer;
+}
 
 .hud-inv-item {
   display: flex;
