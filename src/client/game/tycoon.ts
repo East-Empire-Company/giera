@@ -186,6 +186,13 @@ export class TycoonManager {
     return this.plot?.getCollisionBodies() ?? EMPTY_COLLISION_BODIES;
   }
   registerShadowMaterials(register: (material: THREE.Material) => void): void {
+    this.object?.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mat = mesh.material;
+      if (Array.isArray(mat)) mat.forEach((entry) => register(entry));
+      else if (mat) register(mat);
+    });
     this.plot?.registerShadowMaterials(register);
     this.expansion.registerShadowMaterials(register);
   }

@@ -85,6 +85,22 @@ describe("TycoonManager", () => {
     expect(colors).toEqual([0x38a169, 0xd69e2e, 0xe53e3e, 0xf6e05e]);
   });
 
+  it("registers shadow materials for pads, plot and expansions", () => {
+    const scene = new THREE.Scene();
+    const tycoon = new TycoonManager({ x: 0, y: 50, z: 0 }, scene);
+    const registered: THREE.Material[] = [];
+    tycoon.registerShadowMaterials((mat) => registered.push(mat));
+
+    // 4 pad/trampoline meshes + expansion meshes + plot materials
+    expect(registered.length).toBeGreaterThanOrEqual(4);
+    const padColors = registered
+      .filter((m): m is THREE.MeshStandardMaterial => m instanceof THREE.MeshStandardMaterial)
+      .map((m) => m.color.getHex());
+    expect(padColors).toContain(0x38a169); // collector pad
+    expect(padColors).toContain(0xd69e2e); // upgrade pad
+    expect(padColors).toContain(0xf6e05e); // trampoline mesh
+  });
+
   it("animates a remote player's plot without producing or banking coins", () => {
     const scene = new THREE.Scene();
     const tycoon = new TycoonManager({ x: 0, y: 50, z: 0 }, scene);
