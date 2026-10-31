@@ -695,21 +695,26 @@ export class GameHUD {
       const availableEquipment = WEARABLE_ITEMS.filter((item) => (state.items[item.id] ?? 0) > 0);
 
       // Active in-hand equipment slot
-      const inHandDef = WEARABLE_ITEMS.find((w) => (state.items[w.id] ?? 0) > 0);
+      const inHandDef = WEARABLE_ITEMS.find((w) => w.id === inventory.equippedTool);
       const equippedSlot = document.createElement("div");
       equippedSlot.className = "hud-equip-slot";
       equippedSlot.innerHTML = `
         <span class="hud-equip-label">W ręce:</span>
         <div class="hud-equip-box">
-          ${inHandDef ? `<img src="${getItemIcon(inHandDef.id)}" alt="${inHandDef.name}" /><span>${inHandDef.name}</span>` : `<span class="hud-equip-empty">Pusta ręka</span>`}
+          ${inHandDef ? `<img src="${getItemIcon(inHandDef.id)}" alt="${inHandDef.name}" /><span>${inHandDef.name}</span><button type="button" class="hud-unequip-btn" style="margin-left: 8px; padding: 2px 8px; font-size: 12px; cursor: pointer;">Zdejmij</button>` : `<span class="hud-equip-empty">Pusta ręka</span>`}
         </div>
       `;
+      equippedSlot.querySelector(".hud-unequip-btn")?.addEventListener("click", () => {
+        inventory.equipTool(null);
+        this.renderInventoryModal(inventory, onCraft);
+      });
       this.equipmentSlotsEl.appendChild(equippedSlot);
 
       if (availableEquipment.length === 0) {
         this.equipmentItemsEl.innerHTML = `<p class="hud-empty">Brak wytworzonych narzędzi. Wytwórz kilof lub miecz w zakładce Rzemiosło!</p>`;
       } else {
         availableEquipment.forEach((tool) => {
+          const isEquipped = inventory.equippedTool === tool.id;
           const itemEl = document.createElement("div");
           itemEl.className = "hud-equip-item-card";
           itemEl.innerHTML = `
@@ -718,15 +723,11 @@ export class GameHUD {
               <span class="hud-equip-name">${tool.name}</span>
               <span class="hud-equip-type">${tool.type} (x${state.items[tool.id]})</span>
             </div>
-            <button type="button" class="hud-equip-btn">Załóż</button>
+            <button type="button" class="hud-equip-btn ${isEquipped ? "equipped" : ""}">${isEquipped ? "Założone ✓" : "Załóż"}</button>
           `;
           itemEl.querySelector(".hud-equip-btn")?.addEventListener("click", () => {
-            // Put in active hotbar slot
-            const blockId = (BLOCK_ID as Record<string, number>)[tool.id] ?? BLOCK_ID.air;
-            if (blockId > 0) {
-              inventory.setHotbarSlot(inventory.activeSlot, blockId as BlockId);
-              this.renderHotbar(inventory);
-            }
+            inventory.equipTool(isEquipped ? null : tool.id);
+            this.renderInventoryModal(inventory, onCraft);
           });
           this.equipmentItemsEl.appendChild(itemEl);
         });

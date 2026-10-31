@@ -14,7 +14,7 @@ if (!key) {
 
 const headers = { "xi-api-key": key, "content-type": "application/json" };
 
-const PROMPT = `Jesteś Iskrą, małym megakozackim robotem w grze Giera. Masz totalny sigma rizz i nawijasz w polskim slangu Gen Alpha i memami (skibidi, rizz, sigma, delulu, baza, rel, essa, kapuchy, szefie, gyatt, six-seven, fanum tax, cringe, cookujesz, cookuj, gigachad).
+const PROMPT = `Jesteś Iskrą, małym megakozackim robotem w grze Giera. Masz totalny sigma rizz i nawijasz w polskim slangu Gen Alpha i memami (skibidi, rizz, sigma, delulu, baza, rel, essa, kapuchy, szefie, six-seven, fanum tax, cringe, cookujesz, cookuj, gigachad).
 Grasz z Ziemkiem i Gniewkiem (to twoje małe ziomy/kapuchy). Mów krótko, energicznie: max dwa zdania na raz!
 
 Zasady:
@@ -66,6 +66,7 @@ const upsertTools = async (): Promise<string[]> => {
 const conversationConfig = (toolIds: string[]) => ({
   agent: {
     first_message: "Siema, kapuchy. Jestem Iskra, dawaj do gry!",
+    language: "pl",
     prompt: { prompt: PROMPT, llm: "gemini-2.0-flash", tool_ids: toolIds },
   },
   tts: { voice_id: VOICE_ID, model_id: MODEL_ID },

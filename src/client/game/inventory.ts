@@ -10,6 +10,7 @@ export type SerializedInventory = {
   blocks: Record<string, number>;
   items: Record<string, number>;
   chunkEdits: Record<string, number>;
+  equippedTool?: string | null;
 };
 
 export const DEFAULT_HOTBAR: BlockId[] = [
@@ -28,6 +29,7 @@ export class GameInventory {
   public creative: boolean;
   public activeSlot: number;
   public hotbar: BlockId[];
+  public equippedTool: string | null = null;
   blocks: Record<string, number>;
   items: Record<string, number>;
   private chunkEdits: Record<string, number>;
@@ -39,10 +41,12 @@ export class GameInventory {
     blocks?: Record<string, number>;
     items?: Record<string, number>;
     chunkEdits?: Record<string, number>;
+    equippedTool?: string | null;
   }) {
     this.creative = options?.creative ?? true;
     this.activeSlot = options?.activeSlot ?? 0;
     this.hotbar = options?.hotbar ? [...options.hotbar] : [...DEFAULT_HOTBAR];
+    this.equippedTool = options?.equippedTool ?? null;
     this.blocks = { ...(options?.blocks ?? {}) };
     this.items = { ...(options?.items ?? {}) };
     this.chunkEdits = { ...(options?.chunkEdits ?? {}) };
@@ -86,6 +90,18 @@ export class GameInventory {
     if (slotIndex >= 0 && slotIndex < this.hotbar.length) {
       this.hotbar[slotIndex] = BLOCK_ID.air;
     }
+  }
+
+  equipTool(toolId: string | null): boolean {
+    if (toolId === null) {
+      this.equippedTool = null;
+      return true;
+    }
+    if ((this.items[toolId] ?? 0) <= 0) {
+      return false;
+    }
+    this.equippedTool = toolId;
+    return true;
   }
 
   getBlockCount(key: string): number {
@@ -173,6 +189,7 @@ export class GameInventory {
       blocks: { ...this.blocks },
       items: { ...this.items },
       chunkEdits: { ...this.chunkEdits },
+      equippedTool: this.equippedTool,
     };
   }
 

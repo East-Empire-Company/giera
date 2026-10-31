@@ -46,6 +46,25 @@ describe("GameInventory", () => {
     expect(inv.hotbar[0]).toBe(9); // planks filled into empty slot, depleted oak_log removed
   });
 
+  it("equips and un-equips wearable tools or weapons", () => {
+    const inv = new GameInventory({
+      items: { wooden_pickaxe: 1 },
+    });
+    expect(inv.equippedTool).toBeNull();
+    const ok = inv.equipTool("wooden_pickaxe");
+    expect(ok).toBe(true);
+    expect(inv.equippedTool).toBe("wooden_pickaxe");
+
+    // Unequip
+    inv.equipTool(null);
+    expect(inv.equippedTool).toBeNull();
+
+    // Cannot equip unowned tool
+    const fail = inv.equipTool("iron_sword");
+    expect(fail).toBe(false);
+    expect(inv.equippedTool).toBeNull();
+  });
+
   it("cycles hotbar slots via scroll or direct selection", () => {
     const inv = new GameInventory();
     inv.selectSlot(3);

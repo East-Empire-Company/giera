@@ -46,6 +46,28 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(document.querySelector(".hud-tab-equipment")).not.toBeNull();
   });
 
+  it("allows equipping and unequipping wearable tools in the equipment tab", () => {
+    const inventory = new GameInventory({ items: { wooden_pickaxe: 1 } });
+    const objectives = new ObjectiveManager();
+    const hud = new GameHUD({ inventory, objectives });
+
+    hud.setInventoryOpen(true, inventory);
+    const equipTab = document.querySelector<HTMLButtonElement>(".hud-tab-equipment");
+    equipTab?.click();
+
+    const equipBtn = document.querySelector<HTMLButtonElement>(".hud-equip-btn");
+    expect(equipBtn).not.toBeNull();
+    expect(equipBtn?.textContent).toBe("Załóż");
+
+    equipBtn?.click();
+    expect(inventory.equippedTool).toBe("wooden_pickaxe");
+    expect(document.querySelector(".hud-equip-box")?.textContent).toContain("Drewniany Kilof");
+
+    const unequipBtn = document.querySelector<HTMLButtonElement>(".hud-unequip-btn");
+    unequipBtn?.click();
+    expect(inventory.equippedTool).toBeNull();
+    expect(document.querySelector(".hud-equip-box")?.textContent).toContain("Pusta ręka");
+  });
   it("supports dragging and dropping items between hotbar slots", () => {
     const inventory = new GameInventory();
     inventory.addMinedBlock("oak_log", 2);
