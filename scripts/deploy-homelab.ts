@@ -15,7 +15,7 @@ const NAMESPACE = "giera";
 const TAG = "giera";
 const PUBLIC_URL = `https://${TAG}.tail5d39b4.ts.net`;
 
-type Step = { step: string; status: "pass" | "fail"; detail: string; ms: number };
+type Step = { step: string; status: "pass" | "warn" | "fail"; detail: string; ms: number };
 const steps: Step[] = [];
 
 function run(cmd: string, args: string[], env?: Record<string, string>): { ok: boolean; out: string } {
@@ -309,12 +309,14 @@ await step("elevenlabs voice secret", () => {
   const res = run("kubectl", ["-n", NAMESPACE, "create", "secret", "generic", "elevenlabs-auth", "--from-literal=ELEVEN_LABS_API_KEY=" + key]);
   return { ok: res.ok, detail: res.out };
 });
-must(
-  await step("tailscale acl tag + funnel", async () => {
-    const res = await ensureTagFunnel();
-    return res;
-  })
-);
+const aclOk = await step("tailscale acl tag + funnel", async () => {
+  const res = await ensureTagFunnel();
+  return res;
+});
+if (!aclOk) {
+  steps[steps.length - 1].status = "warn";
+  console.warn("ACL mutation skipped; the public URL check below is the gate");
+}
 
 must(
   await step("registry pull secret", () => {

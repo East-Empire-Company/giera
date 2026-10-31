@@ -27,16 +27,6 @@ await rm(www, { recursive: true, force: true });
 await mkdir(www, { recursive: true });
 await cp(dist, www, { recursive: true });
 
-const splashVideo = Bun.file(join(dist, "assets", "video", "splash.mp4"));
-const splashTarget = join(here, "Assets", "SplashVideo.mp4");
-if (await splashVideo.exists()) {
-  await Bun.write(splashTarget, splashVideo);
-  console.log("splash video -> Assets/SplashVideo.mp4");
-} else {
-  await rm(splashTarget, { force: true });
-  console.log("no splash video in dist; UWP splash falls back to the logo card");
-}
-
 let files = 0;
 let bytes = 0;
 for await (const entry of new Bun.Glob("**/*").scan({ cwd: www, onlyFiles: true })) {

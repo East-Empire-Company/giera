@@ -17,6 +17,7 @@
     "test:e2e": "playwright test",
     "shots": "playwright test tests/e2e/shots.spec.ts",
     "qa:session": "bun scripts/qa-visible-session.mjs",
+    "concierge:provision": "bun scripts/provision-concierge-agent.ts",
     "pipeline": "bun scripts/pipeline.ts",
     "pipeline:fast": "bun scripts/pipeline.ts --fast",
     "goldens:init": "bun scripts/pipeline.ts --goldens-init",

@@ -2,6 +2,10 @@ import { chromium } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { MUSIC_PLAYLIST } from "../src/client/audio/sound.ts";
+
+const PLAYLIST = new Set(MUSIC_PLAYLIST);
+const isPlaylistTrack = (id) => typeof id === "string" && PLAYLIST.has(id);
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:5173";
 const GAME_URL = `${BASE}/?seed=424242`;
@@ -84,9 +88,44 @@ const ensureHarness = async () => {
     };
   });
 };
+const pauseMenuVisible = () =>
+  page.evaluate(() => {
+    const root = document.querySelector("#pause-menu");
+    return !!root && !root.hidden;
+  });
+// Escape closes the top overlay; with no overlay open it opens the pause menu,
+// which silences the playlist. Resume whenever that happened.
+const closeOverlays = async () => {
+  await page.keyboard.press("Escape");
+  await pause(500);
+  if (!(await pauseMenuVisible())) return false;
+  await page.keyboard.press("Escape");
+  await pause(400);
+  return true;
+};
+const musicSnapshot = () =>
+  page.evaluate(() => {
+    const root = document.querySelector("#pause-menu");
+    return {
+      track: window.__GIERA__.audio.playingMusic ?? null,
+      paused: !!root && !root.hidden,
+    };
+  });
+const waitForMusic = async (timeoutMs = 8000) => {
+  const deadline = Date.now() + timeoutMs;
+  let state = await musicSnapshot();
+  while (Date.now() < deadline) {
+    state = await musicSnapshot();
+    if (state.track && !state.paused) return state;
+    await pause(200);
+  }
+  return state;
+};
 await pause(2500);
 await page.screenshot({ path: resolve(EVIDENCE, "visible-01-boot.png") });
 check("boot", true, "heroes loaded");
+const bootMusic = await waitForMusic();
+check("background music plays a playlist track", isPlaylistTrack(bootMusic.track), bootMusic.track ?? "silent");
 
 // WALK
 const walkBefore = await page.evaluate(() => window.__GIERA__.player.position.toArray());
@@ -334,11 +373,14 @@ check(
   crafted === null ? craftable === 0 : craftAfter > craftBefore,
   crafted === null ? "no affordable recipe yet (materials missing)" : `crafted ${crafted}, inventory ${craftBefore}->${craftAfter}`
 );
-await page.keyboard.press("Escape");
-await pause(500);
+const pausedByEscape = await closeOverlays();
 
-const playlistTrack = await page.evaluate(() => window.__GIERA__.audio.playingMusic);
-check("background music playlist", playlistTrack === "sigma_protocol", playlistTrack ?? "silent");
+const playlistMusic = await waitForMusic();
+check(
+  "background music playlist",
+  isPlaylistTrack(playlistMusic.track) && !playlistMusic.paused,
+  `${playlistMusic.track ?? "silent"}${pausedByEscape ? " (pause menu opened, resumed)" : ""}`
+);
 
 // SPLIT SCREEN
 await page.click(".hud-mode-btn");
@@ -415,8 +457,7 @@ if (npc) {
   const replied = reply.length > 0 && reply !== npcState.reply;
   const detail = `buttons=${npcState.buttons} reply="${reply.slice(0, 50)}"${replied ? "" : ` state=${JSON.stringify(npcState)}`}`;
   check("NPC conversation", npcState.buttons > 0 && replied, detail);
-  await page.keyboard.press("Escape");
-  await pause(400);
+  await closeOverlays();
 }
 
 // COMBAT: training dummy
@@ -523,8 +564,7 @@ await pause(900);
 await page.screenshot({ path: resolve(EVIDENCE, "visible-15-lan.png") });
 const lanOpen = await page.evaluate(() => !!document.querySelector(".hud-lan-modal.hud-modal-open"));
 check("LAN modal opens", lanOpen, `open=${lanOpen}`);
-await page.keyboard.press("Escape");
-await pause(400);
+await closeOverlays();
 
 check("no page errors during the session", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
 

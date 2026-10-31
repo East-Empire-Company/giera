@@ -12,8 +12,9 @@ CONSOLE="${CONSOLE:?set CONSOLE to the console address shown in Dev Home}"
 PORTAL_USER="${PORTAL_USER:?set PORTAL_USER}"
 PORTAL_PASS="${PORTAL_PASS:?set PORTAL_PASS}"
 BASE="https://${CONSOLE}:11443"
-APPX="${APPX:-AppPackages/Giera.Uwp_1.0.0.0_x64_Test/Giera.Uwp_1.0.0.0_x64.msix}"
-PFN_PREFIX="Giera.Uwp_1.0.0.0_x64__"
+cd "$(dirname "${BASH_SOURCE[0]}")"
+APPX="${APPX:-}"
+PFN_PREFIX="Giera.Uwp_"
 
 portal() {
   curl -sk -u "${PORTAL_USER}:${PORTAL_PASS}" "$@"
@@ -25,6 +26,10 @@ packages() {
 
 case "${1:-install}" in
   install)
+    if [ -z "$APPX" ]; then
+      APPX="$(find AppPackages -type f \( -name '*.msix' -o -name '*.msixbundle' -o -name '*.appx' -o -name '*.appxbundle' \) -print 2>/dev/null | sort | tail -1)"
+      [ -n "$APPX" ] || { echo "no package found under AppPackages; run build-giera.ps1 first" >&2; exit 1; }
+    fi
     [ -f "$APPX" ] || { echo "missing package: $APPX" >&2; exit 1; }
     portal -F "file=@${APPX}" \
       "${BASE}/api/app/packagemanager/package?package=$(basename "$APPX")"
@@ -32,7 +37,7 @@ case "${1:-install}" in
     packages | tr ',' '\n' | grep -E 'PackageFullName|Name' || true
     ;;
   log)
-    full="$(packages | tr ',' '\n' | grep -o "${PFN_PREFIX}[a-z0-9]*" | head -1)"
+    full="$(packages | tr ',' '\n' | grep -o "${PFN_PREFIX}[A-Za-z0-9._]*" | head -1)"
     [ -n "$full" ] || { echo "Giera.Uwp is not installed on the console" >&2; exit 1; }
     portal -G "${BASE}/api/filesystem/apps/file" \
       --data-urlencode "knownfolderid=LocalAppData" \
