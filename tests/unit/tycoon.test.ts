@@ -12,7 +12,7 @@ describe("TycoonManager", () => {
   });
 
   it("restores durable tycoon progress", () => {
-    const saved = { vaultCoins: 3, collectedStars: 17, dropperTier: 4 };
+    const saved = { vaultCoins: 3, collectedStars: 17, dropperTier: 4, expansions: [0] };
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
 
     tycoon.restore(saved);
@@ -240,5 +240,85 @@ describe("TycoonManager", () => {
       bounces++;
     }, 0);
     expect(bounces).toBe(1);
+  });
+
+  it("charges stars for an expansion circle and keeps it owned", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(25);
+    expect(tycoon.buyExpansion(0)).toBe(true);
+    expect(tycoon.collectedStars).toBe(5);
+    expect(tycoon.toJSON().expansions).toEqual([0]);
+    expect(tycoon.buyExpansion(0)).toBe(false);
+    expect(tycoon.collectedStars).toBe(5);
+  });
+
+  it("refuses an expansion circle the player cannot afford", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(4);
+    expect(tycoon.buyExpansion(0)).toBe(false);
+    expect(tycoon.collectedStars).toBe(4);
+  });
+
+  it("buys expansion circles in order", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(60);
+    expect(tycoon.buyNextExpansion()).toBe(true);
+    expect(tycoon.toJSON().expansions).toEqual([0]);
+    expect(tycoon.buyNextExpansion()).toBe(true);
+    expect(tycoon.toJSON().expansions).toEqual([0, 1]);
+  });
+
+  it("buys an expansion circle when the player walks onto it", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(25);
+    const slot = tycoon.expansionSlots[0];
+    let expanded = -1;
+    tycoon.update(
+      0.1,
+      { x: -3 + slot.x, y: 50, z: 8 + slot.z },
+      undefined,
+      undefined,
+      undefined,
+      0,
+      (index) => {
+        expanded = index;
+      }
+    );
+    expect(expanded).toBe(0);
+    expect(tycoon.collectedStars).toBe(5);
+  });
+
+  it("restores saves made before expansion circles existed", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.restore({ vaultCoins: 1, collectedStars: 2, dropperTier: 3 });
+    expect(tycoon.toJSON().expansions).toEqual([]);
+    expect(tycoon.collectedStars).toBe(2);
+  });
+
+  it("prices the next expansion before it is bought", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(60);
+    expect(tycoon.nextExpansionSlot?.cost).toBe(20);
+    expect(tycoon.buyExpansion(tycoon.nextExpansionSlot!.index)).toBe(true);
+    expect(tycoon.nextExpansionSlot?.cost).toBe(30);
+    tycoon.addStars(1000);
+    for (const slot of tycoon.expansionSlots) tycoon.buyExpansion(slot.index);
+    expect(tycoon.nextExpansionSlot).toBeUndefined();
+  });
+
+  it("reports the paid price of the expansion it bought", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(60);
+    expect(tycoon.buyNextExpansionWithPrice()).toEqual({ bought: true, stars: 40, cost: 20 });
+    expect(tycoon.buyNextExpansionWithPrice()).toEqual({ bought: true, stars: 10, cost: 30 });
+    tycoon.addStars(1000);
+    for (const slot of tycoon.expansionSlots) tycoon.buyExpansion(slot.index);
+    expect(tycoon.buyNextExpansionWithPrice()).toEqual({ bought: false, stars: 790, cost: 0 });
+  });
+
+  it("reports the price of an expansion the player cannot afford", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.addStars(5);
+    expect(tycoon.buyNextExpansionWithPrice()).toEqual({ bought: false, stars: 5, cost: 20 });
   });
 });

@@ -39,6 +39,7 @@ const host: ConciergeHost = {
   setJumpHeight: () => 0,
   setFlying: () => false,
   buildHouse: () => null,
+  buyExpansion: () => ({ bought: false, stars: 0, cost: 20 }),
   teleportToSpawn: () => {},
   reload: () => {},
 };

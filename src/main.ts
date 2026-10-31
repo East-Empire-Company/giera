@@ -19,6 +19,7 @@ import { tycoonSlotOrigin, tycoonTheme } from "./shared/tycoon-slots";
 import { TouchController } from "./client/input/touch";
 import { loadGameState, saveGameState } from "./client/persist/db";
 import { attachSplashVideo, type SplashVideoHandle } from "./client/startup/splash-video";
+import { MenuStage } from "./client/startup/menu-stage";
 import { pushOutOfCylinders } from "./shared/entity-collision";
 import { smoothGroundOffset } from "./shared/mesher";
 import { collideCamera } from "./shared/camera-collision";
@@ -281,6 +282,12 @@ async function boot(): Promise<void> {
 
   world.applySavedEdits(saved);
 
+  const camSolid = (x: number, y: number, z: number): boolean => {
+    const id = world.getBlock(x, y, z);
+    return id !== BLOCK_ID.air && id !== BLOCK_ID.water && id !== BLOCK_ID.oak_leaves;
+  };
+  const menuStage = new MenuStage({ radius: 13, height: 8.5, speed: 0.06, startAngle: 0.7, solid: camSolid });
+
   const loadAreaBatched = async (
     worldX: number,
     worldZ: number,
@@ -327,7 +334,9 @@ async function boot(): Promise<void> {
 
   const spawnRemoteTycoon = (id: string, name: string, slot: number): void => {
     if (remoteTycoons.has(id)) return;
-    remoteTycoons.set(id, makeTycoon(slot, name));
+    const remote = makeTycoon(slot, name);
+    remote.registerShadowMaterials((material) => cascadedShadows?.registerMaterial(material));
+    remoteTycoons.set(id, remote);
   };
 
   const clearRemoteTycoons = (): void => {
@@ -497,6 +506,9 @@ async function boot(): Promise<void> {
       for (const body of plot.getCollisionBodies()) {
         if (overlaps(body.x, body.z, body.radius)) return true;
       }
+      for (const slot of plot.expansionSlots) {
+        if (overlaps(plot.origin.x + slot.x, plot.origin.z + slot.z, 1.2)) return true;
+      }
       return false;
     };
     if (tycoonOccupied(tycoon)) return true;
@@ -541,6 +553,9 @@ async function boot(): Promise<void> {
       }
       hud.updateObjective(objectives);
       return { blocks: plan.blocks.length, style: plan.style };
+    },
+    buyExpansion: () => {
+      return tycoon.buyNextExpansionWithPrice();
     },
     teleportToSpawn: () => {
       player.position.set(player.spawn[0], player.spawn[1], player.spawn[2]);
@@ -948,9 +963,10 @@ async function boot(): Promise<void> {
     }
     if (!gameStarted) {
       launchMenu.pollGamepad();
-      camera.position.copy(player.getCameraPosition(5.5));
-      camera.lookAt(player.getCameraTarget());
-      postfx.noteFrame(realDelta);
+      const menuDelta = qa ? 1 / 60 : Math.min(0.05, realDelta);
+      tycoon.updateVisuals(menuDelta);
+      menuStage.update(menuDelta, camera, tycoon.origin);
+      postfx.noteFrame(menuDelta);
       postfx.renderSolo();
       previous = now;
       return;
@@ -1179,10 +1195,6 @@ async function boot(): Promise<void> {
     sky.update(elapsed, player.position);
     world.updateWater(elapsed);
 
-    const camSolid = (x: number, y: number, z: number): boolean => {
-      const id = world.getBlock(x, y, z);
-      return id !== BLOCK_ID.air && id !== BLOCK_ID.water && id !== BLOCK_ID.oak_leaves;
-    };
     camera.position.copy(player.getCameraPosition(5.5));
     {
       const t = player.getCameraTarget();
@@ -1302,7 +1314,11 @@ async function boot(): Promise<void> {
         player.onGround = false;
         audio.play("jump", { rate: 1.5, volume: 1.0 });
       },
-      player.velocity.y
+      player.velocity.y,
+      () => {
+        audio.play("celebrate_win");
+        gameplayVfx.emit("collect", new THREE.Vector3(player.position.x, player.position.y + 0.6, player.position.z));
+      }
     );
 
     if (splitScreen.isSplitScreen) {
@@ -1324,7 +1340,11 @@ async function boot(): Promise<void> {
           player2.onGround = false;
           audio.play("jump", { rate: 1.5, volume: 1.0 });
         },
-        player2.velocity.y
+        player2.velocity.y,
+        () => {
+          audio.play("celebrate_win");
+          gameplayVfx.emit("collect", new THREE.Vector3(player2.position.x, player2.position.y + 0.6, player2.position.z));
+        }
       );
     }
     hud.updateTycoon(tycoon.collectedStars, tycoon.vaultCoins, tycoon.dropperTier, tycoon.upgradeCost);

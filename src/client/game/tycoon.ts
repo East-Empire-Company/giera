@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { TycoonPlot } from "./tycoon-plot";
+import { TycoonExpansion, EXPANSION_SLOTS, type ExpansionSlot } from "./tycoon-expansion";
 import type { TycoonTheme } from "../../shared/tycoon-slots";
 import type { Cylinder } from "../../shared/entity-collision";
 
@@ -31,6 +32,7 @@ export type SerializedTycoon = {
   vaultCoins: number;
   collectedStars: number;
   dropperTier: number;
+  expansions?: number[];
 };
 
 const RISING_VELOCITY_LIMIT = 1;
@@ -84,6 +86,7 @@ export class TycoonManager {
   private pulseTime = 0;
 
   readonly object?: THREE.Group;
+  readonly expansion: TycoonExpansion;
   private collectorMesh?: THREE.Mesh;
   private upgradeMesh?: THREE.Mesh;
   private trampolineMesh?: THREE.Mesh;
@@ -105,9 +108,19 @@ export class TycoonManager {
       return Number.isFinite(y) ? y + 1 - this.origin.y : 0;
     };
 
+    const expansionSlots = blockedAt
+      ? EXPANSION_SLOTS.filter((slot) => !blockedAt(this.origin.x + slot.x, this.origin.z + slot.z))
+      : undefined;
+    this.expansion = new TycoonExpansion({
+      groundAt: groundOffset,
+      slots: expansionSlots,
+      render: Boolean(scene),
+    });
+
     if (scene) {
       this.object = new THREE.Group();
       this.object.position.copy(this.origin);
+      this.object.add(this.expansion.group);
 
       const padGeo = new THREE.CylinderGeometry(0.85, 0.95, 0.1, 24);
 
@@ -174,6 +187,7 @@ export class TycoonManager {
   }
   registerShadowMaterials(register: (material: THREE.Material) => void): void {
     this.plot?.registerShadowMaterials(register);
+    this.expansion.registerShadowMaterials(register);
   }
 
   get upgradeCost(): number {
@@ -185,6 +199,7 @@ export class TycoonManager {
       vaultCoins: this.vaultCoins,
       collectedStars: this.collectedStars,
       dropperTier: this.dropperTier,
+      expansions: this.expansion.ownedIndices(),
     };
   }
 
@@ -192,10 +207,42 @@ export class TycoonManager {
     this.vaultCoins = progress.vaultCoins;
     this.collectedStars = progress.collectedStars;
     this.dropperTier = progress.dropperTier;
+    this.expansion.restore(progress.expansions ?? []);
+    this.expansion.refresh(this.collectedStars);
   }
 
   addStars(amount: number): void {
     this.collectedStars += amount;
+    this.expansion.refresh(this.collectedStars);
+  }
+
+  get expansionSlots(): readonly ExpansionSlot[] {
+    return this.expansion.slots;
+  }
+
+  get nextExpansionSlot(): ExpansionSlot | undefined {
+    return this.expansion.slots.find((slot) => !this.expansion.isOwned(slot.index));
+  }
+
+  buyExpansion(index: number): boolean {
+    if (!this.expansion.canAfford(index, this.collectedStars)) return false;
+    this.collectedStars -= this.expansion.costOf(index);
+    this.expansion.claim(index);
+    this.expansion.refresh(this.collectedStars);
+    return true;
+  }
+
+  buyNextExpansion(): boolean {
+    const next = this.nextExpansionSlot;
+    if (!next) return false;
+    return this.buyExpansion(next.index);
+  }
+
+  buyNextExpansionWithPrice(): { bought: boolean; stars: number; cost: number } {
+    const next = this.nextExpansionSlot;
+    if (!next) return { bought: false, stars: this.collectedStars, cost: 0 };
+    const bought = this.buyExpansion(next.index);
+    return { bought, stars: this.collectedStars, cost: next.cost };
   }
 
   update(
@@ -204,7 +251,8 @@ export class TycoonManager {
     onCollect?: (coins: number) => void,
     onUpgrade?: () => void,
     onBounce?: () => void,
-    verticalVelocity = 0
+    verticalVelocity = 0,
+    onExpand?: (index: number) => void
   ): void {
     this.dropTimer += delta;
     const interval = Math.max(0.6, 2.5 / this.dropperTier);
@@ -214,7 +262,7 @@ export class TycoonManager {
       this.plot?.produce();
     }
 
-    this.updatePlayerInteractions(delta, playerPos, onCollect, onUpgrade, onBounce, verticalVelocity, false);
+    this.updatePlayerInteractions(delta, playerPos, onCollect, onUpgrade, onBounce, verticalVelocity, false, onExpand);
 
     this.updateVisuals(delta);
   }
@@ -228,6 +276,7 @@ export class TycoonManager {
     }
 
     this.plot?.update(delta, this.dropperTier);
+    this.expansion.update(delta);
   }
 
   updateSecondary(
@@ -236,9 +285,10 @@ export class TycoonManager {
     onCollect?: (coins: number) => void,
     onUpgrade?: () => void,
     onBounce?: () => void,
-    verticalVelocity = 0
+    verticalVelocity = 0,
+    onExpand?: (index: number) => void
   ): void {
-    this.updatePlayerInteractions(delta, playerPos, onCollect, onUpgrade, onBounce, verticalVelocity, true);
+    this.updatePlayerInteractions(delta, playerPos, onCollect, onUpgrade, onBounce, verticalVelocity, true, onExpand);
   }
 
   private updatePlayerInteractions(
@@ -248,7 +298,8 @@ export class TycoonManager {
     onUpgrade: (() => void) | undefined,
     onBounce: (() => void) | undefined,
     verticalVelocity: number,
-    isSecondary: boolean
+    isSecondary: boolean,
+    onExpand: ((index: number) => void) | undefined
   ): void {
     if (isSecondary) {
       if (this.secondaryTrampolineCooldown > 0) this.secondaryTrampolineCooldown -= delta;
@@ -271,6 +322,20 @@ export class TycoonManager {
       onUpgrade?.();
     }
 
+    this.expansion.refresh(this.collectedStars);
+
+    for (const slot of this.expansion.slots) {
+      if (this.expansion.isOwned(slot.index)) continue;
+      const distance = Math.hypot(
+        playerPos.x - (this.origin.x + slot.x),
+        playerPos.z - (this.origin.z + slot.z)
+      );
+      if (distance >= 1.1) continue;
+      if (!this.buyExpansion(slot.index)) continue;
+      onExpand?.(slot.index);
+      break;
+    }
+
     if (
       this.onTrampoline(playerPos, verticalVelocity) &&
       (isSecondary ? this.secondaryTrampolineCooldown : this.trampolineCooldown) <= 0
@@ -291,6 +356,7 @@ export class TycoonManager {
   dispose(): void {
     this.plot?.dispose();
     this.plot = undefined;
+    this.expansion.dispose();
     if (this.label) {
       this.label.material.map?.dispose();
       this.label.material.dispose();

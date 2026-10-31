@@ -11,6 +11,7 @@ export type ConciergeStatus = {
 
 export type ConciergePlayer = "ziemek" | "gniewko";
 export type ConciergeHouse = { blocks: number; style: "wood" | "stone" };
+export type ConciergeExpansion = { bought: boolean; stars: number; cost: number };
 
 export type ConciergeHost = {
   status(): ConciergeStatus;
@@ -19,6 +20,7 @@ export type ConciergeHost = {
   setJumpHeight(player: ConciergePlayer, height: number): number;
   setFlying(player: ConciergePlayer, enabled: boolean): boolean;
   buildHouse(player: ConciergePlayer): ConciergeHouse | null;
+  buyExpansion(): ConciergeExpansion;
   teleportToSpawn(): void;
   reload(): void;
 };
@@ -110,6 +112,13 @@ export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolN
       await clearProgress();
       host.reload();
       return "Postępy skasowane. Zrobiłem kopię zapasową na wszelki wypadek.";
+    },
+
+    async buy_expansion() {
+      const result = host.buyExpansion();
+      if (result.bought) return `Fabryka rośnie! Nowe pole kosztowało ${result.cost} gwiazdek.`;
+      if (result.cost <= 0) return "Fabryka jest już rozbudowana do końca!";
+      return `Potrzebujesz ${result.cost} gwiazdek na kolejne pole fabryki.`;
     },
   };
 }

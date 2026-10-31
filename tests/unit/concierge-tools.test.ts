@@ -12,7 +12,7 @@ describe("concierge audio controls", () => {
 describe("concierge world cheats", () => {
   it("exposes bounded jump, flight, and house actions", () => {
     const names = CONCIERGE_TOOLS.map(({ name }) => name);
-    expect(names).toEqual(expect.arrayContaining(["set_jump_height", "set_flight", "build_house"]));
+    expect(names).toEqual(expect.arrayContaining(["set_jump_height", "set_flight", "build_house", "buy_expansion"]));
   });
 });
 
@@ -31,6 +31,7 @@ describe("concierge cheat actions", () => {
       setJumpHeight: (player: ConciergePlayer, height) => players[player].setJumpHeight(height),
       setFlying: (player: ConciergePlayer, enabled) => players[player].setFlying(enabled),
       buildHouse: () => ({ blocks: 60, style: "wood" }),
+      buyExpansion: () => ({ bought: true, stars: 0, cost: 20 }),
     };
     return { players, tools: createConciergeTools(host) };
   };
@@ -51,5 +52,12 @@ describe("concierge cheat actions", () => {
 
     expect(response).toContain("Ziemka");
     expect(players.gniewko.flying).toBe(false);
+  });
+
+  it("expands the factory on request", async () => {
+    const { tools } = create(false);
+    const response = await tools.buy_expansion({});
+
+    expect(response).toContain("Fabryka rośnie");
   });
 });

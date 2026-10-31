@@ -9,7 +9,8 @@ export type ConciergeToolName =
   | "make_backup"
   | "list_backups"
   | "restore_backup"
-  | "reset_progress";
+  | "reset_progress"
+  | "buy_expansion";
 
 export type ConciergeToolSpec = {
   name: ConciergeToolName;
@@ -116,5 +117,11 @@ export const CONCIERGE_TOOLS: readonly ConciergeToolSpec[] = [
       },
       required: ["confirmed"],
     },
+  },
+  {
+    name: "buy_expansion",
+    description:
+      "Rozbuduj fabrykę: kup kolejne pole powiększenia, jeśli masz wystarczająco gwiazdek.",
+    parameters: { type: "object", properties: {} },
   },
 ] as const;
