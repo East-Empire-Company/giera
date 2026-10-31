@@ -9,6 +9,8 @@ import { addFoliageWind, decorRadiiFor, disposeGroundDecor, placeGroundDecor, sc
 import { BLOCK_ID } from "../../shared/blocks";
 
 type ChunkView = { data: Uint8Array; mesh?: THREE.Mesh; cx: number; cy: number; cz: number };
+type ChunkEdit = { id: number; persist: boolean };
+export type SavedEdits = { seed: number; edits: Record<string, number> };
 type ChunkJob = {
   taskId: number;
   coordinates: Omit<ChunkBuildRequest, "taskId">;
@@ -19,6 +21,26 @@ type AtlasTile = (typeof atlasManifest.tiles)[keyof typeof atlasManifest.tiles];
 const MAX_SURFACE_CHUNK_Y = Math.floor(MAX_GENERATED_BLOCK_Y / CHUNK_SIZE);
 /** Smooth-top vertex normals read columns up to two cells away, so edits that close to a border change the neighbour chunk. */
 const SMOOTH_NORMAL_REACH = 2;
+
+function localCoords(x: number, y: number, z: number): { lx: number; ly: number; lz: number } {
+  return {
+    lx: ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
+    ly: ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
+    lz: ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
+  };
+}
+
+function blockIndex(x: number, y: number, z: number): number {
+  const { lx, ly, lz } = localCoords(x, y, z);
+  return lx + CHUNK_SIZE * (lz + CHUNK_SIZE * ly);
+}
+
+function localFromIndex(index: number): { lx: number; ly: number; lz: number } {
+  const ly = Math.floor(index / (CHUNK_SIZE * CHUNK_SIZE));
+  const rest = index - ly * CHUNK_SIZE * CHUNK_SIZE;
+  const lz = Math.floor(rest / CHUNK_SIZE);
+  return { lx: rest - lz * CHUNK_SIZE, ly, lz };
+}
 
 export const SHADOW_CASTER_HYSTERESIS = 16;
 
@@ -380,8 +402,7 @@ class ChunkWorkerPool {
 export class WorldRenderer {
   private readonly chunks = new Map<string, ChunkView>();
   private readonly pending = new Set<string>();
-  private readonly edits = new Map<string, number>();
-  private readonly chunkEdits = new Map<string, Map<string, number>>();
+  private readonly edits = new Map<string, Map<number, ChunkEdit>>();
   private readonly workers: ChunkWorkerPool;
   private readonly materials: THREE.Material[];
   private readonly chunkMaterials: THREE.Material[];
@@ -449,7 +470,13 @@ export class WorldRenderer {
     setFoliageWindTime(time);
   }
 
-  async loadArea(worldX: number, worldZ: number, radius: number, otherCenters?: { worldX: number; worldZ: number }[]): Promise<void> {
+  async loadArea(
+    worldX: number,
+    worldZ: number,
+    radius: number,
+    otherCenters?: { worldX: number; worldZ: number }[],
+    maxChunks = Number.POSITIVE_INFINITY
+  ): Promise<number> {
     const centerX = Math.floor(worldX / CHUNK_SIZE);
     const centerZ = Math.floor(worldZ / CHUNK_SIZE);
     const topY = Math.floor(surfaceHeight(worldX, worldZ, this.seed) / CHUNK_SIZE);
@@ -467,14 +494,13 @@ export class WorldRenderer {
       const rightDistance = (right.cx - centerX) ** 2 + (right.cz - centerZ) ** 2 + Math.abs(right.cy - topY) * 0.5;
       return leftDistance - rightDistance;
     });
-    const required = positions.filter((position) => {
+    const missing = positions.filter((position) => {
       const key = chunkKey(position.cx, position.cy, position.cz);
-      if (this.chunks.has(key) || this.pending.has(key)) return false;
-      this.pending.add(key);
-      return true;
+      return !this.chunks.has(key) && !this.pending.has(key);
     });
-    let loaded = 0;
-    await Promise.all(required.map(async (position) => {
+    const batch = missing.slice(0, maxChunks);
+    for (const position of batch) this.pending.add(chunkKey(position.cx, position.cy, position.cz));
+    await Promise.all(batch.map(async (position) => {
       const key = chunkKey(position.cx, position.cy, position.cz);
       try {
         const result = await this.workers.generate({ ...position, seed: this.seed });
@@ -488,7 +514,6 @@ export class WorldRenderer {
         }
       } finally {
         this.pending.delete(key);
-        loaded++;
         this.completed++;
         this.onProgress?.(this.completed, positions.length);
       }
@@ -499,6 +524,7 @@ export class WorldRenderer {
     ];
     this.removeOutside(allCenters, radius + 1);
     this.refreshGroundDecor(worldX, worldZ, radius);
+    return missing.length - batch.length;
   }
 
   private refreshGroundDecor(worldX: number, worldZ: number, radius: number): void {
@@ -535,7 +561,11 @@ export class WorldRenderer {
     const cy = Math.floor(y / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
-    if (!chunk) return generateBlock(x, y, z, this.seed);
+    if (!chunk) {
+      const edit = this.edits.get(chunkKey(cx, cy, cz))?.get(blockIndex(x, y, z));
+      if (edit) return edit.id;
+      return generateBlock(x, y, z, this.seed);
+    }
     const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const localY = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
@@ -564,12 +594,12 @@ export class WorldRenderer {
     return Number.NaN;
   }
 
-  setBlock(x: number, y: number, z: number, blockId: number): void {
+  setBlock(x: number, y: number, z: number, blockId: number, persist = true): void {
     const cx = Math.floor(x / CHUNK_SIZE);
     const cy = Math.floor(y / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
     const key = chunkKey(cx, cy, cz);
-    this.recordEdit(x, y, z, blockId);
+    this.recordEdit(x, y, z, blockId, persist);
     let chunk = this.chunks.get(key);
     if (!chunk) {
       const data = new Uint8Array(CHUNK_VOLUME);
@@ -584,70 +614,77 @@ export class WorldRenderer {
       this.chunks.set(key, chunk);
       this.applyChunkEdits(chunk);
     }
-    const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    const localY = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    chunk.data[getBlockIndex(localX, localY, localZ)] = blockId;
+    const { lx, ly, lz } = localCoords(x, y, z);
+    chunk.data[getBlockIndex(lx, ly, lz)] = blockId;
     this.remeshChunk(cx, cy, cz);
-
-    if (localX < SMOOTH_NORMAL_REACH) this.remeshChunk(cx - 1, cy, cz);
-    if (localX >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx + 1, cy, cz);
-    if (localY < SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy - 1, cz);
-    if (localY >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy + 1, cz);
-    if (localZ < SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy, cz - 1);
-    if (localZ >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy, cz + 1);
+    this.remeshBorderNeighbours(cx, cy, cz, lx, ly, lz);
   }
 
-  getEdits(): Record<string, number> {
-    return Object.fromEntries(this.edits);
+  exportEdits(): Record<string, number> {
+    const exported: Record<string, number> = {};
+    for (const [key, bucket] of this.edits) {
+      const [cx, cy, cz] = key.split(",").map(Number);
+      for (const [index, edit] of bucket) {
+        if (!edit.persist) continue;
+        const { lx, ly, lz } = localFromIndex(index);
+        exported[`${cx * CHUNK_SIZE + lx},${cy * CHUNK_SIZE + ly},${cz * CHUNK_SIZE + lz}`] = edit.id;
+      }
+    }
+    return exported;
   }
 
-  applyEdits(edits: Record<string, number>): void {
-    const touched = new Set<string>();
-    for (const [key, blockId] of Object.entries(edits)) {
+  applySavedEdits(saved: SavedEdits | null | undefined): void {
+    if (!saved || saved.seed !== this.seed) return;
+    for (const [key, blockId] of Object.entries(saved.edits ?? {})) {
       const parts = key.split(",");
       if (parts.length !== 3) continue;
       const [x, y, z] = parts.map(Number);
       if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z) || !Number.isInteger(blockId)) continue;
-      this.recordEdit(x, y, z, blockId);
+      this.recordEdit(x, y, z, blockId, true);
       const cx = Math.floor(x / CHUNK_SIZE);
       const cy = Math.floor(y / CHUNK_SIZE);
       const cz = Math.floor(z / CHUNK_SIZE);
       const chunk = this.chunks.get(chunkKey(cx, cy, cz));
       if (!chunk) continue;
       this.writeBlock(chunk, x, y, z, blockId);
-      touched.add(chunkKey(cx, cy, cz));
-    }
-    for (const key of touched) {
-      const [cx, cy, cz] = key.split(",").map(Number);
+      const { lx, ly, lz } = localCoords(x, y, z);
       this.remeshChunk(cx, cy, cz);
+      this.remeshBorderNeighbours(cx, cy, cz, lx, ly, lz);
     }
   }
 
-  private recordEdit(x: number, y: number, z: number, blockId: number): void {
-    const key = `${x},${y},${z}`;
-    this.edits.set(key, blockId);
-    const chunk = chunkKey(Math.floor(x / CHUNK_SIZE), Math.floor(y / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE));
-    const bucket = this.chunkEdits.get(chunk) ?? new Map<string, number>();
-    bucket.set(key, blockId);
-    this.chunkEdits.set(chunk, bucket);
+  private recordEdit(x: number, y: number, z: number, blockId: number, persist: boolean): void {
+    const key = chunkKey(Math.floor(x / CHUNK_SIZE), Math.floor(y / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE));
+    const bucket = this.edits.get(key) ?? new Map<number, ChunkEdit>();
+    const index = blockIndex(x, y, z);
+    const previous = bucket.get(index);
+    // LAN echoes repeat our own edits, so a persisted edit never loses its persist flag.
+    bucket.set(index, { id: blockId, persist: previous?.persist === true || persist });
+    this.edits.set(key, bucket);
   }
 
   private applyChunkEdits(chunk: ChunkView): boolean {
-    const bucket = this.chunkEdits.get(chunkKey(chunk.cx, chunk.cy, chunk.cz));
-    if (!bucket) return false;
-    for (const [key, blockId] of bucket) {
-      const [x, y, z] = key.split(",").map(Number);
-      this.writeBlock(chunk, x, y, z, blockId);
+    const bucket = this.edits.get(chunkKey(chunk.cx, chunk.cy, chunk.cz));
+    if (!bucket || bucket.size === 0) return false;
+    for (const [index, edit] of bucket) {
+      const { lx, ly, lz } = localFromIndex(index);
+      chunk.data[getBlockIndex(lx, ly, lz)] = edit.id;
     }
     return true;
   }
 
   private writeBlock(chunk: ChunkView, x: number, y: number, z: number, blockId: number): void {
-    const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    const localY = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-    chunk.data[getBlockIndex(localX, localY, localZ)] = blockId;
+    const { lx, ly, lz } = localCoords(x, y, z);
+    chunk.data[getBlockIndex(lx, ly, lz)] = blockId;
+  }
+
+  private remeshBorderNeighbours(cx: number, cy: number, cz: number, lx: number, ly: number, lz: number): void {
+    if (lx < SMOOTH_NORMAL_REACH) this.remeshChunk(cx - 1, cy, cz);
+    if (lx >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx + 1, cy, cz);
+    if (ly < SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy - 1, cz);
+    if (ly >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy + 1, cz);
+    if (lz < SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy, cz - 1);
+    if (lz >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy, cz + 1);
   }
 
   remeshChunk(cx: number, cy: number, cz: number): void {

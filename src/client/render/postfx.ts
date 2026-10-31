@@ -174,19 +174,22 @@ export function postWindowAdvance(windowSeconds: number, deltaSeconds: number): 
   return { total, due: total >= 5 };
 }
 
+export type PostFXOptions = { direct?: boolean };
+
 export class PostFX {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
   private readonly soloCamera: THREE.PerspectiveCamera;
   private readonly prepareView: (camera: THREE.PerspectiveCamera) => void;
-  private solo: ComposerChain;
+  private readonly direct: boolean;
+  private solo: ComposerChain | null;
   private split: [ComposerChain, ComposerChain] | null = null;
   private readonly composite: {
     scene: THREE.Scene;
     camera: THREE.OrthographicCamera;
     material: THREE.ShaderMaterial;
     quad: THREE.Mesh;
-  };
+  } | null;
   private width: number;
   private height: number;
   private windowFrames = 0;
@@ -199,32 +202,48 @@ export class PostFX {
     camera: THREE.PerspectiveCamera,
     width: number,
     height: number,
-    prepareView: (camera: THREE.PerspectiveCamera) => void
+    prepareView: (camera: THREE.PerspectiveCamera) => void,
+    options: PostFXOptions = {}
   ) {
     this.renderer = renderer;
     this.scene = scene;
     this.soloCamera = camera;
     this.prepareView = prepareView;
+    this.direct = options.direct ?? false;
     this.width = width;
     this.height = height;
-    this.solo = buildChain(renderer, scene, camera, width, height);
-    this.resizeChain(this.solo, width, height);
-    this.composite = {
-      scene: new THREE.Scene(),
-      camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
-      material: new THREE.ShaderMaterial(SplitShader),
-      quad: new THREE.Mesh(new THREE.PlaneGeometry(2, 2)),
-    };
-    this.composite.quad.material = this.composite.material;
-    this.composite.scene.add(this.composite.quad);
+    this.solo = this.direct ? null : buildChain(renderer, scene, camera, width, height);
+    if (this.solo) this.resizeChain(this.solo, width, height);
+    this.composite = this.direct
+      ? null
+      : {
+          scene: new THREE.Scene(),
+          camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
+          material: new THREE.ShaderMaterial(SplitShader),
+          quad: new THREE.Mesh(new THREE.PlaneGeometry(2, 2)),
+        };
+    if (this.composite) {
+      this.composite.quad.material = this.composite.material;
+      this.composite.scene.add(this.composite.quad);
+    }
   }
 
   renderSolo(): void {
+    if (this.direct) {
+      this.renderDirect(this.soloCamera, 0, 0, this.width, this.height);
+      return;
+    }
     this.prepareView(this.soloCamera);
-    this.solo.composer.render();
+    this.solo?.composer.render();
   }
 
   renderSplit(camera: THREE.PerspectiveCamera, camera2: THREE.PerspectiveCamera): void {
+    if (this.direct) {
+      const halfWidth = Math.max(1, Math.floor(this.width / 2));
+      this.renderDirect(camera, 0, 0, halfWidth, this.height);
+      this.renderDirect(camera2, halfWidth, 0, this.width - halfWidth, this.height);
+      return;
+    }
     if (!this.split) {
       const halfWidth = Math.max(1, Math.floor(this.width / 2));
       this.split = [
@@ -237,20 +256,22 @@ export class PostFX {
       });
     }
     const [left, right] = this.split;
+    const composite = this.composite;
+    if (!composite) return;
     this.prepareView(camera);
     left.composer.render();
     this.prepareView(camera2);
     right.composer.render();
-    this.composite.material.uniforms.tLeft.value = outputTexture(left);
-    this.composite.material.uniforms.tRight.value = outputTexture(right);
+    composite.material.uniforms.tLeft.value = outputTexture(left);
+    composite.material.uniforms.tRight.value = outputTexture(right);
     this.renderer.setRenderTarget(null);
-    this.renderer.render(this.composite.scene, this.composite.camera);
+    this.renderer.render(composite.scene, composite.camera);
   }
 
   setSize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    this.resizeChain(this.solo, width, height);
+    if (this.solo) this.resizeChain(this.solo, width, height);
     if (this.split) {
       const halfWidth = Math.max(1, Math.floor(width / 2));
       this.split.forEach((chain) => this.resizeChain(chain, halfWidth, height));
@@ -271,8 +292,16 @@ export class PostFX {
     if (!changed) return;
     const backoff = after.quality.ao ? "" : `, retry in ${after.restoreCooldown} windows`;
     console.info(`[postfx] AO and bloom ${after.quality.ao ? "restored" : "disabled"} (avg fps ${avgFps.toFixed(1)}${backoff})`);
-    this.applyQuality(this.solo);
+    if (this.solo) this.applyQuality(this.solo);
     this.split?.forEach((chain) => this.applyQuality(chain));
+  }
+
+  private renderDirect(camera: THREE.PerspectiveCamera, x: number, y: number, width: number, height: number): void {
+    this.renderer.setRenderTarget(null);
+    this.renderer.setViewport(x, y, width, height);
+    this.renderer.setScissor(x, y, width, height);
+    this.renderer.setScissorTest(true);
+    this.renderer.render(this.scene, camera);
   }
 
   private resizeChain(chain: ComposerChain, width: number, height: number): void {
@@ -288,9 +317,9 @@ export class PostFX {
   }
 
   dispose(): void {
-    this.solo.composer.dispose();
+    this.solo?.composer.dispose();
     this.split?.forEach((chain) => chain.composer.dispose());
-    this.composite.material.dispose();
-    this.composite.quad.geometry.dispose();
+    this.composite?.material.dispose();
+    this.composite?.quad.geometry.dispose();
   }
 }

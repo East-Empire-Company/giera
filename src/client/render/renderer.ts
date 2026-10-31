@@ -127,13 +127,18 @@ export async function loadRenderAssets(renderer: WebGLRenderer, onProgress?: (do
 }
 
 export const SHADOW_MAP_TYPE = PCFShadowMap;
-export function createRenderer(canvas: HTMLCanvasElement): WebGLRenderer {
-  const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+export type RendererOptions = {
+  antialias?: boolean;
+  shadows?: boolean;
+  pixelRatio?: number;
+};
+export function createRenderer(canvas: HTMLCanvasElement, options: RendererOptions = {}): WebGLRenderer {
+  const renderer = new WebGLRenderer({ canvas, antialias: options.antialias ?? true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(options.pixelRatio ?? Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = NoToneMapping;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = options.shadows ?? true;
   renderer.shadowMap.type = SHADOW_MAP_TYPE;
   renderer.info.autoReset = false;
   return renderer;

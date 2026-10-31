@@ -122,13 +122,13 @@ describe("worldRenderer edit ledger", () => {
     const world = buildWorld();
     world.setBlock(1, 2, 3, 9);
     world.setBlock(1, 2, 3, 10);
-    expect(world.getEdits()).toEqual({ "1,2,3": 10 });
+    expect(world.exportEdits()).toEqual({ "1,2,3": 10 });
     world.dispose();
   });
 
   it("restores saved edits into chunks created later", () => {
     const world = buildWorld();
-    world.applyEdits({ "4,5,6": 10 });
+    world.applySavedEdits({ seed: 1234, edits: { "4,5,6": 10 } });
     world.setBlock(0, 0, 0, 9);
     expect(world.getBlock(4, 5, 6)).toBe(10);
     world.dispose();
@@ -137,16 +137,24 @@ describe("worldRenderer edit ledger", () => {
   it("restores saved edits into already loaded chunks", () => {
     const world = buildWorld();
     world.setBlock(0, 0, 0, 9);
-    world.applyEdits({ "4,5,6": 10 });
+    world.applySavedEdits({ seed: 1234, edits: { "4,5,6": 10 } });
     expect(world.getBlock(4, 5, 6)).toBe(10);
-    expect(world.getEdits()).toEqual({ "0,0,0": 9, "4,5,6": 10 });
+    expect(world.exportEdits()).toEqual({ "0,0,0": 9, "4,5,6": 10 });
     world.dispose();
   });
 
   it("ignores malformed saved edit keys", () => {
     const world = buildWorld();
-    world.applyEdits({ "4,5": 10, "x,y,z": 10, "1,2,3": 10 });
-    expect(world.getEdits()).toEqual({ "1,2,3": 10 });
+    world.applySavedEdits({ seed: 1234, edits: { "4,5": 10, "x,y,z": 10, "1,2,3": 10 } });
+    expect(world.exportEdits()).toEqual({ "1,2,3": 10 });
+    world.dispose();
+  });
+
+  it("ignores edits saved under another world seed", () => {
+    const world = buildWorld();
+    world.applySavedEdits({ seed: 999, edits: { "1,2,3": 10 } });
+    expect(world.exportEdits()).toEqual({});
+    expect(world.getBlock(1, 2, 3)).not.toBe(10);
     world.dispose();
   });
 });

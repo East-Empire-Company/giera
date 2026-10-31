@@ -31,6 +31,8 @@ import { CascadedShadows, MAX_SHADOW_CASTER_RANGE, shadowDistanceFor } from "./c
 import { getSplitViewports, SplitScreenManager } from "./client/render/split-screen";
 import { PostFX } from "./client/render/postfx";
 import { WorldRenderer } from "./client/render/worldRenderer";
+import { probeWebGL } from "./client/render/capabilities";
+import { hostBridgeAvailable, postHostDiagnostic, postHostMessage } from "./client/startup/host-bridge";
 import { resolveWorldSeed } from "./client/startup/world-seed";
 import { LaunchMenuController } from "./client/startup/launch-menu";
 import { PauseMenuController } from "./client/game/pause-menu";
@@ -96,7 +98,14 @@ const splashVideo: SplashVideoHandle = qa
 if (!qa) canvas.inert = true;
 const ambientChatterEnabled = ambientNpcChatterEnabled(window.location.search);
 const INTERACT_REACH = 12;
-const VIEW_RADIUS = pickViewRadius(navigator.userAgent, (navigator as Navigator & { deviceMemory?: number }).deviceMemory);
+const capabilities = probeWebGL();
+const lowPowerParam = new URLSearchParams(window.location.search).get("lowpower");
+const lowPower = lowPowerParam === null ? !qa && capabilities.software : lowPowerParam === "1";
+const LOW_POWER_VIEW_RADIUS = 3;
+const CHUNK_BATCH = 8;
+const VIEW_RADIUS = lowPower
+  ? LOW_POWER_VIEW_RADIUS
+  : pickViewRadius(navigator.userAgent, (navigator as Navigator & { deviceMemory?: number }).deviceMemory);
 
 function chooseSeed(): number {
   const value = new Uint32Array(1);
@@ -136,7 +145,11 @@ async function boot(): Promise<void> {
   let suppressGamepadJumpUntilRelease = false;
   const audio = new AudioManager();
   void audio.preload(MUSIC_PLAYLIST).catch(() => {});
-  const renderer = createRenderer(canvas);
+  const renderer = createRenderer(canvas, {
+    antialias: !lowPower,
+    shadows: !lowPower,
+    pixelRatio: lowPower ? 1 : undefined,
+  });
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 900);
   const camera2 = new THREE.PerspectiveCamera(68, (window.innerWidth / 2) / window.innerHeight, 0.1, 900);
@@ -266,7 +279,19 @@ async function boot(): Promise<void> {
     },
   });
 
-  world.applyEdits(saved?.edits ?? {});
+  world.applySavedEdits(saved);
+
+  const loadAreaBatched = async (
+    worldX: number,
+    worldZ: number,
+    radius: number,
+    otherCenters?: { worldX: number; worldZ: number }[]
+  ): Promise<void> => {
+    let remaining = await world.loadArea(worldX, worldZ, radius, otherCenters, CHUNK_BATCH);
+    while (remaining > 0) {
+      remaining = await world.loadArea(worldX, worldZ, radius, otherCenters, CHUNK_BATCH);
+    }
+  };
 
   const trainingDummy = new TrainingDummy(
     { x: 1.5, y: dummyY, z: 3 },
@@ -275,15 +300,19 @@ async function boot(): Promise<void> {
   scene.add(trainingDummy.object);
 
   const sky = new SkyCycle(scene, assets);
-  const cascadedShadows = new CascadedShadows(
-    scene,
-    camera,
-    sky.getSunLight(),
-    shadowDistanceFor(camera.far, CHUNK_SIZE * VIEW_RADIUS)
-  );
-  world.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
-  tycoon.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
-  cascadedShadows.registerObject(scene);
+  const cascadedShadows = lowPower
+    ? null
+    : new CascadedShadows(
+        scene,
+        camera,
+        sky.getSunLight(),
+        shadowDistanceFor(camera.far, CHUNK_SIZE * VIEW_RADIUS)
+      );
+  if (cascadedShadows) {
+    world.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
+    tycoon.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
+    cascadedShadows.registerObject(scene);
+  }
 
   const setOwnTycoonSlot = (slot: number): void => {
     if (slot === tycoonSlot) return;
@@ -292,7 +321,7 @@ async function boot(): Promise<void> {
     tycoonSlot = slot;
     tycoon = makeTycoon(slot, player.profile.name);
     tycoon.restore(progress);
-    tycoon.registerShadowMaterials((material) => cascadedShadows.registerMaterial(material));
+    tycoon.registerShadowMaterials((material) => cascadedShadows?.registerMaterial(material));
     if (window.__GIERA__) window.__GIERA__.tycoon = tycoon;
   };
 
@@ -311,7 +340,8 @@ async function boot(): Promise<void> {
     camera,
     window.innerWidth,
     window.innerHeight,
-    (viewCamera) => cascadedShadows.prepareView(viewCamera)
+    (viewCamera) => cascadedShadows?.prepareView(viewCamera),
+    { direct: lowPower }
   );
   const qaState = {
     simTime: 0,
@@ -382,7 +412,7 @@ async function boot(): Promise<void> {
               remoteTycoons.delete(leave.id);
             },
             onBlock: (b) => {
-              world.setBlock(b.x, b.y, b.z, b.id);
+              world.setBlock(b.x, b.y, b.z, b.id, false);
             },
             onPlayer: (p) => {
               player2.position.set(p.x, p.y, p.z);
@@ -663,20 +693,34 @@ async function boot(): Promise<void> {
   await splashVideo.settle();
   splashVideo.stop();
   status.classList.add("boot-ready");
-  const notifyHost = (): void => {
-    try {
-      const view = (window as unknown as { chrome?: { webview?: { postMessage: (message: string) => void } } })
-        .chrome?.webview;
-      if (view) {
-        view.postMessage("boot-ready");
-        return;
-      }
-      (window as unknown as { external?: { notify?: (message: string) => void } }).external?.notify?.("boot-ready");
-    } catch {
-      // not hosted in a WebView
-    }
-  };
-  notifyHost();
+  postHostMessage("boot-ready");
+  if (hostBridgeAvailable()) {
+    postHostDiagnostic("diag", {
+      ua: navigator.userAgent,
+      cores: navigator.hardwareConcurrency ?? null,
+      memory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? null,
+      vendor: capabilities.vendor,
+      gl: capabilities.renderer,
+      webgl2: capabilities.webgl2,
+      software: capabilities.software,
+      lowPower,
+      viewRadius: VIEW_RADIUS,
+      batch: CHUNK_BATCH,
+    });
+    let lastBeat = performance.now();
+    window.setInterval(() => {
+      const now = performance.now();
+      const drift = Math.round(now - lastBeat);
+      lastBeat = now;
+      postHostDiagnostic("hb", {
+        drift,
+        chunks: world.loadedChunkCount,
+        fps: stats.fps,
+        calls: stats.drawCalls,
+        started: gameStarted,
+      });
+    }, 2000);
+  }
   if (!qa) {
     launchMenu.show();
     void conciergeSession.open("launch");
@@ -694,7 +738,11 @@ async function boot(): Promise<void> {
   let streamCx = 0;
   let streamCz = 0;
   let streamBusy = true;
-  void world.loadArea(0, 0, qa ? 8 : VIEW_RADIUS).catch(showBootError).finally(() => { streamBusy = false; });
+  if (qa) {
+    void world.loadArea(0, 0, 8).catch(showBootError).finally(() => { streamBusy = false; });
+  } else {
+    void loadAreaBatched(0, 0, VIEW_RADIUS).catch(showBootError).finally(() => { streamBusy = false; });
+  }
 
   // Input states
   const keys = new Set<string>();
@@ -830,7 +878,7 @@ async function boot(): Promise<void> {
         stepIndex: 0,
         currentProgress: 0,
       },
-      edits: world.getEdits(),
+      edits: world.exportEdits(),
       savedAt: new Date().toISOString(),
     });
   };
@@ -886,12 +934,23 @@ async function boot(): Promise<void> {
   };
 
   renderer.setAnimationLoop((now) => {
+    const drawCalls = renderer.info.render.calls;
     renderer.info.reset();
     pollPauseButton();
+    const realDelta = Math.max(0, (now - previous) / 1000);
+    fpsFrames++;
+    if (now - fpsStart >= 1000) {
+      stats.fps = Math.round((fpsFrames * 1000) / (now - fpsStart));
+      stats.drawCalls = drawCalls;
+      stats.chunkCount = world.loadedChunkCount;
+      fpsFrames = 0;
+      fpsStart = now;
+    }
     if (!gameStarted) {
       launchMenu.pollGamepad();
       camera.position.copy(player.getCameraPosition(5.5));
       camera.lookAt(player.getCameraTarget());
+      postfx.noteFrame(realDelta);
       postfx.renderSolo();
       previous = now;
       return;
@@ -1096,8 +1155,12 @@ async function boot(): Promise<void> {
         streamCx = ccx;
         streamCz = ccz;
         streamBusy = true;
-        void world
-          .loadArea(player.position.x, player.position.z, VIEW_RADIUS, splitScreen.isSplitScreen ? [{ worldX: player2.position.x, worldZ: player2.position.z }] : undefined)
+        void loadAreaBatched(
+          player.position.x,
+          player.position.z,
+          VIEW_RADIUS,
+          splitScreen.isSplitScreen ? [{ worldX: player2.position.x, worldZ: player2.position.z }] : undefined
+        )
           .catch(() => {})
           .finally(() => { streamBusy = false; });
       }
@@ -1374,7 +1437,7 @@ async function boot(): Promise<void> {
       resetMiningFeedback();
     }
 
-    postfx.noteFrame(delta);
+    postfx.noteFrame(realDelta);
     const width = window.innerWidth;
     const height = window.innerHeight;
     const viewports = getSplitViewports(width, height, splitScreen.isSplitScreen);
@@ -1386,14 +1449,6 @@ async function boot(): Promise<void> {
       postfx.renderSplit(camera, camera2);
     } else {
       postfx.renderSolo();
-    }
-    fpsFrames++;
-    if (now - fpsStart >= 1000) {
-      stats.fps = Math.round((fpsFrames * 1000) / (now - fpsStart));
-      stats.drawCalls = renderer.info.render.calls;
-      stats.chunkCount = world.loadedChunkCount;
-      fpsFrames = 0;
-      fpsStart = now;
     }
   });
 

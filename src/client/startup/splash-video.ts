@@ -72,6 +72,7 @@ export function attachSplashVideo(status: HTMLElement): SplashVideoHandle {
     }).catch(() => {
       video.controls = true;
       showVideo();
+      finish();
     });
   };
 
