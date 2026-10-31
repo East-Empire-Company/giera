@@ -14,7 +14,6 @@ import {
 import { NPC_ALLOWED_TOOLS as NPC_TOOLS } from "./npc-bridge";
 import { handleNpcReason } from "./npc-reason";
 import { handleNpcTts } from "./npc-tts";
-import { handleNpcStt } from "./npc-stt";
 import { handleConciergeSession } from "./concierge";
 import { serveStatic } from "./static";
 
@@ -99,10 +98,6 @@ const server = Bun.serve<WsConnection>({
 
     if (url.pathname === "/npc/tts") {
       return handleNpcTts(req);
-    }
-
-    if (url.pathname === "/npc/stt") {
-      return handleNpcStt(req);
     }
 
     if (url.pathname === "/concierge/session") {
