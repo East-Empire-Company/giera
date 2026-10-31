@@ -266,6 +266,8 @@ async function boot(): Promise<void> {
     },
   });
 
+  world.applyEdits(saved?.edits ?? {});
+
   const trainingDummy = new TrainingDummy(
     { x: 1.5, y: dummyY, z: 3 },
     { planks: world.getTileMaterial("oak_planks"), bark: world.getTileMaterial("oak_log_side") }
@@ -766,6 +768,10 @@ async function boot(): Promise<void> {
         mic.stop();
       } else if (hud.isInventoryOpen()) {
         hud.setInventoryOpen(false);
+      } else if (hud.isControlsModalOpen()) {
+        hud.setControlsModalOpen(false);
+      } else if (hud.isLanModalOpen()) {
+        hud.setLanModalOpen(false);
       } else if (!qa) {
         pauseMenu.toggle();
       }
@@ -824,7 +830,7 @@ async function boot(): Promise<void> {
         stepIndex: 0,
         currentProgress: 0,
       },
-      edits: {},
+      edits: world.getEdits(),
       savedAt: new Date().toISOString(),
     });
   };

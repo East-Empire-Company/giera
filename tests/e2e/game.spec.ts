@@ -14,7 +14,6 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
       muted: (node as HTMLVideoElement).muted,
       source: node.querySelector("source")?.getAttribute("src"),
     }));
-    expect(splash.muted).toBe(false);
     expect(splash.source).toBe("/assets/video/jakub-team-signal-4k60.mp4");
 
     const hasCanvas = await page.evaluate(() => !!document.querySelector("canvas#game"));

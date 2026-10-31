@@ -52,14 +52,16 @@ export function createHousePlan(
       const centerX = Math.round(player.x + forwardX * distance + sideX * side);
       const centerZ = Math.round(player.z + forwardZ * distance + sideZ * side);
       if (occupied?.(centerX, centerZ, radius)) continue;
-      const xAt = (column: number): number => centerX + sideX * (column - halfWidth);
-      const zAt = (row: number): number => centerZ - forwardZ * (row - halfDepth);
+      const xAt = (column: number, row: number): number =>
+        centerX + sideX * (column - halfWidth) + forwardX * (halfDepth - row);
+      const zAt = (column: number, row: number): number =>
+        centerZ + sideZ * (column - halfWidth) + forwardZ * (halfDepth - row);
       let floorY = -Infinity;
       let lowestY = Infinity;
       let flat = true;
       for (let column = 0; column < width; column++) {
         for (let row = 0; row < depth; row++) {
-          const y = world.surfaceColumnTop(xAt(column), zAt(row));
+          const y = world.surfaceColumnTop(xAt(column, row), zAt(column, row));
           if (!Number.isFinite(y)) {
             flat = false;
             break;
@@ -73,11 +75,11 @@ export function createHousePlan(
 
       const blocks: HousePlan["blocks"] = [];
       const add = (column: number, y: number, row: number, id: BlockId): void => {
-        blocks.push({ x: xAt(column), y, z: zAt(row), id });
+        blocks.push({ x: xAt(column, row), y, z: zAt(column, row), id });
       };
       for (let column = 0; column < width; column++) {
         for (let row = 0; row < depth; row++) {
-          const groundY = world.surfaceColumnTop(xAt(column), zAt(row));
+          const groundY = world.surfaceColumnTop(xAt(column, row), zAt(column, row));
           if (groundY + 1 < floorY) add(column, groundY + 1, row, BLOCK_ID.cobblestone);
           add(column, floorY, row, floorId);
           for (let level = 1; level <= wallHeight; level++) {

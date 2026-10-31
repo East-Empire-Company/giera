@@ -32,6 +32,12 @@ describe("Iskra house plans", () => {
     expect(new Set(first!.blocks.map(({ x, y, z }) => `${x},${y},${z}`)).size).toBe(first!.blocks.length);
     expect(first!.blocks.every(({ y, id }) => y > 40 && id !== BLOCK_ID.air)).toBe(true);
   });
+  it("spans both footprint axes when the player faces the X axis", () => {
+    const plan = createHousePlan(flatWorld(), { x: 0, z: 0, yaw: Math.PI / 2 }, 424242)!;
+
+    expect(new Set(plan.blocks.map(({ x }) => x)).size).toBeGreaterThan(1);
+    expect(new Set(plan.blocks.map(({ z }) => z)).size).toBeGreaterThan(1);
+  });
   it("refuses occupied terrain and protected actor areas", () => {
     const occupiedWorld: HouseWorld = {
       getBlock: (_x, y) => y <= 40 ? BLOCK_ID.grass : BLOCK_ID.stone,

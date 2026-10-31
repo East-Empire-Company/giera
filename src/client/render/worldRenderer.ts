@@ -8,7 +8,7 @@ import atlasManifest from "../../shared/atlas-manifest.json";
 import { addFoliageWind, decorRadiiFor, disposeGroundDecor, placeGroundDecor, scatterGrassBlades, scatterGroundDecor, setFoliageWindTime } from "./ground-decor";
 import { BLOCK_ID } from "../../shared/blocks";
 
-type ChunkView = { data: Uint8Array; mesh?: THREE.Mesh; cx: number; cz: number };
+type ChunkView = { data: Uint8Array; mesh?: THREE.Mesh; cx: number; cy: number; cz: number };
 type ChunkJob = {
   taskId: number;
   coordinates: Omit<ChunkBuildRequest, "taskId">;
@@ -380,6 +380,8 @@ class ChunkWorkerPool {
 export class WorldRenderer {
   private readonly chunks = new Map<string, ChunkView>();
   private readonly pending = new Set<string>();
+  private readonly edits = new Map<string, number>();
+  private readonly chunkEdits = new Map<string, Map<string, number>>();
   private readonly workers: ChunkWorkerPool;
   private readonly materials: THREE.Material[];
   private readonly chunkMaterials: THREE.Material[];
@@ -477,9 +479,13 @@ export class WorldRenderer {
       try {
         const result = await this.workers.generate({ ...position, seed: this.seed });
         if ("error" in result) throw new Error(result.error);
-        const chunk: ChunkView = { data: result.data, cx: position.cx, cz: position.cz };
-        if (result.mesh.indices.length > 0) this.attachChunkMesh(chunk, result.mesh, position);
+        const chunk: ChunkView = { data: result.data, cx: position.cx, cy: position.cy, cz: position.cz };
         this.chunks.set(key, chunk);
+        if (this.applyChunkEdits(chunk)) {
+          this.remeshChunk(position.cx, position.cy, position.cz);
+        } else if (result.mesh.indices.length > 0) {
+          this.attachChunkMesh(chunk, result.mesh, position);
+        }
       } finally {
         this.pending.delete(key);
         loaded++;
@@ -563,6 +569,7 @@ export class WorldRenderer {
     const cy = Math.floor(y / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
     const key = chunkKey(cx, cy, cz);
+    this.recordEdit(x, y, z, blockId);
     let chunk = this.chunks.get(key);
     if (!chunk) {
       const data = new Uint8Array(CHUNK_VOLUME);
@@ -573,8 +580,9 @@ export class WorldRenderer {
           }
         }
       }
-      chunk = { data, cx, cz };
+      chunk = { data, cx, cy, cz };
       this.chunks.set(key, chunk);
+      this.applyChunkEdits(chunk);
     }
     const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const localY = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
@@ -588,6 +596,58 @@ export class WorldRenderer {
     if (localY >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy + 1, cz);
     if (localZ < SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy, cz - 1);
     if (localZ >= CHUNK_SIZE - SMOOTH_NORMAL_REACH) this.remeshChunk(cx, cy, cz + 1);
+  }
+
+  getEdits(): Record<string, number> {
+    return Object.fromEntries(this.edits);
+  }
+
+  applyEdits(edits: Record<string, number>): void {
+    const touched = new Set<string>();
+    for (const [key, blockId] of Object.entries(edits)) {
+      const parts = key.split(",");
+      if (parts.length !== 3) continue;
+      const [x, y, z] = parts.map(Number);
+      if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z) || !Number.isInteger(blockId)) continue;
+      this.recordEdit(x, y, z, blockId);
+      const cx = Math.floor(x / CHUNK_SIZE);
+      const cy = Math.floor(y / CHUNK_SIZE);
+      const cz = Math.floor(z / CHUNK_SIZE);
+      const chunk = this.chunks.get(chunkKey(cx, cy, cz));
+      if (!chunk) continue;
+      this.writeBlock(chunk, x, y, z, blockId);
+      touched.add(chunkKey(cx, cy, cz));
+    }
+    for (const key of touched) {
+      const [cx, cy, cz] = key.split(",").map(Number);
+      this.remeshChunk(cx, cy, cz);
+    }
+  }
+
+  private recordEdit(x: number, y: number, z: number, blockId: number): void {
+    const key = `${x},${y},${z}`;
+    this.edits.set(key, blockId);
+    const chunk = chunkKey(Math.floor(x / CHUNK_SIZE), Math.floor(y / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE));
+    const bucket = this.chunkEdits.get(chunk) ?? new Map<string, number>();
+    bucket.set(key, blockId);
+    this.chunkEdits.set(chunk, bucket);
+  }
+
+  private applyChunkEdits(chunk: ChunkView): boolean {
+    const bucket = this.chunkEdits.get(chunkKey(chunk.cx, chunk.cy, chunk.cz));
+    if (!bucket) return false;
+    for (const [key, blockId] of bucket) {
+      const [x, y, z] = key.split(",").map(Number);
+      this.writeBlock(chunk, x, y, z, blockId);
+    }
+    return true;
+  }
+
+  private writeBlock(chunk: ChunkView, x: number, y: number, z: number, blockId: number): void {
+    const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const localY = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    chunk.data[getBlockIndex(localX, localY, localZ)] = blockId;
   }
 
   remeshChunk(cx: number, cy: number, cz: number): void {

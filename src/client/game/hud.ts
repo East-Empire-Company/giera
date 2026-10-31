@@ -348,6 +348,10 @@ export class GameHUD {
   isControlsModalOpen(): boolean {
     return this.controlsModalOpen;
   }
+
+  isLanModalOpen(): boolean {
+    return this.lanModalOpen;
+  }
   isNpcDialogOpen(): boolean {
     return this.npcDialogOpen;
   }

@@ -106,4 +106,38 @@ describe("LaunchMenuController", () => {
     document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
     expect(document.activeElement).toBe(startButton);
   });
+
+  it("reaches the audio sliders with the gamepad and changes volume", () => {
+    document.body.innerHTML = `
+      <section id="launch-menu" hidden>
+        <button id="launch-start" disabled>Start</button>
+        <button id="launch-mode" disabled aria-pressed="false"></button>
+        <details id="launch-audio-category">
+          <summary>Audio</summary>
+          <input id="launch-music-volume" data-audio-volume="music" type="range" min="0" max="1" step="0.05" value="0.5" />
+        </details>
+      </section>
+    `;
+    const root = document.querySelector<HTMLElement>("#launch-menu")!;
+    const startButton = document.querySelector<HTMLButtonElement>("#launch-start")!;
+    const modeButton = document.querySelector<HTMLButtonElement>("#launch-mode")!;
+    const slider = document.querySelector<HTMLInputElement>("#launch-music-volume")!;
+    const details = document.querySelector<HTMLDetailsElement>("#launch-audio-category")!;
+    const menu = new LaunchMenuController({ root, startButton, modeButton, onStart: vi.fn() });
+    const volumes: number[] = [];
+    slider.addEventListener("input", () => volumes.push(Number(slider.value)));
+    menu.show();
+
+    const down = gamepad([13]);
+    menu.pollGamepad([down]);
+    expect(document.activeElement).toBe(modeButton);
+    menu.pollGamepad([gamepad()]);
+    menu.pollGamepad([down]);
+    expect(document.activeElement).toBe(slider);
+    expect(details.open).toBe(true);
+
+    menu.pollGamepad([gamepad([15])]);
+    expect(Number(slider.value)).toBeCloseTo(0.55, 5);
+    expect(volumes).toEqual([0.55]);
+  });
 });

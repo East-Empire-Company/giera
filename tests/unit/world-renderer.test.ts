@@ -106,6 +106,51 @@ describe("worldRenderer setBlock", () => {
   });
 });
 
+describe("worldRenderer edit ledger", () => {
+  const buildWorld = (): WorldRenderer =>
+    new WorldRenderer({
+      scene: new THREE.Scene(),
+      seed: 1234,
+      atlasTexture: new THREE.Texture(),
+      atlasNormal: new THREE.Texture(),
+      atlasOrm: new THREE.Texture(),
+      waterNormal: new THREE.Texture(),
+      workerCount: 1,
+    });
+
+  it("records every edit for persistence", () => {
+    const world = buildWorld();
+    world.setBlock(1, 2, 3, 9);
+    world.setBlock(1, 2, 3, 10);
+    expect(world.getEdits()).toEqual({ "1,2,3": 10 });
+    world.dispose();
+  });
+
+  it("restores saved edits into chunks created later", () => {
+    const world = buildWorld();
+    world.applyEdits({ "4,5,6": 10 });
+    world.setBlock(0, 0, 0, 9);
+    expect(world.getBlock(4, 5, 6)).toBe(10);
+    world.dispose();
+  });
+
+  it("restores saved edits into already loaded chunks", () => {
+    const world = buildWorld();
+    world.setBlock(0, 0, 0, 9);
+    world.applyEdits({ "4,5,6": 10 });
+    expect(world.getBlock(4, 5, 6)).toBe(10);
+    expect(world.getEdits()).toEqual({ "0,0,0": 9, "4,5,6": 10 });
+    world.dispose();
+  });
+
+  it("ignores malformed saved edit keys", () => {
+    const world = buildWorld();
+    world.applyEdits({ "4,5": 10, "x,y,z": 10, "1,2,3": 10 });
+    expect(world.getEdits()).toEqual({ "1,2,3": 10 });
+    world.dispose();
+  });
+});
+
 describe("worldRenderer smooth-normal neighbour remesh", () => {
   const SEED = 1234;
   const BORDER_Z = 8;

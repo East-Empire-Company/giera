@@ -18,7 +18,8 @@ export class LaunchMenuController {
 
   constructor(private readonly options: LaunchMenuOptions) {
     const { root, startButton, modeButton } = options;
-    this.controls = [startButton, modeButton];
+    const audioInputs = Array.from(root.querySelectorAll<HTMLInputElement>("input[data-audio-volume]"));
+    this.controls = [startButton, modeButton, ...audioInputs];
     this.renderMode();
 
     startButton.addEventListener("click", () => this.start("control"));
@@ -86,7 +87,8 @@ export class LaunchMenuController {
   private handleDirection(button: number): void {
     if (button === 12) this.moveFocus(-1);
     else if (button === 13) this.moveFocus(1);
-    else if (button === 14 || button === 15) this.adjustSelection();
+    else if (button === 14) this.adjustSelection(-1);
+    else if (button === 15) this.adjustSelection(1);
   }
 
   private handleKeydown(event: KeyboardEvent): void {
@@ -123,16 +125,30 @@ export class LaunchMenuController {
 
   private focusControl(index: number): void {
     this.focusedIndex = index;
-    this.controls[index].focus();
+    const control = this.controls[index];
+    const details = control.closest("details");
+    if (details instanceof HTMLDetailsElement) details.open = true;
+    control.focus();
   }
 
-  private adjustSelection(): void {
-    if (this.focusedIndex === 1) this.toggleSplitScreen();
+  private adjustSelection(amount: number): void {
+    if (this.focusedIndex === 1) {
+      this.toggleSplitScreen();
+      return;
+    }
+    const control = this.controls[this.focusedIndex];
+    if (!(control instanceof HTMLInputElement) || control.type !== "range") return;
+    const step = Number(control.step) || 0.05;
+    const min = Number(control.min);
+    const max = Number(control.max);
+    const next = Math.min(max, Math.max(min, Number(control.value) + amount * step));
+    control.value = String(next);
+    control.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   private activate(source: LaunchStartSource): void {
     if (this.focusedIndex === 0) this.start(source);
-    else this.toggleSplitScreen();
+    else if (this.focusedIndex === 1) this.toggleSplitScreen();
   }
 
   private toggleSplitScreen(): void {
