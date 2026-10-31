@@ -78,6 +78,7 @@ export class MicController {
   private segmentStartedAt = 0;
   private heardSound = false;
   private stopping = false;
+  private runId = 0;
   private error: MicErrorCode | null = null;
   private readonly callbacks: MicCallbacks;
   private readonly endpoint: string;
@@ -128,12 +129,19 @@ export class MicController {
       this.fail("unsupported");
       return false;
     }
+    const runId = ++this.runId;
+    let stream: MediaStream;
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (error) {
-      this.fail(classifyMicError(error));
+      if (runId === this.runId) this.fail(classifyMicError(error));
       return false;
     }
+    if (runId !== this.runId) {
+      for (const track of stream.getTracks()) track.stop();
+      return false;
+    }
+    this.stream = stream;
     this.error = null;
     this.setRecording(true);
     this.startSegment();
@@ -142,7 +150,11 @@ export class MicController {
   }
 
   stop(): void {
-    if (!this.recording && !this.recorder) return;
+    this.runId += 1;
+    if (!this.recording && !this.recorder) {
+      this.releaseStream();
+      return;
+    }
     this.setRecording(false);
     this.stopLevelMonitor();
     const recorder = this.recorder;
@@ -233,12 +245,10 @@ export class MicController {
         if (Math.sqrt(sum / data.length) > LEVEL_THRESHOLD) {
           this.heardSound = true;
           this.lastSoundAt = now;
-          return;
         }
       } else {
         this.heardSound = true;
         this.lastSoundAt = now;
-        return;
       }
       if (
         shouldCutSegment({

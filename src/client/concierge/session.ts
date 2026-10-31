@@ -82,10 +82,13 @@ export class ConciergeSession {
     this.generation += 1;
     this.clearConnectTimeout();
     this.avatar.hide();
-    this.options.root.hidden = reason !== "error" && reason !== "disconnect";
+    const keepFailedPanel = reason === "error" || reason === "disconnect";
+    this.options.root.hidden = !keepFailedPanel;
+    if (keepFailedPanel) this.showRetry();
+    else this.hideRetry();
     const conversation = this.conversation;
     this.conversation = null;
-    if (reason !== "error" && reason !== "disconnect") this.setPhase("closed");
+    if (!keepFailedPanel) this.setPhase("closed");
     if (conversation) {
       try {
         await conversation.endSession();
