@@ -113,10 +113,19 @@ export class ConciergeSession {
     try {
       const signedUrl = await this.resolveSignedUrl();
       if (this.isStale(generation)) return;
+      const firstMessage =
+        this.menu === "pause"
+          ? "Cześć! Gra jest zapauzowana. W czym mogę pomóc Ziemkowi i Gniewkowi?"
+          : "Cześć! Jestem Iskra, mały robot w Gierze. Gotowi na przygodę?";
       const conversation = await Conversation.startSession({
         signedUrl,
         connectionType: "websocket",
         clientTools: this.clientTools(),
+        overrides: {
+          agent: {
+            firstMessage,
+          },
+        },
         onConnect: () => {
           if (this.isStale(generation)) return;
           this.clearConnectTimeout();

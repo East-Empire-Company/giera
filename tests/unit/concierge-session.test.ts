@@ -150,10 +150,13 @@ describe("ConciergeSession", () => {
     expect(h.panel.parentElement).toBe(h.launchSlot);
     expect(h.panel.hidden).toBe(false);
     expect(startSession).toHaveBeenCalledTimes(1);
+    expect(startSession.mock.calls[0][0].overrides?.agent?.firstMessage).toContain("Gotowi na przygodę");
 
+    await h.session.close("menu");
     await h.session.open("pause");
     expect(h.panel.parentElement).toBe(h.pauseSlot);
-    expect(startSession).toHaveBeenCalledTimes(1);
+    expect(startSession).toHaveBeenCalledTimes(2);
+    expect(startSession.mock.calls[1][0].overrides?.agent?.firstMessage).toContain("zapauzowana");
     h.session.dispose();
   });
 

@@ -2,7 +2,7 @@ import { CONCIERGE_TOOLS } from "../src/shared/concierge-tools";
 
 const API = "https://api.elevenlabs.io/v1";
 const AGENT_NAME = "Iskra — Giera";
-const VOICE_ID = "B9cNwbQXN3s6l3nU6fqz";
+const VOICE_ID = "pt0Iailp6NXMdRw1n3c5";
 const MODEL_ID = "eleven_flash_v2_5";
 const OUT = "src/shared/concierge-agent.json";
 
