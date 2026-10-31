@@ -307,7 +307,6 @@ export class GameHUD {
     this.equipmentItemsEl = this.inventoryModal.querySelector(".hud-equipment-items")!;
     const closeBtn = this.inventoryModal.querySelector(".hud-modal-close");
     closeBtn?.addEventListener("click", () => this.setInventoryOpen(false));
-
     const tabs = this.inventoryModal.querySelectorAll<HTMLButtonElement>(".hud-modal-tab");
     const panes = this.inventoryModal.querySelectorAll<HTMLElement>(".hud-tab-pane");
     tabs.forEach((tab) => {
@@ -319,6 +318,9 @@ export class GameHUD {
           pane.style.display = isTarget ? "" : "none";
           pane.classList.toggle("active", isTarget);
         });
+        if (target === "equipment") {
+          this.renderInventoryModal(options.inventory, options.onCraft);
+        }
       });
     });
     this.renderHotbar(options.inventory);

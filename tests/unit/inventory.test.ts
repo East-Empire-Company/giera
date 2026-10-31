@@ -35,6 +35,17 @@ describe("GameInventory", () => {
     expect(inv.hotbar[0]).toBe(0);
   });
 
+  it("syncs hotbar with available blocks after crafting or state updates", () => {
+    const inv = new GameInventory({
+      creative: false,
+      hotbar: [7, 0, 0, 0, 0, 0, 0, 0, 0] as any,
+      blocks: { oak_log: 0, planks: 4 },
+    });
+    // oak_log count is 0, planks count is 4 (BLOCK_ID.planks is 9)
+    inv.syncHotbarWithBlocks();
+    expect(inv.hotbar[0]).toBe(9); // planks filled into empty slot, depleted oak_log removed
+  });
+
   it("cycles hotbar slots via scroll or direct selection", () => {
     const inv = new GameInventory();
     inv.selectSlot(3);

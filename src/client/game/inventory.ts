@@ -134,6 +134,35 @@ export class GameInventory {
   applyState(state: InventoryState): void {
     this.blocks = { ...state.blocks };
     this.items = { ...state.items };
+    this.syncHotbarWithBlocks();
+  }
+
+  syncHotbarWithBlocks(): void {
+    // Drop slots whose block count is <= 0 (if not creative)
+    if (!this.creative) {
+      for (let i = 0; i < this.hotbar.length; i++) {
+        const id = this.hotbar[i];
+        if (id > 0) {
+          const key = Object.keys(BLOCK_ID).find(
+            (k) => (BLOCK_ID as Record<string, number>)[k] === id
+          );
+          if (key && (this.blocks[key] ?? 0) <= 0) {
+            this.hotbar[i] = BLOCK_ID.air;
+          }
+        }
+      }
+    }
+    // Fill empty slots from available blocks
+    for (const [key, count] of Object.entries(this.blocks)) {
+      if (count <= 0) continue;
+      const blockId = (BLOCK_ID as Record<string, number>)[key];
+      if (blockId && blockId > 0 && !this.hotbar.includes(blockId as BlockId)) {
+        const emptyIdx = this.hotbar.indexOf(BLOCK_ID.air);
+        if (emptyIdx !== -1) {
+          this.hotbar[emptyIdx] = blockId as BlockId;
+        }
+      }
+    }
   }
 
   toJSON(): SerializedInventory {

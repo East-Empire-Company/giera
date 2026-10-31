@@ -115,8 +115,8 @@ export class ConciergeSession {
       if (this.isStale(generation)) return;
       const firstMessage =
         this.menu === "pause"
-          ? "Cześć! Gra jest zapauzowana. W czym mogę pomóc Ziemkowi i Gniewkowi?"
-          : "Cześć! Jestem Iskra, mały robot w Gierze. Gotowi na przygodę?";
+          ? "No co tam, ziomy"
+          : "Siema, kapuchy. Jestem Iskra, dawaj do gry";
       const conversation = await Conversation.startSession({
         signedUrl,
         connectionType: "websocket",
