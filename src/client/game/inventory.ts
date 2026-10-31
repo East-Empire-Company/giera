@@ -1,5 +1,5 @@
 import { BLOCK_ID, type BlockId } from "../../shared/blocks";
-import type { InventoryState } from "./recipes";
+import { RECIPES, type InventoryState } from "./recipes";
 
 export const MAX_EDITS_PER_CHUNK = 20_000;
 
@@ -102,6 +102,41 @@ export class GameInventory {
     }
     this.equippedTool = toolId;
     return true;
+  }
+
+  getMiningSpeedMultiplier(blockId: number): number {
+    const isWood =
+      blockId === BLOCK_ID.oak_log ||
+      blockId === BLOCK_ID.oak_leaves ||
+      blockId === BLOCK_ID.planks;
+    const isStoneOrOre =
+      blockId === BLOCK_ID.stone ||
+      blockId === BLOCK_ID.cobblestone ||
+      blockId >= BLOCK_ID.coal_ore;
+
+    if (!isWood && !isStoneOrOre) return 1;
+    const targetMaterial = isWood ? "wood" : "stone";
+
+    // If an equipped tool matches the material, return its multiplier
+    if (this.equippedTool && (this.items[this.equippedTool] ?? 0) > 0) {
+      const eqRecipe = RECIPES.find((r) => r.output.item === this.equippedTool);
+      if (eqRecipe?.toolBonus?.material === targetMaterial) {
+        return eqRecipe.toolBonus.speedMultiplier;
+      }
+    }
+
+    // Otherwise find best owned tool for this material
+    let best = 1;
+    for (const recipe of RECIPES) {
+      if (
+        recipe.toolBonus?.material === targetMaterial &&
+        (this.items[recipe.output.item] ?? 0) > 0 &&
+        recipe.toolBonus.speedMultiplier > best
+      ) {
+        best = recipe.toolBonus.speedMultiplier;
+      }
+    }
+    return best;
   }
 
   getBlockCount(key: string): number {

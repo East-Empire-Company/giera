@@ -65,6 +65,23 @@ describe("GameInventory", () => {
     expect(inv.equippedTool).toBeNull();
   });
 
+  it("computes mining speed multiplier from equipped tool and owned tools", () => {
+    const inv = new GameInventory({
+      items: { wooden_pickaxe: 1, iron_axe: 1 },
+    });
+    // stone block (id 2) -> wooden_pickaxe has 1.8x speed on stone
+    expect(inv.getMiningSpeedMultiplier(2)).toBe(1.8);
+    // oak_log block (id 7) -> iron_axe has 4x speed on wood
+    expect(inv.getMiningSpeedMultiplier(7)).toBe(4);
+    // dirt block (id 4) -> 1.0x
+    expect(inv.getMiningSpeedMultiplier(4)).toBe(1);
+
+    // If iron_pickaxe is added and equipped, stone gets 3.5x
+    inv.items.iron_pickaxe = 1;
+    inv.equipTool("iron_pickaxe");
+    expect(inv.getMiningSpeedMultiplier(2)).toBe(3.5);
+  });
+
   it("cycles hotbar slots via scroll or direct selection", () => {
     const inv = new GameInventory();
     inv.selectSlot(3);

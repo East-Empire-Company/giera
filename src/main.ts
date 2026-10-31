@@ -1390,12 +1390,7 @@ async function boot(): Promise<void> {
 
           const def = BLOCK_BY_ID[bId as BlockId];
           const hardness = def?.hardness ?? 1.0;
-          let toolSpeed = 1.0;
-          if ((bId === BLOCK_ID.oak_log || bId === BLOCK_ID.oak_leaves) && inventory.getItemCount("stone_axe") > 0) {
-            toolSpeed = 3.0;
-          } else if ((bId === BLOCK_ID.stone || bId === BLOCK_ID.cobblestone || bId >= BLOCK_ID.coal_ore) && inventory.getItemCount("iron_pickaxe") > 0) {
-            toolSpeed = 3.0;
-          }
+          const toolSpeed = inventory.getMiningSpeedMultiplier(bId);
 
           miningProgress += (delta / Math.max(0.2, hardness)) * 1.5 * toolSpeed;
           hud.updateBreakProgress(miningProgress);

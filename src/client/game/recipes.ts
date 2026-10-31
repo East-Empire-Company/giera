@@ -10,7 +10,7 @@ export type RecipeDef = {
     count: number;
   };
   toolBonus?: {
-    material: "wood" | "stone" | "iron";
+    material: "wood" | "stone" | "iron" | "combat";
     speedMultiplier: number;
   };
 };
@@ -46,9 +46,10 @@ export const RECIPES: RecipeDef[] = [
   {
     id: "wooden_sword",
     name: "Drewniany Miecz",
-    description: "Lekka broń do ćwiczeń na kukle",
+    description: "Lekka broń do ćwiczeń na kukle (2x mocniejszy cios)",
     cost: { stick: 1, planks: 2 },
     output: { item: "wooden_sword", count: 1 },
+    toolBonus: { material: "combat", speedMultiplier: 2 },
   },
   {
     id: "stone_pickaxe",
@@ -85,9 +86,10 @@ export const RECIPES: RecipeDef[] = [
   {
     id: "iron_sword",
     name: "Żelazny Miecz",
-    description: "Mocny miecz do zabawy i pojedynków z kukłą",
+    description: "Mocny miecz do zabawy i pojedynków z kukłą (3.5x mocniejszy cios)",
     cost: { stick: 1, iron_ore: 2 },
     output: { item: "iron_sword", count: 1 },
+    toolBonus: { material: "combat", speedMultiplier: 3.5 },
   },
 ];
 

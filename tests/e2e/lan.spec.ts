@@ -170,6 +170,7 @@ test("lan: two clients join one room, exchange a block edit, server persists the
   await A.evaluate(([y]) => {
     const g = (window as unknown as G).__GIERA__;
     (g.inventory as any).setHotbarSlot(0, 3);
+    (g.inventory as any).selectSlot(0);
     g.player.yaw = y as number;
     g.player.pitch = 0;
     g.player.syncAvatar();
