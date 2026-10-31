@@ -23,7 +23,7 @@ describe("concierge cheat actions", () => {
       gniewko: new PlayerController({ id: "p2", spawn: [5, 40, 0] }),
     };
     const host: ConciergeHost = {
-      status: () => ({ started: true, splitScreen, volume: 0.8, coins: 0, tier: 1 }),
+      status: () => ({ started: true, splitScreen, volume: 0.8, coins: 0, stars: 0, tier: 1 }),
       setSplitScreen: () => {},
       setVolume: (level) => level,
       teleportToSpawn: () => {},
@@ -59,5 +59,10 @@ describe("concierge cheat actions", () => {
     const response = await tools.buy_expansion({});
 
     expect(response).toContain("Fabryka rośnie");
+  });
+
+  it("keeps the deployed agent tool configuration in sync with CONCIERGE_TOOLS", async () => {
+    const agentConfig = (await import("../../src/shared/concierge-agent.json")).default;
+    expect(agentConfig.tools.length).toBe(CONCIERGE_TOOLS.length);
   });
 });

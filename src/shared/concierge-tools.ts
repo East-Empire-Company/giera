@@ -26,7 +26,7 @@ export const CONCIERGE_TOOLS: readonly ConciergeToolSpec[] = [
   {
     name: "get_status",
     description:
-      "Odczytaj aktualny stan gry: czy gra trwa, czy jest podzielony ekran, głośność, monety i poziom. Użyj tego, zanim odpowiesz na pytanie o stan gry.",
+      "Odczytaj aktualny stan gry: czy gra trwa, czy jest podzielony ekran, głośność, gwiazdki, monety i poziom. Użyj tego, zanim odpowiesz na pytanie o stan gry.",
     parameters: { type: "object", properties: {} },
   },
   {

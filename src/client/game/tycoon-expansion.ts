@@ -136,8 +136,9 @@ export class TycoonExpansion {
   }
 
   restore(owned: readonly number[]): void {
+    const list = Array.isArray(owned) ? owned : [];
     for (const slot of this.slots) {
-      const isOwned = owned.includes(slot.index);
+      const isOwned = list.includes(slot.index);
       this.states.set(slot.index, isOwned ? "owned" : "locked");
       this.growth.set(slot.index, isOwned ? 1 : 0);
       this.paint(slot.index);

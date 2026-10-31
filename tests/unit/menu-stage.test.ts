@@ -38,4 +38,20 @@ describe("MenuStage", () => {
     expect(camera.position.distanceTo(focus)).toBeLessThan(openDistance);
     expect(camera.position.y).toBeGreaterThan(focus.y);
   });
+
+  it("elevates the camera above high terrain via groundAt", () => {
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+    const focus = new THREE.Vector3(12, 60, 12);
+    const stage = new MenuStage({
+      radius: 13,
+      height: 8.5,
+      speed: 0.06,
+      startAngle: 0,
+      groundAt: () => 75,
+    });
+
+    stage.update(1, camera, focus);
+    // Default would be 60 + 8.5 = 68.5, but terrain is 75 -> clamped to 75 + 2 = 77
+    expect(camera.position.y).toBeCloseTo(77, 5);
+  });
 });

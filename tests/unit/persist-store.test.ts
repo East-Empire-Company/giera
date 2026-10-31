@@ -45,6 +45,14 @@ describe("save store", () => {
     expect(parseSaveData(JSON.stringify(legacyState))).toEqual(legacyState);
   });
 
+  it("rejects saves with malformed tycoon expansions", () => {
+    const malformed = {
+      ...state,
+      tycoon: { vaultCoins: 3, collectedStars: 17, dropperTier: 4, expansions: "invalid" as unknown as number[] },
+    };
+    expect(parseSaveData(JSON.stringify(malformed))).toBeNull();
+  });
+
   it.each([1, 2])("loads prior saves without terrain metadata (%i)", (worldgenVersion) => {
     const previousSave = { ...state, worldgenVersion };
     expect(parseSaveData(JSON.stringify(previousSave))).toEqual(state);

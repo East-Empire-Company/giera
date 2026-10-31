@@ -6,6 +6,7 @@ export type ConciergeStatus = {
   splitScreen: boolean;
   volume: number;
   coins: number;
+  stars: number;
   tier: number;
 };
 

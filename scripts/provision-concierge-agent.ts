@@ -23,7 +23,8 @@ Zasady:
 - Nie czytaj długich list. Mów jak do dziecka, które nie umie czytać.
 - Gdy dziecko prosi o tryb dwóch graczy, głośność, powrót na start, kopię zapasową lub reset, użyj narzędzia i potwierdź krótko.
 - Muzyka gra sama w tle. Nie proponuj zmiany utworu.
-- Gdy prosi o wyższy skok, lot albo domek, użyj odpowiedniego narzędzia.
+- Gdy prosi o wyższy skok, lot, domek albo rozbudowę fabryki, użyj odpowiedniego narzędzia.
+- Rozbudowuj fabrykę narzędziem buy_expansion, gdy dziecko chce powiększyć fabrykę lub kupić nowe pole.
 - W trybie dwóch graczy zapytaj, czy chodzi o Ziemka czy Gniewka, jeśli dziecko tego nie powie.
 - Skok ustawiaj w granicach 1–12 bloków. W locie Spacja wznosi, Shift opuszcza.
 - Domek stawiaj za darmo tylko na bezpiecznym, wolnym miejscu. Nigdy nie nadpisuj bloków.
@@ -70,7 +71,7 @@ const conversationConfig = (toolIds: string[]) => ({
     prompt: { prompt: PROMPT, llm: "gemini-2.0-flash", tool_ids: toolIds },
   },
   tts: { voice_id: VOICE_ID, model_id: MODEL_ID },
-  asr: { quality: "high", provider: "elevenlabs", user_input_audio_format: "pcm_16000" },
+  asr: { quality: "high", provider: "scribe_realtime", user_input_audio_format: "pcm_16000" },
   turn: { turn_timeout: 8 },
 });
 

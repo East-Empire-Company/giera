@@ -25,6 +25,7 @@ vi.mock("@openavatar/three", () => ({
 
 import { ConciergeSession } from "../../src/client/concierge/session";
 import type { ConciergeHost } from "../../src/client/concierge/actions";
+import type { ConciergeSessionOptions } from "../../src/client/concierge/session";
 
 const host: ConciergeHost = {
   status: () => ({
@@ -32,6 +33,7 @@ const host: ConciergeHost = {
     splitScreen: false,
     volume: 0.8,
     coins: 0,
+    stars: 0,
     tier: 0,
   }),
   setSplitScreen: () => {},
@@ -52,7 +54,10 @@ type Harness = {
   onClosed: ReturnType<typeof vi.fn>;
 };
 
-const build = (signedUrl = Promise.resolve("wss://signed")): Harness => {
+const build = (
+  signedUrl = Promise.resolve("wss://signed"),
+  overrides: Partial<ConciergeSessionOptions> = {},
+): Harness => {
   document.body.innerHTML = `
     <div id="launch-slot"></div>
     <div id="pause-slot"></div>
@@ -71,6 +76,7 @@ const build = (signedUrl = Promise.resolve("wss://signed")): Harness => {
     },
     fetchSignedUrl: () => signedUrl,
     onClosed,
+    ...overrides,
   });
   return {
     session,
@@ -199,6 +205,44 @@ describe("ConciergeSession", () => {
 
     expect(lateEnd).toHaveBeenCalledTimes(1);
     h.session.dispose();
+  });
+
+  it("fails the panel when the conversation never connects", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = build(Promise.resolve("wss://signed"), { connectTimeoutMs: 100 });
+      await h.session.open("launch");
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      const status = document.querySelector<HTMLElement>("#status")!;
+      expect(status.dataset.phase).toBe("failed");
+      expect(status.textContent).toContain("połączyć");
+      expect(h.panel.hidden).toBe(false);
+      h.session.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays live when the conversation connects before the timeout", async () => {
+    startSession.mockImplementation(async (options: { onConnect?: () => void }) => {
+      options.onConnect?.();
+      return { endSession, type: "voice", setVolume: setConversationVolume };
+    });
+    vi.useFakeTimers();
+    try {
+      const h = build(Promise.resolve("wss://signed"), { connectTimeoutMs: 100 });
+      await h.session.open("launch");
+      expect(h.session.currentPhase).toBe("live");
+
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(h.session.currentPhase).toBe("live");
+      h.session.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the failure message visible when the signed url fetch fails", async () => {

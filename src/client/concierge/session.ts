@@ -6,6 +6,8 @@ export type ConciergeMenu = "launch" | "pause";
 export type ConciergePhase = "closed" | "connecting" | "live" | "failed";
 export type ConciergeCloseReason = "menu" | "hidden" | "error" | "disconnect" | "user";
 
+export const CONNECT_TIMEOUT_MS = 12_000;
+
 const STATUS_TEXT: Record<ConciergePhase, string> = {
   closed: "",
   connecting: "Iskra się budzi…",
@@ -20,6 +22,7 @@ export type ConciergeSessionOptions = {
   statusEl: HTMLElement;
   slots: Record<ConciergeMenu, HTMLElement>;
   fetchSignedUrl?: () => Promise<string>;
+  connectTimeoutMs?: number;
   onClosed?: (reason: ConciergeCloseReason) => void;
   onPhaseChange?: (phase: ConciergePhase) => void;
 };
@@ -29,6 +32,7 @@ export class ConciergeSession {
   private conversation: ConversationHandle | null = null;
   private menu: ConciergeMenu | null = null;
   private generation = 0;
+  private connectTimer: number | null = null;
   private speechVolume = 1;
   private readonly avatar: ConciergeAvatar;
   private readonly tools: Record<string, ConciergeToolHandler>;
@@ -67,6 +71,7 @@ export class ConciergeSession {
     const wasOpen = this.menu !== null;
     this.menu = null;
     this.generation += 1;
+    this.clearConnectTimeout();
     this.avatar.hide();
     this.options.root.hidden = reason !== "error" && reason !== "disconnect";
     const conversation = this.conversation;
@@ -104,6 +109,7 @@ export class ConciergeSession {
   private async connect(): Promise<void> {
     const generation = ++this.generation;
     this.setPhase("connecting");
+    this.armConnectTimeout(generation);
     try {
       const signedUrl = await this.resolveSignedUrl();
       if (this.isStale(generation)) return;
@@ -113,6 +119,7 @@ export class ConciergeSession {
         clientTools: this.clientTools(),
         onConnect: () => {
           if (this.isStale(generation)) return;
+          this.clearConnectTimeout();
           this.setPhase("live");
           this.avatar.setState("listening");
         },
@@ -122,12 +129,14 @@ export class ConciergeSession {
         },
         onDisconnect: () => {
           if (this.isStale(generation)) return;
+          this.clearConnectTimeout();
           this.conversation = null;
           this.setPhase("failed");
           void this.close("disconnect");
         },
         onError: () => {
           if (this.isStale(generation)) return;
+          this.clearConnectTimeout();
           this.conversation = null;
           this.setPhase("failed");
           void this.close("error");
@@ -172,6 +181,23 @@ export class ConciergeSession {
 
   private isStale(generation: number): boolean {
     return generation !== this.generation || this.menu === null;
+  }
+
+  private armConnectTimeout(generation: number): void {
+    this.clearConnectTimeout();
+    this.connectTimer = window.setTimeout(() => {
+      this.connectTimer = null;
+      if (this.isStale(generation)) return;
+      this.conversation = null;
+      this.setPhase("failed");
+      void this.close("error");
+    }, this.options.connectTimeoutMs ?? CONNECT_TIMEOUT_MS);
+  }
+
+  private clearConnectTimeout(): void {
+    if (this.connectTimer === null) return;
+    window.clearTimeout(this.connectTimer);
+    this.connectTimer = null;
   }
 
   private setPhase(phase: ConciergePhase): void {

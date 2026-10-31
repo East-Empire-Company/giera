@@ -286,7 +286,14 @@ async function boot(): Promise<void> {
     const id = world.getBlock(x, y, z);
     return id !== BLOCK_ID.air && id !== BLOCK_ID.water && id !== BLOCK_ID.oak_leaves;
   };
-  const menuStage = new MenuStage({ radius: 13, height: 8.5, speed: 0.06, startAngle: 0.7, solid: camSolid });
+  const menuStage = new MenuStage({
+    radius: 13,
+    height: 8.5,
+    speed: 0.06,
+    startAngle: 0.7,
+    solid: camSolid,
+    groundAt: (x, z) => surfaceHeight(x, z, seed),
+  });
 
   const loadAreaBatched = async (
     worldX: number,
@@ -522,6 +529,7 @@ async function boot(): Promise<void> {
       splitScreen: splitScreen.isSplitScreen,
       volume: audio.volume,
       coins: tycoon.vaultCoins,
+      stars: tycoon.collectedStars,
       tier: tycoon.dropperTier,
     }),
     setSplitScreen: (enabled) => {

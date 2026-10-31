@@ -25,7 +25,10 @@ function isSerializedTycoon(data: unknown): data is SerializedTycoon {
     data.collectedStars >= 0 &&
     typeof data.dropperTier === "number" &&
     Number.isSafeInteger(data.dropperTier) &&
-    data.dropperTier >= 1
+    data.dropperTier >= 1 &&
+    (!("expansions" in data) ||
+      data.expansions === undefined ||
+      (Array.isArray(data.expansions) && data.expansions.every((n) => Number.isSafeInteger(n) && n >= 0)))
   );
 }
 
