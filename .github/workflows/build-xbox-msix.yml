@@ -1,0 +1,44 @@
+name: build-xbox-msix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'platform/xbox-uwp-giera/**'
+      - '.github/workflows/build-xbox-msix.yml'
+
+jobs:
+  msix:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Build web bundle
+        shell: pwsh
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          bun platform/xbox-uwp-giera/sync-web.ts --skip-build
+
+      - name: Report toolchain
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -format json
+          Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }
+
+      - name: Build MSIX
+        shell: pwsh
+        run: platform/xbox-uwp-giera/build-giera.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: giera-msix
+          path: platform/xbox-uwp-giera/AppPackages/**/*.msix
+          if-no-files-found: error
+          retention-days: 14
