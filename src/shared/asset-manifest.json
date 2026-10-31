@@ -29,6 +29,9 @@
     "factoryButton": "assets/models/kenney-factory-kit/button-floor-round.glb",
     "factoryGear": "assets/models/kenney-factory-kit/cog-a.glb"
   },
+  "concierge": {
+    "iskra": "assets/models/concierge/iskra.glb"
+  },
   "modelTextures": {
     "factoryKit": "assets/models/kenney-factory-kit/Textures/colormap.png"
   },

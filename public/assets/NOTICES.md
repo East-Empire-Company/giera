@@ -30,6 +30,7 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 | `assets/models/kenney-factory-kit/scanner-low.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/scanner-low.glb` | Kenney | CC0 |
 | `assets/models/kenney-factory-kit/button-floor-round.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/button-floor-round.glb` | Kenney | CC0 |
 | `assets/models/kenney-factory-kit/cog-a.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/cog-a.glb` | Kenney | CC0 |
+| `assets/models/concierge/iskra.glb` | [Validated Avatar Library (VALID) / Microsoft Rocketbox](https://github.com/c-frame/valid-avatars-glb) / `avatars/White/White_F_2_Casual.glb` | Tiffany Do, Microsoft Rocketbox | MIT |
 | `assets/models/kenney-factory-kit/Textures/colormap.png` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/Textures/colormap.png` | Kenney | CC0 |
 | `assets/sky/clouds.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Other/clouds.png` | Kenney | CC0 |
 | `assets/sky/skybox_sideClouds.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Other/skybox_sideClouds.png` | Kenney | CC0 |

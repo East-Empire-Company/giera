@@ -30,7 +30,8 @@ type AssetSourceId =
   | "polyhaven-hdri"
   | "kaykit-adventurers"
   | "quaternius-nature"
-  | "kenney-factory-kit";
+  | "kenney-factory-kit"
+  | "valid-rocketbox";
 type AssetPick = { source: AssetSourceId; member: string; path: string; preplaced?: boolean };
 
 const sourceInfo: Record<AssetSourceId, { title: string; author: string; license: string; url: string }> = {
@@ -49,6 +50,7 @@ const sourceInfo: Record<AssetSourceId, { title: string; author: string; license
   "kaykit-adventurers": { title: "KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)", author: "Kay Lousberg", license: "CC0 1.0", url: "https://kaylousberg.itch.io/kaykit-adventurers" },
   "quaternius-nature": { title: "Ultimate Stylized Nature (Grass_Small, Bush_Small_Flowers, Flower_1)", author: "Quaternius", license: "CC0", url: "https://quaternius.com/packs/ultimatestylizednature.html" },
   "kenney-factory-kit": { title: "Factory Kit 3.0", author: "Kenney", license: "CC0", url: "https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip" },
+  "valid-rocketbox": { title: "Validated Avatar Library (VALID) / Microsoft Rocketbox", author: "Tiffany Do, Microsoft Rocketbox", license: "MIT", url: "https://github.com/c-frame/valid-avatars-glb" },
 };
 
 const assetPicks: Record<string, Record<string, AssetPick>> = {
@@ -82,6 +84,9 @@ const assetPicks: Record<string, Record<string, AssetPick>> = {
     factoryScanner: { source: "kenney-factory-kit", member: "Models/GLB format/scanner-low.glb", path: "assets/models/kenney-factory-kit/scanner-low.glb" },
     factoryButton: { source: "kenney-factory-kit", member: "Models/GLB format/button-floor-round.glb", path: "assets/models/kenney-factory-kit/button-floor-round.glb" },
     factoryGear: { source: "kenney-factory-kit", member: "Models/GLB format/cog-a.glb", path: "assets/models/kenney-factory-kit/cog-a.glb" },
+  },
+  concierge: {
+    iskra: { source: "valid-rocketbox", member: "avatars/White/White_F_2_Casual.glb", path: "assets/models/concierge/iskra.glb", preplaced: true },
   },
   modelTextures: {
     factoryKit: { source: "kenney-factory-kit", member: "Models/GLB format/Textures/colormap.png", path: "assets/models/kenney-factory-kit/Textures/colormap.png" },

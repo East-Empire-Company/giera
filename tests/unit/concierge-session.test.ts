@@ -9,20 +9,6 @@ vi.mock("@elevenlabs/client", () => ({
   Conversation: { startSession: (...args: unknown[]) => startSession(...args) },
 }));
 
-vi.mock("@openavatar/core", () => ({ parse: () => ({ document: {} }) }));
-
-vi.mock("@openavatar/three", () => ({
-  OpenAvatarStage: class {
-    load(): void {}
-    setInput(): void {}
-    start(): void {}
-    stop(): void {}
-    play(): void {}
-    resize(): void {}
-    dispose(): void {}
-  },
-}));
-
 import { ConciergeSession } from "../../src/client/concierge/session";
 import type { ConciergeHost } from "../../src/client/concierge/actions";
 import type { ConciergeSessionOptions } from "../../src/client/concierge/session";

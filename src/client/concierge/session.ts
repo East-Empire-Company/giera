@@ -81,11 +81,16 @@ export class ConciergeSession {
     this.menu = null;
     this.generation += 1;
     this.clearConnectTimeout();
-    this.avatar.hide();
+    this.avatar.setAudioSource(null);
     const keepFailedPanel = reason === "error" || reason === "disconnect";
+    if (keepFailedPanel) {
+      this.avatar.setState("idle");
+      this.showRetry();
+    } else {
+      this.avatar.hide();
+      this.hideRetry();
+    }
     this.options.root.hidden = !keepFailedPanel;
-    if (keepFailedPanel) this.showRetry();
-    else this.hideRetry();
     const conversation = this.conversation;
     this.conversation = null;
     if (!keepFailedPanel) this.setPhase("closed");
@@ -190,6 +195,17 @@ export class ConciergeSession {
         return;
       }
       this.conversation = conversation;
+      this.avatar.setAudioSource(() => {
+        const active = this.conversation as {
+          getOutputVolume?: () => number;
+          getOutputByteFrequencyData?: () => Uint8Array;
+        } | null;
+        if (!active) return null;
+        return {
+          volume: typeof active.getOutputVolume === "function" ? active.getOutputVolume() : 0,
+          spectrum: typeof active.getOutputByteFrequencyData === "function" ? active.getOutputByteFrequencyData() : null,
+        };
+      });
       if (conversation.type === "voice") conversation.setVolume({ volume: this.speechVolume });
     } catch {
       if (this.isStale(generation)) return;
