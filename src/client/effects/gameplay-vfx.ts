@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { makeRng } from "../../shared/rng";
 
-export type GameplayVfxKind = "mine" | "wood" | "leaves" | "footstep" | "pollen" | "craft" | "place" | "collect" | "bounce";
+export type GameplayVfxKind = "mine" | "wood" | "leaves" | "footstep" | "pollen" | "craft" | "place" | "collect" | "bounce" | "impact_ring" | "debris";
 
 export type GameplayVfxTextures = {
   dirt01: THREE.Texture;
@@ -12,7 +12,7 @@ export type GameplayVfxTextures = {
   star01: THREE.Texture;
 };
 
-type ParticleKind = "dirt" | "spark" | "star" | "smoke" | "wood" | "leaf" | "pollen" | "dust";
+type ParticleKind = "dirt" | "spark" | "star" | "smoke" | "wood" | "leaf" | "pollen" | "dust" | "debris";
 type ParticlePriority = "ambient" | "gameplay";
 
 type Particle = {
@@ -25,6 +25,8 @@ type Particle = {
   velocity: THREE.Vector3;
   serial: number;
   priority: ParticlePriority;
+  groundY: number;
+  bounce: boolean;
 };
 
 type Spec = { gravity: number; size: number; speed: number; lift: number; tint: number };
@@ -41,6 +43,7 @@ const SPECS: Record<ParticleKind, Spec> = {
   leaf: { gravity: -1.2, size: 0.18, speed: 1.2, lift: 1.6, tint: 0x9bcf5a },
   pollen: { gravity: 0, size: 0.1, speed: 0.14, lift: 0.12, tint: 0xffe6a0 },
   dust: { gravity: -0.5, size: 0.15, speed: 0.5, lift: 0.3, tint: 0xb1a98b },
+  debris: { gravity: -14, size: 0.18, speed: 3, lift: 1.2, tint: 0xffffff },
 };
 
 export class GameplayVfx {
@@ -49,6 +52,17 @@ export class GameplayVfx {
   private readonly pool: Particle[] = [];
   private serial = 0;
   private readonly footstepStates = new Map<string, { position: THREE.Vector3; distance: number }>();
+  private readonly impactRing: THREE.Mesh;
+  private readonly impactRingGeometry = new THREE.RingGeometry(0.88, 1, 24);
+  private readonly impactRingMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffdf96,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+  });
+  private impactRingAge = -1;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -57,13 +71,12 @@ export class GameplayVfx {
   ) {
     this.rng = makeRng(seed);
     this.group.name = "gameplay-vfx";
+    this.impactRing = new THREE.Mesh(this.impactRingGeometry, this.impactRingMaterial);
+    this.impactRing.rotation.x = -Math.PI / 2;
+    this.impactRing.visible = false;
+    scene.add(this.impactRing);
     for (let i = 0; i < POOL_SIZE; i++) {
-      const material = new THREE.SpriteMaterial({
-        transparent: true,
-        depthWrite: false,
-        opacity: 0,
-        fog: false,
-      });
+      const material = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, opacity: 0, fog: false });
       const sprite = new THREE.Sprite(material);
       sprite.visible = false;
       this.group.add(sprite);
@@ -77,13 +90,15 @@ export class GameplayVfx {
         velocity: new THREE.Vector3(),
         priority: "gameplay",
         serial: 0,
+        groundY: -Infinity,
+        bounce: false,
       });
     }
     scene.add(this.group);
   }
 
   get activeCount(): number {
-    let n = 0;
+    let n = this.impactRing.visible ? 1 : 0;
     for (const p of this.pool) if (p.sprite.visible) n++;
     return n;
   }
@@ -94,7 +109,7 @@ export class GameplayVfx {
       .map((p) => ({ x: p.sprite.position.x, y: p.sprite.position.y, z: p.sprite.position.z, opacity: p.material.opacity }));
   }
 
-  emit(kind: GameplayVfxKind, position: THREE.Vector3): void {
+  emit(kind: GameplayVfxKind, position: THREE.Vector3, options: { tint?: number; groundY?: number } = {}): void {
     switch (kind) {
       case "mine":
         this.burst("dirt", 8, 0.45, position, true);
@@ -104,6 +119,18 @@ export class GameplayVfx {
         break;
       case "leaves":
         this.burst("leaf", 8, 0.72, position, true);
+        break;
+      case "debris":
+        this.burst("debris", 10, 0.65, position, true, "gameplay", options);
+        break;
+      case "impact_ring":
+        this.impactRing.position.copy(position);
+        this.impactRing.position.y = options.groundY ?? position.y;
+        this.impactRing.scale.setScalar(0.3);
+        this.impactRingMaterial.color.setHex(options.tint ?? 0xffdf96);
+        this.impactRingMaterial.opacity = 0.8;
+        this.impactRing.visible = true;
+        this.impactRingAge = 0;
         break;
       case "footstep":
         this.burst("dust", 4, 0.28, position, true, "ambient");
@@ -163,15 +190,33 @@ export class GameplayVfx {
       }
       p.velocity.y += p.gravity * deltaSeconds;
       p.sprite.position.addScaledVector(p.velocity, deltaSeconds);
+      if (p.bounce && p.sprite.position.y <= p.groundY && p.velocity.y < 0) {
+        p.sprite.position.y = p.groundY;
+        p.velocity.y = -p.velocity.y * 0.4;
+        p.velocity.x *= 0.4;
+        p.velocity.z *= 0.4;
+        p.bounce = false;
+      }
       p.material.opacity = 1 - p.age / p.life;
+    }
+    if (this.impactRing.visible) {
+      this.impactRingAge += deltaSeconds;
+      if (this.impactRingAge >= 0.25) {
+        this.impactRing.visible = false;
+        this.impactRingMaterial.opacity = 0;
+      } else {
+        const progress = this.impactRingAge / 0.25;
+        this.impactRing.scale.setScalar(0.3 + progress * 0.9);
+        this.impactRingMaterial.opacity = 0.8 * (1 - progress);
+      }
     }
   }
 
   dispose(): void {
-    this.scene.remove(this.group);
-    for (const p of this.pool) {
-      p.material.dispose();
-    }
+    this.scene.remove(this.group, this.impactRing);
+    for (const p of this.pool) p.material.dispose();
+    this.impactRingGeometry.dispose();
+    this.impactRingMaterial.dispose();
     this.footstepStates.clear();
   }
 
@@ -180,6 +225,7 @@ export class GameplayVfx {
       case "wood":
       case "dust":
       case "dirt":
+      case "debris":
         return index % 2 === 0 ? this.textures.dirt01 : this.textures.dirt02;
       case "leaf":
         return this.textures.leaf01;
@@ -213,7 +259,8 @@ export class GameplayVfx {
     life: number,
     origin: THREE.Vector3,
     outward: boolean,
-    priority: ParticlePriority = "gameplay"
+    priority: ParticlePriority = "gameplay",
+    options: { tint?: number; groundY?: number } = {}
   ): void {
     const spec = SPECS[kind];
     for (let i = 0; i < count; i++) {
@@ -232,8 +279,10 @@ export class GameplayVfx {
       p.size = spec.size;
       p.serial = ++this.serial;
       p.priority = priority;
+      p.groundY = options.groundY ?? -Infinity;
+      p.bounce = kind === "debris";
       p.material.map = this.texture(kind, i);
-      p.material.color.setHex(spec.tint);
+      p.material.color.setHex(options.tint ?? spec.tint);
       p.material.opacity = 1;
       p.material.needsUpdate = true;
       p.sprite.scale.setScalar(spec.size);
@@ -241,5 +290,4 @@ export class GameplayVfx {
       p.sprite.visible = true;
     }
   }
-
 }

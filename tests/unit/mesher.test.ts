@@ -38,6 +38,41 @@ describe("greedy chunk mesher", () => {
   });
 });
 
+describe("anisotropy quad-flip", () => {
+  it("keeps the unflipped diagonal for a fully-exposed face (all ao = 1)", () => {
+    const data = new Uint8Array(CHUNK_VOLUME);
+    data[getBlockIndex(1, 1, 1)] = BLOCK_ID.stone;
+    const mesh = meshChunk({ data, cx: 0, cy: 0, cz: 0, getBlock: () => 0, atlas });
+    const indices = Array.from(mesh.indices);
+    expect(indices.slice(0, 6)).toEqual([0, 1, 2, 0, 2, 3]);
+  });
+
+  it("flips the top-face diagonal when the opposite corners have lower AO", () => {
+    const data = new Uint8Array(CHUNK_VOLUME);
+    data[getBlockIndex(1, 1, 1)] = BLOCK_ID.stone;
+    data[getBlockIndex(0, 2, 2)] = BLOCK_ID.stone;
+    data[getBlockIndex(2, 2, 0)] = BLOCK_ID.stone;
+    const mesh = meshChunk({ data, cx: 0, cy: 0, cz: 0, getBlock: () => 0, atlas });
+    const vertexAt = (x: number, z: number): number => {
+      for (let i = 0; i < mesh.positions.length / 3; i++) {
+        if (mesh.positions[i * 3] === x && mesh.positions[i * 3 + 1] === 2 && mesh.positions[i * 3 + 2] === z && mesh.normals[i * 3 + 1] === 1) return i;
+      }
+      throw new Error(`Missing top face vertex ${x},${z}`);
+    };
+    const v0 = vertexAt(1, 1);
+    const v1 = vertexAt(1, 2);
+    const v2 = vertexAt(2, 2);
+    const v3 = vertexAt(2, 1);
+    const target = new Set([v0, v1, v2, v3]);
+    const triangles: number[][] = [];
+    for (let i = 0; i < mesh.indices.length; i += 3) {
+      const triangle = Array.from(mesh.indices.slice(i, i + 3));
+      if (triangle.every((index) => target.has(index))) triangles.push(triangle.sort((a, b) => a - b));
+    }
+    expect(triangles).toEqual([[v0, v1, v3].sort((a, b) => a - b), [v1, v2, v3].sort((a, b) => a - b)]);
+  });
+});
+
 describe("smooth terrain", () => {
   const smoothAtlas = { ...atlas, dirt: { id: 3, uv: [0, 0, 1, 1] as const }, grass_top: atlas.grass_top, grass_side: atlas.grass_side };
   it("rounds the corner between a step of grass columns instead of leaving a cliff edge", () => {
@@ -59,6 +94,12 @@ describe("smooth terrain", () => {
     const tops = new Set<number>();
     for (let i = 0; i < mesh.positions.length / 3; i++) if (mesh.normals[i * 3 + 1] === 1) tops.add(mesh.positions[i * 3 + 1]);
     expect([...tops]).toEqual([1]);
+  });
+  it("keeps the four-corner mean after two deform iterations", () => {
+    const heightAt = (x: number, z: number): number => (x === 1 && z === 0 ? 4 : 3);
+    const getBlock = (x: number, y: number, z: number): number =>
+      y >= 0 && y < heightAt(x, z) ? BLOCK_ID.grass : 0;
+    expect(smoothVertexHeight(getBlock, 1, 4, 1)).toBeCloseTo(3.25);
   });
   it("shares smooth normals across adjacent terrain top faces", () => {
     const heightAt = (x: number, z: number): number => (x === 2 && z === 2 ? 4 : 3);

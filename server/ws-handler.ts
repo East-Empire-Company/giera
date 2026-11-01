@@ -1,6 +1,6 @@
 import { BLOCK_BY_ID } from "../src/shared/blocks";
 import { CHUNK_SIZE, WORLD_HEIGHT } from "../src/shared/chunk";
-import { MAX_PLAYER_SPEED, encodeBinaryChunkFrame, isValidPlayerSpeed, type ServerMessage } from "../src/shared/lan-protocol";
+import { MAX_PLAYER_SPEED, encodeBinaryChunkFrame, isValidPlayerSpeed, type PlayerProfile, type ServerMessage } from "../src/shared/lan-protocol";
 import type { RoomState } from "./room";
 
 export const DEFAULT_ROOM = "DOM1";
@@ -105,10 +105,29 @@ function handleHello(ws: WsSocket, msg: Record<string, unknown>, deps: WsDeps): 
   const room = deps.rooms.getOrCreate(code);
   if (!room) return;
 
+  if (msg.host === true && typeof msg.roomName === "string") {
+    room.setName(msg.roomName);
+  }
+
+  if (msg.host === true && typeof msg.seed === "number" && Number.isInteger(msg.seed)) {
+    room.setSeedIfFresh(msg.seed);
+  }
+
   data.roomCode = code;
   data.name = name;
   data.joined = true;
-  const player = room.addPlayer(data.id, name);
+
+  const requested = (typeof msg.profile === "string" && (msg.profile === "ziemek" || msg.profile === "gniewko")) ? msg.profile as PlayerProfile : "ziemek";
+  const existing = room.getAllPlayers().map((p) => p.profile);
+  let profile = requested;
+  if (existing.includes(profile)) {
+    profile = profile === "ziemek" ? "gniewko" : "ziemek";
+    if (existing.includes(profile)) {
+      profile = requested; // both taken, allow duplicate for >2 players
+    }
+  }
+
+  const player = room.addPlayer(data.id, name, profile);
 
   const welcome: ServerMessage = {
     t: "welcome",
@@ -117,9 +136,11 @@ function handleHello(ws: WsSocket, msg: Record<string, unknown>, deps: WsDeps): 
     spawn: [player.x, player.y, player.z],
     slot: player.slot ?? 0,
     players: room.getAllPlayers().filter((p) => p.id !== data.id),
+    roomName: room.getName(),
+    profile,
   };
   ws.send(JSON.stringify(welcome));
-  const join: ServerMessage = { t: "join", id: data.id, name, slot: player.slot ?? 0 };
+  const join: ServerMessage = { t: "join", id: data.id, name, profile, slot: player.slot ?? 0 };
   deps.publish(`room:${code}`, JSON.stringify(join));
   ws.subscribe(`room:${code}`);
 }
@@ -171,7 +192,7 @@ function handleInput(ws: WsSocket, msg: Record<string, unknown>, deps: WsDeps): 
   data.hadInput = true;
   data.lastAcceptTime = now;
   room.updatePlayer(data.id, { x, y, z, yaw, pitch, anim });
-  const state: ServerMessage = { t: "player", id: data.id, name: data.name, x, y, z, yaw, pitch, anim };
+  const state: ServerMessage = { t: "player", id: data.id, name: data.name, profile: player.profile, x, y, z, yaw, pitch, anim };
   deps.publish(`room:${data.roomCode}`, JSON.stringify(state));
 }
 

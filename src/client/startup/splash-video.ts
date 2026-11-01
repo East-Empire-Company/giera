@@ -5,13 +5,20 @@ export interface SplashVideoHandle {
   stop: () => void;
 }
 
-export function attachSplashVideo(status: HTMLElement): SplashVideoHandle {
+export function attachSplashVideo(status: HTMLElement, onVisible?: () => void): SplashVideoHandle {
   const video = status.querySelector<HTMLVideoElement>("#boot-video");
   if (!video) {
+    onVisible?.();
     return { settle: async () => {}, stop: () => {} };
   }
   video.removeAttribute("muted");
   video.muted = false;
+  let visibleNotified = false;
+  const notifyVisible = (): void => {
+    if (visibleNotified) return;
+    visibleNotified = true;
+    onVisible?.();
+  };
 
   let settled = false;
   let release: () => void = () => {};
@@ -30,15 +37,19 @@ export function attachSplashVideo(status: HTMLElement): SplashVideoHandle {
     status.classList.remove("boot-video-ready");
     video.hidden = true;
     video.pause();
+    notifyVisible();
     finish();
   };
 
   const showVideo = (): void => {
     video.hidden = false;
     status.classList.add("boot-video-ready");
+    notifyVisible();
   };
 
-  const capTimer = setTimeout(() => {
+  let capTimer: ReturnType<typeof setTimeout>;
+  capTimer = setTimeout(() => {
+    notifyVisible();
     video.pause();
     finish();
   }, MAX_SPLASH_MS);

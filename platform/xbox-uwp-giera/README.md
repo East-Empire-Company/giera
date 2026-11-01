@@ -11,7 +11,7 @@ The classic `Windows.UI.Xaml.Controls.WebView` is EdgeHTML: no WebGL2, no ES2022
 Two layers:
 
 1. `Package.appxmanifest` → `uap:SplashScreen` (`Assets/SplashScreen.png`, background `#0b1020`) drawn by the OS before any app code runs.
-2. `MainPage.xaml` → `SplashLayer`: `Assets/SplashLogo.png` + indeterminate progress bar + status text. It fades out on the web `boot-ready` message (`src/main.ts` `postHostMessage`), with a 45 s timeout fallback and a hard error message when the WebView2 runtime or the navigation fails.
+2. `MainPage.xaml` → `SplashLayer`: `Assets/SplashLogo.png` + indeterminate progress bar + status text. It hides when the web splash video or fallback card becomes visible, with a 45 s timeout fallback and a hard error message when the WebView2 runtime or navigation fails.
 
 The native layer plays no video. The web app owns the splash animation (`src/client/startup/splash-video.ts`), so only the WebView2 process decodes a video.
 

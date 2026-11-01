@@ -12,6 +12,9 @@ vi.mock("@elevenlabs/client", () => ({
 import { ConciergeSession } from "../../src/client/concierge/session";
 import type { ConciergeHost } from "../../src/client/concierge/actions";
 import type { ConciergeSessionOptions } from "../../src/client/concierge/session";
+import { BLOCK_ID } from "../../src/shared/blocks";
+import { createMinePlan, applyMinePlan } from "../../src/client/game/terrain-cheats";
+import { GameInventory } from "../../src/client/game/inventory";
 
 const host: ConciergeHost = {
   status: () => ({
@@ -27,6 +30,7 @@ const host: ConciergeHost = {
   setJumpHeight: () => 0,
   setFlying: () => false,
   buildHouse: () => null,
+  digMine: () => null,
   buyExpansion: () => ({ bought: false, stars: 0, cost: 20 }),
   teleportToSpawn: () => {},
   reload: () => {},
@@ -87,6 +91,52 @@ describe("ConciergeSession", () => {
     startSession.mockReset();
     startSession.mockImplementation(async () => ({ endSession, type: "voice", setVolume: setConversationVolume }));
     setHidden(false);
+  });
+  it("executes a mine request through the connected conversation tool callback", async () => {
+    const terrain = new Map<string, number>();
+    const edited = new Set<string>();
+    for (let x = -2; x <= 2; x++) {
+      for (let y = 41; y <= 42; y++) {
+        for (let z = 0; z <= 12; z++) terrain.set(`${x},${y},${z}`, BLOCK_ID.stone);
+      }
+    }
+    const world = {
+      getBlock: (x: number, y: number, z: number) => terrain.get(`${x},${y},${z}`) ?? BLOCK_ID.air,
+      hasEdit: (x: number, y: number, z: number) => edited.has(`${x},${y},${z}`),
+      setBlock: (x: number, y: number, z: number, id: number) => {
+        const key = `${x},${y},${z}`;
+        terrain.set(key, id);
+        edited.add(key);
+      },
+    };
+    const inventory = new GameInventory();
+    const miningHost: ConciergeHost = {
+      ...host,
+      status: () => ({ ...host.status(), started: true }),
+      digMine: () => {
+        const plan = createMinePlan(world, { x: 0.5, y: 41, z: 0.5, yaw: Math.PI });
+        return plan && applyMinePlan(plan, world, inventory) ? plan.blocks.length : null;
+      },
+    };
+    let tools: Record<string, (parameters: unknown) => Promise<string>> | undefined;
+    startSession.mockImplementationOnce(async (options: {
+      clientTools?: Record<string, (parameters: unknown) => Promise<string>>;
+      onConnect?: () => void;
+    }) => {
+      tools = options.clientTools;
+      options.onConnect?.();
+      return { endSession, type: "voice", setVolume: setConversationVolume };
+    });
+    const h = build(Promise.resolve("wss://signed"), { host: miningHost });
+    await h.session.open("pause");
+
+    const response = await tools!.dig_mine({});
+
+    expect(response).toContain("32 bloków");
+    expect(terrain.get("0,41,1")).toBe(BLOCK_ID.air);
+    expect(terrain.get("0,41,2")).toBe(BLOCK_ID.air);
+    expect(Object.values(inventory.toJSON().chunkEdits).reduce((sum, count) => sum + count, 0)).toBe(32);
+    await h.session.close();
   });
   it("keeps speech volume changes made while connecting", async () => {
     const { promise: pending, resolve: resolveStart } = Promise.withResolvers<unknown>();

@@ -79,7 +79,7 @@ describe("ws hello", () => {
     const welcome = JSON.parse(ws.sent[0] as string);
     expect(welcome).toMatchObject({ t: "welcome", id: "p1", seed: 777, slot: 0, players: [] });
     expect(welcome.spawn).toHaveLength(3);
-    expect(h.published).toEqual([{ topic: "room:K7QX", msg: { t: "join", id: "p1", name: "Ziemek", slot: 0 } }]);
+    expect(h.published).toEqual([{ topic: "room:K7QX", msg: { t: "join", id: "p1", name: "Ziemek", profile: "ziemek", slot: 0 } }]);
     expect(h.room("K7QX").getPlayerCount()).toBe(1);
   });
 
@@ -92,7 +92,7 @@ describe("ws hello", () => {
     const welcome = JSON.parse(ws.sent[0] as string);
     expect(welcome.slot).toBe(1);
     expect(welcome.players.map((p: { slot: number }) => p.slot)).toEqual([0]);
-    expect(h.published).toEqual([{ topic: "room:DOM1", msg: { t: "join", id: "p2", name: "Gniewko", slot: 1 } }]);
+    expect(h.published).toEqual([{ topic: "room:DOM1", msg: { t: "join", id: "p2", name: "Gniewko", profile: "gniewko", slot: 1 } }]);
   });
 
   it("falls back to room DOM1 and name Gracz when both are blank", () => {
@@ -275,7 +275,7 @@ describe("ws input", () => {
     send(ws, h.deps, input(300, 60, -300));
     expect(h.room("DOM1").getPlayer("p1")).toMatchObject({ x: 300, y: 60, z: -300, yaw: 0.5, pitch: -0.25, anim: "walk" });
     expect(h.published).toEqual([
-      { topic: "room:DOM1", msg: { t: "player", id: "p1", name: "Ziemek", x: 300, y: 60, z: -300, yaw: 0.5, pitch: -0.25, anim: "walk" } },
+      { topic: "room:DOM1", msg: { t: "player", id: "p1", name: "Ziemek", profile: "ziemek", x: 300, y: 60, z: -300, yaw: 0.5, pitch: -0.25, anim: "walk" } },
     ]);
     expect(ws.data.hadInput).toBe(true);
   });

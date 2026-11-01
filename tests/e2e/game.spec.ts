@@ -64,6 +64,16 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
     await expect(page.locator("#hud-root .hud-music-btn")).toHaveCount(0);
     expect(await page.evaluate(() => window.__GIERA__?.audio.playingMusic)).toBe("sigma_protocol");
   });
+  test("gameplay: HUD becomes visible and interactive after launch", async ({ page }) => {
+    await page.goto("/?seed=424242");
+    await page.waitForFunction(() => window.__GIERA__?.ready === true);
+    await page.getByRole("button", { name: "Rozpocznij grę" }).click();
+
+    await expect(page.locator("#launch-menu")).toBeHidden();
+    await expect(page.locator("#hud-root")).toBeVisible();
+    await expect(page.locator(".hud-mode-btn")).toBeVisible();
+    await expect(page.locator("#hud-root")).not.toHaveAttribute("inert", "");
+  });
 
   test("launch audio category changes music and speech volume separately", async ({ page }) => {
     const pageErrors: string[] = [];
@@ -196,4 +206,33 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
     const btnText = await page.textContent(".hud-mode-btn");
     expect(btnText).toContain("2 Graczy");
   });
+  test("Xbox WebView host selects direct rendering", async ({ browser }) => {
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
+    });
+    try {
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, "deviceMemory", { configurable: true, value: 2 });
+        const external = (window as unknown as { external?: { notify?: (message: string) => void } }).external ?? {};
+        external.notify = () => {};
+        Object.defineProperty(window, "external", { configurable: true, value: external });
+      });
+      const page = await context.newPage();
+      await page.goto("/?seed=424242");
+      await page.waitForFunction(() => window.__GIERA__?.ready === true);
+      const direct = await page.evaluate(() => (window.__GIERA__?.postfx as unknown as { direct: boolean }).direct);
+      expect(direct).toBe(true);
+      await page.locator("#launch-start").click();
+      await page.waitForFunction(() => (window.__GIERA__?.stats.drawCalls ?? 0) > 0);
+      const rendering = await page.evaluate(() => ({
+        drawCalls: window.__GIERA__?.stats.drawCalls ?? 0,
+        contextLost: window.__GIERA__?.renderer.getContext().isContextLost() ?? true,
+      }));
+      expect(rendering.drawCalls).toBeGreaterThan(0);
+      expect(rendering.contextLost).toBe(false);
+    } finally {
+      await context.close();
+    }
+  });
+
 });

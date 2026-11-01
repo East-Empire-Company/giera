@@ -1,18 +1,20 @@
 import { BLOCK_ID, type BlockId } from "../../shared/blocks";
 import { makeRng } from "../../shared/rng";
-import { WORLD_HEIGHT } from "../../shared/chunk";
-import { CHUNK_SIZE, chunkKey } from "../../shared/chunk";
+import { CHUNK_SIZE, chunkKey, WORLD_HEIGHT } from "../../shared/chunk";
 import { MAX_EDITS_PER_CHUNK, type GameInventory } from "./inventory";
 
 export type HouseWorld = {
   getBlock(x: number, y: number, z: number): number;
   surfaceColumnTop(x: number, z: number): number;
+  hasEdit?: (x: number, y: number, z: number) => boolean;
 };
 
+export type HouseArchetype = "cabin" | "lookout_tower";
 export type HousePlan = {
   blocks: { x: number; y: number; z: number; id: BlockId }[];
   center: { x: number; z: number };
   style: "wood" | "stone";
+  archetype: HouseArchetype;
 };
 
 const MAX_HOUSE_BLOCKS = 150;
@@ -21,20 +23,22 @@ export function createHousePlan(
   world: HouseWorld,
   player: { x: number; z: number; yaw: number },
   seed: number,
-  occupied?: (x: number, z: number, radius: number) => boolean
+  occupied?: (x: number, z: number, radius: number) => boolean,
+  requestedArchetype?: HouseArchetype
 ): HousePlan | null {
   if (![player.x, player.z, player.yaw, seed].every(Number.isFinite)) return null;
   const rng = makeRng(seed);
+  const archetype = requestedArchetype ?? (rng() < 0.5 ? "cabin" : "lookout_tower");
   const facingX = -Math.sin(player.yaw);
   const facingZ = -Math.cos(player.yaw);
   const forwardX = Math.abs(facingX) > Math.abs(facingZ) ? Math.sign(facingX) : 0;
   const forwardZ = forwardX === 0 ? Math.sign(facingZ) : 0;
   const sideX = -forwardZ;
   const sideZ = forwardX;
-  const width = 4 + Math.floor(rng() * 2);
-  const depth = 4 + Math.floor(rng() * 2);
-  const wallHeight = 3 + Math.floor(rng() * 2);
-  const roofLayers = 1 + Math.floor(rng() * 2);
+  const width = archetype === "lookout_tower" ? 3 : 4 + Math.floor(rng() * 2);
+  const depth = archetype === "lookout_tower" ? 3 : 4 + Math.floor(rng() * 2);
+  const wallHeight = archetype === "lookout_tower" ? 6 + Math.floor(rng() * 3) : 3 + Math.floor(rng() * 2);
+  const roofLayers = archetype === "lookout_tower" ? 1 : 1 + Math.floor(rng() * 2);
   const style = rng() < 0.5 ? "wood" : "stone";
   const floorId = style === "wood" ? BLOCK_ID.planks : BLOCK_ID.cobblestone;
   const wallId = style === "wood" ? BLOCK_ID.planks : BLOCK_ID.stone;
@@ -106,13 +110,13 @@ export function createHousePlan(
       if (blocks.length > MAX_HOUSE_BLOCKS) continue;
       let clear = true;
       for (const block of blocks) {
-        if (world.getBlock(block.x, block.y, block.z) !== BLOCK_ID.air) {
+        if (world.hasEdit?.(block.x, block.y, block.z) || world.getBlock(block.x, block.y, block.z) !== BLOCK_ID.air) {
           clear = false;
           break;
         }
       }
       if (!clear) continue;
-      return { blocks, center: { x: centerX, z: centerZ }, style };
+      return { blocks, center: { x: centerX, z: centerZ }, style, archetype };
     }
   }
   return null;
@@ -125,7 +129,7 @@ export function placeHousePlan(
   const counts = new Map<string, number>();
   const savedCounts = inventory.toJSON().chunkEdits;
   for (const block of plan.blocks) {
-    if (world.getBlock(block.x, block.y, block.z) !== BLOCK_ID.air) return null;
+    if (world.hasEdit?.(block.x, block.y, block.z) || world.getBlock(block.x, block.y, block.z) !== BLOCK_ID.air) return null;
     const key = chunkKey(Math.floor(block.x / CHUNK_SIZE), Math.floor(block.y / CHUNK_SIZE), Math.floor(block.z / CHUNK_SIZE));
     const count = (counts.get(key) ?? 0) + 1;
     if ((savedCounts[key] ?? 0) + count > MAX_EDITS_PER_CHUNK) return null;

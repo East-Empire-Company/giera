@@ -293,6 +293,36 @@ body {
 }
 
 .launch-mode[aria-pressed="true"]::before {
+.launch-profile-picker {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.launch-profile-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border: 2px solid #d6c79e;
+  background: #1d4038;
+  color: #f8e4a9;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.launch-profile-btn:hover {
+  filter: brightness(1.1);
+}
+
+.launch-profile-btn.active,
+.launch-profile-btn[aria-pressed="true"] {
+  background: #dfa753;
+  color: #0d2320;
+  border-color: #f0dc9f;
+  box-shadow: 0 0 0 4px rgba(223, 167, 83, 0.3);
+}
   background-image: url("/assets/ui/kenney-adventure/checkbox_beige_checked.png");
 }
 .launch-audio-category {
@@ -1286,76 +1316,96 @@ body {
   transform: scale(0.95);
 }
 
-/* LAN Modal & Button */
-.hud-lan-btn {
-  position: absolute;
-  top: 20px;
-  right: 280px;
-  padding: 8px 14px;
-  border: 2px solid #577764;
-  border-radius: 10px;
-  background: rgba(16, 24, 32, 0.9);
-  color: #ffde8a;
+/* LAN Panel (pause menu) */
+.lan-panel {
+  margin-top: 12px;
+}
+
+.lan-panel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lan-panel-card h2 {
+  margin: 0 0 6px;
+  color: #5c3d23;
+  font-size: 20px;
+}
+
+.lan-panel-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #654b32;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.lan-panel-card input {
+  padding: 8px 12px;
+  border: 2px solid #9a7247;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #3c2a18;
   font-family: inherit;
-  font-size: 14px;
-  cursor: pointer;
-  pointer-events: auto;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  transition: background 150ms ease, transform 120ms ease;
+  font-size: 15px;
 }
 
-.hud-lan-btn:hover {
-  background: rgba(28, 48, 40, 0.95);
-  transform: scale(1.04);
-}
-
-.hud-lan-modal {
-  display: none;
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-}
-
-.hud-lan-modal.hud-modal-open {
-  display: flex;
-}
-
-.hud-lan-card {
-  width: min(500px, 92vw);
-}
-
-.hud-lan-form {
+.lan-server-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-top: 10px;
+  gap: 8px;
+  min-height: 40px;
 }
 
-.hud-lan-form label {
+.lan-room-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 14px;
-  color: #dce7dc;
-}
-
-.hud-lan-form input {
+  gap: 2px;
   padding: 10px 14px;
-  border: 2px solid #3c5e4e;
-  border-radius: 8px;
-  background: rgba(14, 28, 22, 0.9);
-  color: #fff;
+  border: 12px solid transparent;
+  border-image: url("/assets/ui/kenney-adventure/panel_brown.png") 28 fill / 10px / 0 stretch;
+  background: none;
+  cursor: pointer;
+  text-align: left;
   font-family: inherit;
-  font-size: 14px;
 }
 
-.hud-lan-status {
+.lan-room-card:hover {
+  filter: brightness(1.06);
+}
+
+.lan-room-card-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #3c2a18;
+}
+
+.lan-room-card-meta {
   font-size: 13px;
-  color: #92bfa6;
+  color: #654b32;
+}
+
+.lan-manual-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lan-manual-form input {
+  padding: 8px 12px;
+  border: 2px solid #9a7247;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #3c2a18;
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.lan-status {
+  font-size: 14px;
+  color: #654b32;
   min-height: 20px;
 }
 

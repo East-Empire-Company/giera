@@ -4,7 +4,10 @@ import {
   decodeBinaryChunkFrame,
   encodeBinaryChunkFrame,
   isValidPlayerSpeed,
+  isValidPlayerMotion,
   MAX_PLAYER_SPEED,
+  MAX_PLAYER_VERTICAL_SPEED,
+  type LanRoomSummary,
 } from "../../src/shared/lan-protocol";
 import { generateChunk } from "../../src/shared/worldgen";
 
@@ -100,19 +103,11 @@ describe("isValidPlayerSpeed", () => {
     ["z", [0, 0, 1]],
   ])("accepts exactly the limit and rejects just over it on the %s axis", (_axis, unit) => {
     const [ux, uy, uz] = unit;
-    const exact = MAX_PLAYER_SPEED * 2;
+    const exact = _axis === "y" ? MAX_PLAYER_VERTICAL_SPEED * 2 : MAX_PLAYER_SPEED * 2;
     expect(isValidPlayerSpeed(origin, at(ux * exact, uy * exact, uz * exact), 2)).toBe(true);
     expect(isValidPlayerSpeed(origin, at(ux * (exact + 0.001), uy * (exact + 0.001), uz * (exact + 0.001)), 2)).toBe(false);
     expect(isValidPlayerSpeed(origin, at(-ux * exact, -uy * exact, -uz * exact), 2)).toBe(true);
     expect(isValidPlayerSpeed(origin, at(-ux * (exact + 0.001), -uy * (exact + 0.001), -uz * (exact + 0.001)), 2)).toBe(false);
-  });
-
-  it("uses the 3D euclidean distance, not per-axis or manhattan distance", () => {
-    expect(isValidPlayerSpeed(origin, at(4, 8, 8), 1)).toBe(true);
-    expect(isValidPlayerSpeed(origin, at(4, 8, 9), 1)).toBe(false);
-    expect(isValidPlayerSpeed(origin, at(8, 8, 8), 1)).toBe(false);
-    expect(isValidPlayerSpeed(origin, at(9, 9, 0), 1)).toBe(false);
-    expect(isValidPlayerSpeed(origin, at(8.4, 8.4, 0), 1)).toBe(true);
   });
   it("is relative to the previous position, wherever it is", () => {
     const prev = { x: -1000.5, y: 3, z: 777 };
@@ -143,5 +138,12 @@ describe("isValidPlayerSpeed", () => {
     ["both Infinity", { x: Infinity, y: 40, z: 0 }, { x: Infinity, y: 40, z: 0 }],
   ])("rejects %s", (_name, prev, curr) => {
     expect(isValidPlayerSpeed(prev, curr, 1)).toBe(false);
+  });
+});
+
+describe("LanRoomSummary", () => {
+  it("carries a seed field", () => {
+    const room: LanRoomSummary = { code: "DOM1", name: "Dom 1", players: 2, seed: 424242 };
+    expect(room.seed).toBe(424242);
   });
 });

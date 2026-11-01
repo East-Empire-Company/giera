@@ -1,4 +1,4 @@
-import type { PlayerState } from "../src/shared/lan-protocol";
+import { MAX_ROOM_NAME_LENGTH, type PlayerProfile, type PlayerState } from "../src/shared/lan-protocol";
 import { nextFreeTycoonSlot } from "../src/shared/tycoon-slots";
 import { generateChunk } from "../src/shared/worldgen";
 import { CHUNK_SIZE, encodeRLE, getBlockIndex } from "../src/shared/chunk";
@@ -7,22 +7,36 @@ export type WorldSnapshot = {
   seed: number;
   edits: Record<string, number>;
   savedAt: string;
+  name?: string;
 };
-
 export class RoomState {
   readonly code: string;
-  readonly seed: number;
+  private _seed: number;
+  get seed(): number { return this._seed; }
   private readonly players = new Map<string, PlayerState>();
   private readonly edits = new Map<string, number>();
   private readonly chunks = new Map<string, Uint8Array>();
+  private loadedFromSave = false;
+  private name: string;
 
   constructor(code: string, seed: number) {
     this.code = code;
-    this.seed = seed;
+    this._seed = seed;
+    this.name = code;
   }
 
   getPlayerCount(): number {
     return this.players.size;
+  }
+
+  getName(): string {
+    return this.name;
+  }
+
+  setName(value: string): void {
+    const trimmed = value.trim().slice(0, MAX_ROOM_NAME_LENGTH);
+    if (!trimmed) return;
+    this.name = trimmed;
   }
 
   getPlayer(socketId: string): PlayerState | undefined {
@@ -33,11 +47,12 @@ export class RoomState {
     return Array.from(this.players.values());
   }
 
-  addPlayer(socketId: string, name: string): PlayerState {
+  addPlayer(socketId: string, name: string, profile: PlayerProfile = "ziemek"): PlayerState {
     const slot = nextFreeTycoonSlot(this.getAllPlayers().map((p) => p.slot ?? 0));
     const player: PlayerState = {
       id: socketId,
       name,
+      profile,
       x: 0,
       y: 50,
       z: 0,
@@ -82,6 +97,13 @@ export class RoomState {
     return this.edits.size;
   }
 
+  setSeedIfFresh(seed: number): boolean {
+    if (this.loadedFromSave || this.edits.size > 0 || this.players.size > 0) return false;
+    if (!Number.isInteger(seed)) return false;
+    this._seed = seed;
+    return true;
+  }
+
   getChunkRLE(cx: number, cy: number, cz: number): Uint8Array {
     const key = `${cx},${cy},${cz}`;
     let data = this.chunks.get(key);
@@ -111,14 +133,17 @@ export class RoomState {
       seed: this.seed,
       edits,
       savedAt: new Date().toISOString(),
+      name: this.name,
     };
   }
 
   static fromJSON(code: string, json: WorldSnapshot): RoomState {
     const room = new RoomState(code, json.seed);
+    room.loadedFromSave = true;
     for (const [k, v] of Object.entries(json.edits)) {
       room.edits.set(k, v);
     }
+    if (typeof json.name === "string") room.setName(json.name);
     return room;
   }
 }

@@ -18,11 +18,14 @@ async function boot(page: Page): Promise<void> {
 }
 
 async function connect(page: Page): Promise<void> {
-  await page.locator(".hud-lan-btn").click();
-  await page.fill("#lan-url", WS_URL!);
-  await page.fill("#lan-room", ROOM);
-  await page.locator("#lan-form button[type=submit]").click();
+  await page.keyboard.press("Escape");
+  await page.locator("#pause-lan").click();
+  await page.locator("#pause-lan-panel button:has-text('Dołącz')").click();
+  await page.fill("#lan-manual-url", WS_URL!);
+  await page.fill("#lan-manual-room", ROOM);
+  await page.locator("#pause-lan-panel button:has-text('Połącz')").click();
   await expect(page.locator("#lan-status")).toHaveText(/Połączono/, { timeout: 10_000 });
+  await page.locator("#pause-resume").click();
 }
 
 test("lan: two clients join one room, exchange a block edit, server persists the room", async ({ browser }) => {

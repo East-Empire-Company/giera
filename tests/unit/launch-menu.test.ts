@@ -38,11 +38,11 @@ describe("LaunchMenuController", () => {
     menu.show();
     modeButton.click();
 
-    expect(menu.settings).toEqual({ splitScreen: true });
+    expect(menu.settings).toEqual({ splitScreen: true, profile: "ziemek" });
     expect(onStart).not.toHaveBeenCalled();
     startButton.click();
 
-    expect(onStart).toHaveBeenCalledWith({ splitScreen: true }, "control");
+    expect(onStart).toHaveBeenCalledWith({ splitScreen: true, profile: "ziemek" }, "control");
     expect(root.hidden).toBe(true);
   });
 
@@ -83,7 +83,7 @@ describe("LaunchMenuController", () => {
     menu.pollGamepad([confirm]);
 
     expect(onStart).toHaveBeenCalledTimes(1);
-    expect(onStart).toHaveBeenCalledWith({ splitScreen: false }, "gamepad");
+    expect(onStart).toHaveBeenCalledWith({ splitScreen: false, profile: "ziemek" }, "gamepad");
     expect(root.hidden).toBe(true);
   });
 
@@ -91,7 +91,7 @@ describe("LaunchMenuController", () => {
     const { menu, onStart } = createMenu();
     menu.show();
     menu.pollGamepad([null, gamepad([0])]);
-    expect(onStart).toHaveBeenCalledWith({ splitScreen: false }, "gamepad");
+    expect(onStart).toHaveBeenCalledWith({ splitScreen: false, profile: "ziemek" }, "gamepad");
   });
 
   it("supports keyboard focus and player-mode changes", () => {

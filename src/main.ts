@@ -15,6 +15,7 @@ import { TrainingDummy } from "./client/entities/dummy";
 import { GameHUD } from "./client/game/hud";
 import { GameInventory } from "./client/game/inventory";
 import { createHousePlan, placeHousePlan } from "./client/game/house-builder";
+import { applyMinePlan, createMinePlan } from "./client/game/terrain-cheats";
 import { OBJECTIVE_STEPS, ObjectiveManager } from "./client/game/objectives";
 import { TycoonManager } from "./client/game/tycoon";
 import { tycoonSlotOrigin, tycoonTheme } from "./shared/tycoon-slots";
@@ -506,8 +507,13 @@ async function boot(): Promise<void> {
     modeButton: launchMode,
     onStart: (settings, source) => {
       gameStarted = true;
+      canvas.inert = false;
+      if (hudRoot) {
+        hudRoot.removeAttribute("inert");
+        hudRoot.style.visibility = "";
+      }
+      attachTouchControls();
       suppressGamepadJumpUntilRelease = source === "gamepad";
-      splitScreen.setSplitScreen(settings.splitScreen);
       hud.modeBtn.textContent = settings.splitScreen ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
       const pending = sessionStorage.getItem("giera.pendingLanJoin");
       if (pending) {
@@ -534,23 +540,14 @@ async function boot(): Promise<void> {
   }
 
   let houseBuildSequence = 0;
-  const playerForConcierge = (target: ConciergePlayer): PlayerController => target === "gniewko" ? player2 : player;
-  const houseSiteOccupied = (x: number, z: number, radius: number): boolean => {
-    const overlaps = (otherX: number, otherZ: number, otherRadius: number): boolean =>
-      Math.hypot(x - otherX, z - otherZ) < radius + otherRadius;
-    if (overlaps(player.position.x, player.position.z, 0.8) || overlaps(player2.position.x, player2.position.z, 0.8)) return true;
-const reloadControllerAvatar = (controller: PlayerController) => {
-  const oldObject = controller.avatar?.object;
-  if (oldObject) scene.remove(oldObject);
-  controller.loadAvatar().then((avatar) => {
-    scene.add(avatar.object);
-    controller.syncAvatar();
-  });
-};
   const playerForConcierge = (target: ConciergePlayer): PlayerController => {
     const name = target === "gniewko" ? "Gniewko" : "Ziemek";
     return player.profile.name === name ? player : player2;
   };
+  const houseSiteOccupied = (x: number, z: number, radius: number): boolean => {
+    const overlaps = (otherX: number, otherZ: number, otherRadius: number): boolean =>
+      Math.hypot(x - otherX, z - otherZ) < radius + otherRadius;
+    if (overlaps(player.position.x, player.position.z, 0.8) || overlaps(player2.position.x, player2.position.z, 0.8)) return true;
     for (const npc of npcManager.npcs) {
       if (overlaps(npc.position.x, npc.position.z, npc.def.id === "papuga" ? 0.3 : 0.6)) return true;
     }
@@ -590,14 +587,15 @@ const reloadControllerAvatar = (controller: PlayerController) => {
     setVolume: (level) => audio.setVolume(level),
     setJumpHeight: (target, height) => playerForConcierge(target).setJumpHeight(height),
     setFlying: (target, enabled) => playerForConcierge(target).setFlying(enabled),
-    buildHouse: (target) => {
+    buildHouse: (target, archetype) => {
       const actor = playerForConcierge(target);
       const houseSeed = seed + houseBuildSequence++;
       const plan = createHousePlan(
         world,
         { x: actor.position.x, z: actor.position.z, yaw: actor.yaw },
         houseSeed,
-        houseSiteOccupied
+        houseSiteOccupied,
+        archetype
       );
       if (!plan) return null;
       const placed = placeHousePlan(plan, world, inventory);
@@ -610,7 +608,24 @@ const reloadControllerAvatar = (controller: PlayerController) => {
         audio.play("craft_ok");
       }
       hud.updateObjective(objectives);
-      return { blocks: plan.blocks.length, style: plan.style };
+      return { blocks: plan.blocks.length, style: plan.style, archetype: plan.archetype };
+    },
+    digMine: (target) => {
+      const actor = playerForConcierge(target);
+      const plan = createMinePlan(
+        world,
+        { x: actor.position.x, y: actor.position.y, z: actor.position.z, yaw: actor.yaw },
+        houseSiteOccupied
+      );
+      if (!plan || !applyMinePlan(plan, world, inventory)) return null;
+      for (const block of plan.blocks) lanClient?.sendBlockEdit(block.x, block.y, block.z, BLOCK_ID.air);
+      const first = plan.blocks[0];
+      const position = new THREE.Vector3(first.x + 0.5, first.y + 0.5, first.z + 0.5);
+      gameplayVfx.emit("mine", position);
+      gameplayVfx.emit("debris", position, { tint: 0x8a7b66, groundY: first.y });
+      gameplayVfx.emit("impact_ring", position, { tint: 0x8a7b66, groundY: first.y });
+      audio.play("dig_stone");
+      return plan.blocks.length;
     },
     buyExpansion: () => {
       return tycoon.buyNextExpansionWithPrice();

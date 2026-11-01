@@ -1,4 +1,6 @@
-export type LaunchSettings = { splitScreen: boolean };
+import type { PlayerProfile } from "../../shared/lan-protocol";
+
+export type LaunchSettings = { splitScreen: boolean; profile: PlayerProfile };
 export type LaunchStartSource = "control" | "gamepad";
 
 type LaunchMenuOptions = {
@@ -12,6 +14,7 @@ export class LaunchMenuController {
   private readonly controls: readonly HTMLElement[];
   private focusedIndex = 0;
   private splitScreen = false;
+  private currentProfile: PlayerProfile = "ziemek";
   private started = false;
   private previousButtons = new Set<number>();
   private previousStickDirection: number | null = null;
@@ -19,11 +22,20 @@ export class LaunchMenuController {
   constructor(private readonly options: LaunchMenuOptions) {
     const { root, startButton, modeButton } = options;
     const audioInputs = Array.from(root.querySelectorAll<HTMLInputElement>("input[data-audio-volume]"));
-    this.controls = [startButton, modeButton, ...audioInputs];
+    const profileButtons = Array.from(root.querySelectorAll<HTMLButtonElement>(".launch-profile-btn"));
+    this.controls = [startButton, modeButton, ...profileButtons, ...audioInputs];
+    this.loadProfile();
     this.renderMode();
 
     startButton.addEventListener("click", () => this.start("control"));
     modeButton.addEventListener("click", () => this.toggleSplitScreen());
+    profileButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.currentProfile = btn.dataset.profile as PlayerProfile;
+        this.renderProfile();
+        localStorage.setItem("giera.profile", this.currentProfile);
+      });
+    });
     root.addEventListener("focusin", (event) => {
       const index = this.controls.indexOf(event.target as HTMLElement);
       if (index >= 0) this.focusedIndex = index;
@@ -31,9 +43,29 @@ export class LaunchMenuController {
     root.addEventListener("keydown", (event) => this.handleKeydown(event));
   }
 
-  get settings(): LaunchSettings {
-    return { splitScreen: this.splitScreen };
+  private loadProfile(): void {
+    const saved = localStorage.getItem("giera.profile") as PlayerProfile | null;
+    this.currentProfile = (saved === "ziemek" || saved === "gniewko") ? saved : "ziemek";
+    this.renderProfile();
   }
+
+  private renderProfile(): void {
+    const z = document.getElementById("launch-profile-ziemek") as HTMLButtonElement | null;
+    const g = document.getElementById("launch-profile-gniewko") as HTMLButtonElement | null;
+    if (z) {
+      z.setAttribute("aria-pressed", String(this.currentProfile === "ziemek"));
+      z.classList.toggle("active", this.currentProfile === "ziemek");
+    }
+    if (g) {
+      g.setAttribute("aria-pressed", String(this.currentProfile === "gniewko"));
+      g.classList.toggle("active", this.currentProfile === "gniewko");
+    }
+  }
+
+  get settings(): LaunchSettings {
+    return { splitScreen: this.splitScreen, profile: this.currentProfile };
+  }
+
 
   get isStarted(): boolean {
     return this.started;
@@ -45,6 +77,7 @@ export class LaunchMenuController {
     this.options.startButton.disabled = false;
     this.options.modeButton.disabled = false;
     this.focusControl(0);
+    this.renderProfile();
   }
 
   pollGamepad(gamepads?: readonly (Gamepad | null)[]): void {

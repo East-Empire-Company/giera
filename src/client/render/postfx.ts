@@ -106,10 +106,10 @@ function buildChain(
 
   const ao = new N8AOPostPass(scene, camera, width, height);
   ao.setQualityMode("Performance");
-  ao.configuration.aoRadius = 2.5;
+  ao.configuration.aoRadius = 1.5;
   ao.configuration.distanceFalloff = 0.65;
   ao.configuration.halfRes = true;
-  ao.configuration.intensity = 2.2;
+  ao.configuration.intensity = 1.2;
   composer.addPass(ao);
 
   const grade = new Effect("Grade", gradeShader, { blendFunction: BlendFunction.NORMAL });

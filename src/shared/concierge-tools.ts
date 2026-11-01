@@ -3,6 +3,7 @@ export type ConciergeToolName =
   | "set_jump_height"
   | "set_flight"
   | "build_house"
+  | "dig_mine"
   | "set_split_screen"
   | "set_volume"
   | "teleport_to_spawn"
@@ -55,10 +56,21 @@ export const CONCIERGE_TOOLS: readonly ConciergeToolSpec[] = [
   },
   {
     name: "build_house",
-    description: "Zbuduj mały losowy domek z bloków na wolnym miejscu. Nie niszcz istniejących bloków.",
+    description: "Zbuduj na wolnym miejscu domek albo wieżę strażniczą. Nie zmieniaj ani nie nadpisuj istniejących bloków.",
     parameters: {
       type: "object",
-      properties: { player: { type: "string", enum: ["ziemek", "gniewko"], description: "Gracz, w pobliżu którego powstanie domek" } },
+      properties: {
+        player: { type: "string", enum: ["ziemek", "gniewko"], description: "Gracz, w pobliżu którego powstanie budowla" },
+        archetype: { type: "string", enum: ["cabin", "lookout_tower"], description: "Rodzaj: domek albo wieża strażnicza" },
+      },
+    },
+  },
+  {
+    name: "dig_mine",
+    description: "Wykop przed wybranym graczem bezpieczny tunel 8 na 2 na 2 bloki. Usuwaj tylko niezmienione naturalne kamienie, ziemię, piasek i rudy; zatrzymaj się przed cudzymi zmianami, drewnem, wodą lub bedrockiem.",
+    parameters: {
+      type: "object",
+      properties: { player: { type: "string", enum: ["ziemek", "gniewko"], description: "Gracz, przed którym powstanie wejście do kopalni" } },
     },
   },
   {

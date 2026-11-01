@@ -210,6 +210,13 @@
                 <div class="launch-option-label">Gracze</div>
                 <button id="launch-mode" class="launch-mode" type="button" aria-label="Tryb dla 1 gracza" aria-pressed="false" disabled>1 gracz</button>
               </div>
+              <div class="launch-option">
+                <div class="launch-option-label">Postać</div>
+                <div class="launch-profile-picker">
+                  <button id="launch-profile-ziemek" class="launch-profile-btn active" data-profile="ziemek" aria-pressed="true">🟢 Ziemek</button>
+                  <button id="launch-profile-gniewko" class="launch-profile-btn" data-profile="gniewko">🔵 Gniewko</button>
+                </div>
+              </div>
             </div>
             <details id="launch-audio-category" class="launch-audio-category">
               <summary>🔊 Audio</summary>
@@ -256,7 +263,12 @@
                 <input id="pause-speech-volume" data-audio-volume="speech" type="range" min="0" max="1" step="0.05" value="1" aria-label="Głośność głosów" />
               </div>
             </details>
+            <div class="launch-option">
+              <div class="launch-option-label">Sieć LAN</div>
+              <button id="pause-lan" class="launch-mode" type="button" aria-label="Graj przez LAN">🌐 LAN</button>
+            </div>
           </div>
+          <section id="pause-lan-panel" class="lan-panel" hidden></section>
           <div id="pause-concierge-slot" class="concierge-slot"></div>
         </div>
       </section>

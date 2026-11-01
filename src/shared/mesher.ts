@@ -33,14 +33,23 @@ function columnTop(getBlock: (x: number, y: number, z: number) => number, x: num
 }
 
 export function smoothVertexHeight(getBlock: (x: number, y: number, z: number) => number, x: number, y: number, z: number): number {
-  let sum = 0;
+  const heights: number[] = [];
   let anyAtLevel = false;
   for (const [ox, oz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]] as const) {
     const top = columnTop(getBlock, x + ox, z + oz, y);
     if (top === y) anyAtLevel = true;
-    sum += top !== null && Math.abs(top - y) <= 1 ? top : y;
+    heights.push(top !== null && Math.abs(top - y) <= 1 ? top : y);
   }
-  return anyAtLevel ? sum / 4 : y;
+  if (!anyAtLevel) return y;
+  for (let step = 0; step < 2; step++) {
+    const strength = 0.5 * 0.7 ** step;
+    const previous = [...heights];
+    for (let i = 0; i < heights.length; i++) {
+      const others = previous.reduce((sum, value, index) => sum + (index === i ? 0 : value), 0) / 3;
+      heights[i] += (others - previous[i]) * strength;
+    }
+  }
+  return heights.reduce((sum, height) => sum + height, 0) / heights.length;
 }
 
 /** Visual height of the smoothed ground under (x,z) minus the voxel top the physics body stands on. */
@@ -182,7 +191,11 @@ export function meshChunk(input: {
       mesh.colors.push(shade, shade, shade);
       mesh.tileIds.push(face.tile.id);
     }
-    mesh.indices.push(vertexStart, vertexStart + 1, vertexStart + 2, vertexStart, vertexStart + 2, vertexStart + 3);
+    if (face.ao0 + face.ao2 > face.ao1 + face.ao3) {
+      mesh.indices.push(vertexStart, vertexStart + 1, vertexStart + 3, vertexStart + 1, vertexStart + 2, vertexStart + 3);
+    } else {
+      mesh.indices.push(vertexStart, vertexStart + 1, vertexStart + 2, vertexStart, vertexStart + 2, vertexStart + 3);
+    }
   };
   for (const axis of AXES) {
     for (const sign of [-1, 1]) {
@@ -218,7 +231,7 @@ export function meshChunk(input: {
               const side2 = getBlockDef(localBlock(nx + (axis.v === 0 ? dv : 0), ny + (axis.v === 1 ? dv : 0), nz + (axis.v === 2 ? dv : 0))).solid;
               const cornerBlocked = getBlockDef(localBlock(nx + (axis.u === 0 ? du : 0) + (axis.v === 0 ? dv : 0), ny + (axis.u === 1 ? du : 0) + (axis.v === 1 ? dv : 0), nz + (axis.u === 2 ? du : 0) + (axis.v === 2 ? dv : 0))).solid;
               const occlusion = side1 && side2 ? 3 : Number(side1) + Number(side2) + Number(cornerBlocked);
-              const shade = 1 - occlusion * (0.55 / 3);
+              const shade = 1 - occlusion / 3;
               if (corner === 0) ao0 = shade;
               else if (corner === 1) ao1 = shade;
               else if (corner === 2) ao2 = shade;

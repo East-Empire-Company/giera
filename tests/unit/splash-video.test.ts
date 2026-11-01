@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { attachSplashVideo } from "../../src/client/startup/splash-video";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("boot splash audio", () => {
   it("falls back to muted autoplay when autoplay needs a user gesture, then unmutes on gesture", async () => {
@@ -27,6 +27,62 @@ describe("boot splash audio", () => {
     window.dispatchEvent(new Event("pointerdown"));
     expect(video.muted).toBe(false);
     splash.stop();
+  });
+
+  it("reveals the web splash to its native host when video starts", async () => {
+    document.body.innerHTML = '<section id="boot-status"><video id="boot-video"></video><div class="boot-card"></div></section>';
+    const status = document.querySelector<HTMLElement>("#boot-status")!;
+    const video = document.querySelector<HTMLVideoElement>("#boot-video")!;
+    Object.defineProperty(video, "networkState", { value: 1, configurable: true });
+    Object.defineProperty(video, "play", { value: vi.fn().mockResolvedValue(undefined), configurable: true });
+    Object.defineProperty(video, "pause", { value: () => {}, configurable: true });
+    const nativeSplash = document.createElement("div");
+    nativeSplash.hidden = false;
+
+    const splash = attachSplashVideo(status, () => { nativeSplash.hidden = true; });
+    video.dispatchEvent(new Event("playing"));
+
+    expect(nativeSplash.hidden).toBe(true);
+    expect(video.hidden).toBe(false);
+    splash.stop();
+  });
+
+  it("reveals the fallback card to its native host when video has no source", () => {
+    document.body.innerHTML = '<section id="boot-status"><video id="boot-video"></video><div class="boot-card"></div></section>';
+    const status = document.querySelector<HTMLElement>("#boot-status")!;
+    const video = document.querySelector<HTMLVideoElement>("#boot-video")!;
+    Object.defineProperty(video, "networkState", { value: HTMLMediaElement.NETWORK_NO_SOURCE, configurable: true });
+    Object.defineProperty(video, "pause", { value: () => {}, configurable: true });
+    const nativeSplash = document.createElement("div");
+    nativeSplash.hidden = false;
+
+    attachSplashVideo(status, () => { nativeSplash.hidden = true; });
+
+    expect(video.hidden).toBe(true);
+    expect(nativeSplash.hidden).toBe(true);
+  });
+
+  it("reveals the fallback card when video playback stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = '<section id="boot-status"><video id="boot-video" hidden></video><div class="boot-card"></div></section>';
+      const status = document.querySelector<HTMLElement>("#boot-status")!;
+      const video = document.querySelector<HTMLVideoElement>("#boot-video")!;
+      Object.defineProperty(video, "networkState", { value: 1, configurable: true });
+      Object.defineProperty(video, "play", { value: vi.fn(() => new Promise<void>(() => {})), configurable: true });
+      Object.defineProperty(video, "pause", { value: () => {}, configurable: true });
+      const nativeSplash = document.createElement("div");
+      nativeSplash.hidden = false;
+
+      const splash = attachSplashVideo(status, () => { nativeSplash.hidden = true; });
+      await vi.advanceTimersByTimeAsync(9000);
+
+      expect(nativeSplash.hidden).toBe(true);
+      expect(video.hidden).toBe(true);
+      splash.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows controls when even muted autoplay is blocked", async () => {

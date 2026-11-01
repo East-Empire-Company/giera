@@ -1,7 +1,8 @@
-import { networkInterfaces } from "os";
+import { hostname, networkInterfaces } from "os";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { RoomState, type WorldSnapshot } from "./room";
+import { handleLanRooms } from "./lan-discovery";
 import {
   MAX_ROOMS,
   createRoomRegistry,
@@ -67,19 +68,19 @@ function getLanIp(): string {
   return "127.0.0.1";
 }
 
-
 for (const npcId of Object.keys(NPC_TOOLS)) {
   if (!existsSync(resolve("agents", npcId, "prompt.md"))) {
     console.warn(`[npc] missing persona agents/${npcId}/prompt.md — generic fallback in use`);
   }
 }
 
-
 const wsDeps: WsDeps = {
   rooms,
   publish: (topic, payload) => server.publish(topic, payload),
   now: () => Date.now(),
 };
+
+const lanIp = getLanIp();
 
 const server = Bun.serve<WsConnection>({
   port: PORT,
@@ -109,6 +110,11 @@ const server = Bun.serve<WsConnection>({
       return handleConciergeSession(req);
     }
 
+    if (url.pathname === "/lan/rooms") {
+      const live = Array.from(rooms.entries(), ([, room]) => room);
+      return handleLanRooms(req, live, { host: hostname(), ip: lanIp, port: server.port ?? PORT });
+    }
+
     return serveStatic(req, "dist");
   },
   websocket: {
@@ -121,7 +127,6 @@ const server = Bun.serve<WsConnection>({
   },
 });
 
-const lanIp = getLanIp();
 console.log(`\n=================================================`);
 console.log(`🏰 Giera LAN Server działający na porcie ${PORT}`);
 console.log(`📡 Połącz się w sieci domowej: ws://${lanIp}:${PORT}/ws`);

@@ -12,6 +12,7 @@ namespace Giera.Uwp
     {
         const string StartUrl = "https://giera.tail5d39b4.ts.net/";
         const string BootToken = "boot-ready";
+        const string SplashVisibleToken = "boot-content-visible";
         const string LogFile = "boot-log.txt";
 
 
@@ -102,6 +103,12 @@ namespace Giera.Uwp
                 message = "unreadable: " + ex.Message;
             }
 
+            if (message == SplashVisibleToken)
+            {
+                HideSplash();
+                await LogAsync("web splash visible");
+                return;
+            }
             if (message == BootToken)
             {
                 splashTimeout.Stop();

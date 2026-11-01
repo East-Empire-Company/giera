@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { MUSIC_PLAYLIST } from "../src/client/audio/sound.ts";
+import { RECIPES } from "../src/client/game/recipes.ts";
 
 const PLAYLIST = new Set(MUSIC_PLAYLIST);
 const isPlaylistTrack = (id) => typeof id === "string" && PLAYLIST.has(id);
@@ -54,6 +55,12 @@ page.on("pageerror", (e) => pageErrors.push(String(e)));
 page.on("console", (m) => {
   if (m.type() === "error") pageErrors.push(m.text());
 });
+await page.route("**/npc/reason", (route) => route.fulfill({
+  status: 200,
+  contentType: "application/json",
+  body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ say: "Zbierz trochę drewna, to dobry początek." }) } }] }),
+}));
+await page.route("**/npc/tts", (route) => route.fulfill({ status: 204 }));
 
 await page.goto(GAME_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
 await page.waitForFunction(() => window.__GIERA__?.ready === true, undefined, { timeout: 60000 });
@@ -67,6 +74,8 @@ await page.waitForFunction(
 );
 await page.screenshot({ path: resolve(EVIDENCE, "visible-00-launch-menu.png") });
 await page.getByRole("button", { name: "Rozpocznij grę" }).click();
+const canvasInteractive = await page.evaluate(() => !document.querySelector("canvas#game")?.inert);
+check("world input enabled after launch", canvasInteractive, `inert=${!canvasInteractive}`);
 await page.evaluate(() => {
   const A = window.__GIERA__.audio;
   const orig = A.play.bind(A);
@@ -175,29 +184,29 @@ const digsAfter = await page.evaluate(() =>
 await page.screenshot({ path: resolve(EVIDENCE, "visible-04-mine.png") });
 check("mining", digsAfter > digsBefore, `dig events ${digsBefore}->${digsAfter}`);
 
-// Camera-ray probe: mirrors the game's own voxel raycast so aiming matches real play.
-await page.evaluate(() => {
-  window.__aimRay = () => {
-    const g = window.__GIERA__;
-    const V = g.player.position.constructor;
-    const origin = g.camera.getWorldPosition(new V());
-    const dir = g.camera.getWorldDirection(new V());
-    const p = new V();
-    for (let t = 0; t < 12; t += 0.05) {
-      p.copy(dir).multiplyScalar(t).add(origin);
-      const id = g.world.getBlock(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
-      if (id !== 0 && id !== 11) {
-        return { id, t: +t.toFixed(2), x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) };
-      }
-    }
-    return null;
-  };
+// Camera-ray probe mirrors block targeting without storing window state.
+const aimRay = () => page.evaluate(() => {
+  const g = window.__GIERA__;
+  const V = g.player.position.constructor;
+  const origin = g.camera.getWorldPosition(new V());
+  const dir = g.camera.getWorldDirection(new V());
+  const point = new V();
+  for (let t = 0; t < 12; t += 0.05) {
+    point.copy(dir).multiplyScalar(t).add(origin);
+    const x = Math.floor(point.x);
+    const y = Math.floor(point.y);
+    const z = Math.floor(point.z);
+    const id = g.world.getBlock(x, y, z);
+    if (id !== 0 && id !== 11) return { id, t: +t.toFixed(2), x, y, z };
+  }
+  return null;
 });
 
-// GATHER WOOD so the crafting loop has real materials
-const log = await page.evaluate(() => {
+// Gather logs through real aim and mining input. Skip obstructed trunks.
+const findOakLogs = () => page.evaluate(() => {
   const g = window.__GIERA__;
   const p = g.player.position;
+  const logs = [];
   for (let r = 2; r <= 16; r++) {
     for (let dy = -3; dy <= 5; dy++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -206,71 +215,79 @@ const log = await page.evaluate(() => {
           const x = Math.floor(p.x) + dx;
           const y = Math.floor(p.y) + dy;
           const z = Math.floor(p.z) + dz;
-          if (g.world.getBlock(x, y, z) === 7) return { x: x + 0.5, y: y + 0.5, z: z + 0.5 };
+          if (g.world.getBlock(x, y, z) === 7) logs.push({ x: x + 0.5, y: y + 0.5, z: z + 0.5 });
         }
       }
     }
   }
-  return null;
+  return logs;
 });
-if (log) {
-  for (let round = 0; round < 3; round++) {
-    await page.evaluate((target) => {
+
+for (let round = 0; round < 3; round++) {
+  const logs = await findOakLogs();
+  if (logs.length === 0) break;
+  const before = await page.evaluate(() => window.__GIERA__.inventory.blocks?.oak_log ?? 0);
+  let mined = false;
+  for (const log of logs) {
+    const base = await page.evaluate((target) => {
       const g = window.__GIERA__;
       const p = g.player.position;
       const dx = target.x - p.x;
       const dz = target.z - p.z;
-      const len = Math.hypot(dx, dz) || 1;
-      const standX = target.x - (dx / len) * 4.0;
-      const standZ = target.z - (dz / len) * 4.0;
+      const length = Math.hypot(dx, dz) || 1;
+      const x = target.x - (dx / length) * 4;
+      const z = target.z - (dz / length) * 4;
       let groundY = Math.floor(target.y);
       for (let y = Math.floor(target.y) + 4; y > Math.floor(target.y) - 6; y--) {
-        if (g.world.getBlock(Math.floor(standX), y, Math.floor(standZ)) !== 0) {
+        if (g.world.getBlock(Math.floor(x), y, Math.floor(z)) !== 0) {
           groundY = y + 1;
           break;
         }
       }
-      g.player.position.set(standX, groundY, standZ);
+      g.player.position.set(x, groundY, z);
       g.player.velocity.set(0, 0, 0);
-      g.player.pitch = 0.05;
       g.player.syncAvatar();
+      return Math.atan2(-(target.x - x), -(target.z - z));
     }, log);
-    await pause(400);
-    // Sweep yaw and pitch until the camera ray lands on an oak log.
-    let aimed = false;
+    await pause(300);
+    let aim = null;
     for (const pitch of [-0.1, -0.25, -0.4, 0.15, 0.3, 0.05, 0.45, 0.6]) {
       for (const yawStep of [0, 0.12, -0.12, 0.24, -0.24, 0.4, -0.4, 0.6, -0.6, 0.9, -0.9]) {
-        await page.evaluate(
-          ({ step, target, pitchValue }) => {
-            const g = window.__GIERA__;
-            const p = g.player.position;
-            const base = Math.atan2(-(target.x - p.x), -(target.z - p.z));
-            g.player.yaw = base + step;
-            g.player.pitch = pitchValue;
-            g.player.syncAvatar();
-          },
-          { step: yawStep, target: log, pitchValue: pitch }
-        );
-        await pause(120);
-        const hit = await page.evaluate(() => window.__aimRay());
+        await page.evaluate(({ yaw, step, pitchValue }) => {
+          const g = window.__GIERA__;
+          g.player.yaw = yaw + step;
+          g.player.pitch = pitchValue;
+          g.player.syncAvatar();
+        }, { yaw: base, step: yawStep, pitchValue: pitch });
+        await pause(60);
+        const hit = await aimRay();
         if (hit?.id === 7) {
-          aimed = true;
+          aim = { pitch, yaw: base + yawStep };
           break;
         }
       }
-      if (aimed) break;
+      if (aim) break;
     }
+    if (!aim) continue;
     await page.mouse.move(640, 370);
     await page.mouse.down();
     await pause(3200);
     await page.mouse.up();
     await pause(400);
-    if (!aimed) break;
+    const after = await page.evaluate(() => window.__GIERA__.inventory.blocks?.oak_log ?? 0);
+    if (after > before) {
+      mined = true;
+      break;
+    }
   }
+  if (!mined) break;
 }
 const woodCount = await page.evaluate(() => window.__GIERA__.inventory.blocks?.oak_log ?? 0);
 await page.screenshot({ path: resolve(EVIDENCE, "visible-04b-wood.png") });
-check("gathering wood for crafting", woodCount > 0, `oak_log=${woodCount}`);
+check("gathering wood for crafting", woodCount >= 3, `oak_log=${woodCount}`);
+const buildSlot = await page.evaluate(() => window.__GIERA__.inventory.hotbar.findIndex((id) => id !== 0));
+check("building material selected", buildSlot >= 0, `slot=${buildSlot + 1}`);
+if (buildSlot >= 0) await page.keyboard.press(String(buildSlot + 1));
 
 // PLACE + BUILD A SMALL WALL
 // Proven pattern from the mechanics suite: stand on flat ground, drop a fixture
@@ -289,7 +306,7 @@ const buildSpots = await page.evaluate(() => {
       let ok = true;
       for (let d = 0; d < 5 && ok; d++) {
         if (surface(x + d, z) !== h) ok = false;
-        for (let y = h + 1; y <= h + 9 && ok; y++) if (g.world.getBlock(x + d, z, y) !== 0) ok = false;
+        for (let y = h + 1; y <= h + 9 && ok; y++) if (g.world.getBlock(x + d, y, z) !== 0) ok = false;
       }
       if (ok) spots.push({ x: x + 0.5, y: h + 1, z: z + 0.5 });
     }
@@ -299,6 +316,7 @@ const buildSpots = await page.evaluate(() => {
 await ensureHarness();
 let placedBefore = 0;
 let placedAfter = 0;
+let placedVoxel = null;
 for (const spot of buildSpots) {
   await page.evaluate((s) => {
     const g = window.__GIERA__;
@@ -309,33 +327,50 @@ for (const spot of buildSpots) {
     g.player.syncAvatar();
   }, spot);
   await pause(350);
-  const fixture = await page.evaluate(() => {
+  let fixture = null;
+  for (const distance of [8, 9, 7, 6, 5.5]) {
+    const candidate = await page.evaluate((d) => {
+      const g = window.__GIERA__;
+      const dir = g.camera.position.clone();
+      g.camera.getWorldDirection(dir);
+      const x = Math.floor(g.camera.position.x + dir.x * d);
+      const y = Math.floor(g.camera.position.y + dir.y * d);
+      const z = Math.floor(g.camera.position.z + dir.z * d);
+      if (g.world.getBlock(x, y, z) !== 0) return null;
+      g.world.setBlock(x, y, z, 2);
+      return { x, y, z };
+    }, distance);
+    if (!candidate) continue;
+    await pause(100);
+    const hit = await aimRay();
+    if (hit?.id === 2 && hit.x === candidate.x && hit.y === candidate.y && hit.z === candidate.z) {
+      fixture = candidate;
+      break;
+    }
+    await page.evaluate((f) => window.__GIERA__.world.setBlock(f.x, f.y, f.z, 0), candidate);
+  }
+  if (!fixture) continue;
+  const beforeNeighbors = await page.evaluate((f) => {
     const g = window.__GIERA__;
-    const dir = g.camera.position.clone();
-    g.camera.getWorldDirection(dir);
-    const x = Math.floor(g.camera.position.x + dir.x * 6);
-    const y = Math.floor(g.camera.position.y + dir.y * 6);
-    const z = Math.floor(g.camera.position.z + dir.z * 6);
-    g.world.setBlock(x, y, z, 2);
-    return { x, y, z };
-  });
-  await pause(250);
+    return [[f.x - 1, f.y, f.z], [f.x + 1, f.y, f.z], [f.x, f.y - 1, f.z], [f.x, f.y + 1, f.z], [f.x, f.y, f.z - 1], [f.x, f.y, f.z + 1]]
+      .map(([x, y, z]) => ({ x, y, z, id: g.world.getBlock(x, y, z) }));
+  }, fixture);
   placedBefore = await page.evaluate(() => window.__QA_plays.place_block ?? 0);
-  await page.mouse.move(640, 360);
-  await page.mouse.down({ button: "right" });
-  await pause(180);
-  await page.mouse.up({ button: "right" });
+  await page.locator("canvas#game").click({ button: "right" });
   await pause(350);
   placedAfter = await page.evaluate(() => window.__QA_plays.place_block ?? 0);
-  const landed = await page.evaluate((f) => window.__GIERA__.world.getBlock(f.x, f.y + 1, f.z), fixture);
-  if (placedAfter > placedBefore) {
+  placedVoxel = await page.evaluate((neighbors) => {
+    const g = window.__GIERA__;
+    return neighbors.find((v) => v.id === 0 && g.world.getBlock(v.x, v.y, v.z) !== 0) ?? null;
+  }, beforeNeighbors);
+  if (placedAfter > placedBefore && placedVoxel) {
     await page.screenshot({ path: resolve(EVIDENCE, "visible-05-build.png") });
     break;
   }
   await page.evaluate((f) => window.__GIERA__.world.setBlock(f.x, f.y, f.z, 0), fixture);
 }
 await page.screenshot({ path: resolve(EVIDENCE, "visible-05-build.png") });
-check("building", placedAfter > placedBefore, `place_block ${placedBefore}->${placedAfter}`);
+check("building", placedAfter > placedBefore && !!placedVoxel, `place_block ${placedBefore}->${placedAfter} target=${JSON.stringify(placedVoxel)}`);
 
 // HOTBAR + CRAFT
 await page.keyboard.press("3");
@@ -348,7 +383,7 @@ await page.screenshot({ path: resolve(EVIDENCE, "visible-06-craft.png") });
 const craftOpen = await page.evaluate(() => !!document.querySelector(".hud-inventory-modal.hud-modal-open"));
 const recipeCount = await page.evaluate(() => document.querySelectorAll(".hud-recipes-list .hud-craft-btn").length);
 const craftable = await page.evaluate(() => document.querySelectorAll(".hud-recipes-list .hud-craft-btn.can-craft").length);
-check("craft modal", craftOpen && recipeCount === 5, `open=${craftOpen} recipes=${recipeCount} craftable=${craftable}`);
+check("craft modal", craftOpen && recipeCount === RECIPES.length, `open=${craftOpen} recipes=${recipeCount} expected=${RECIPES.length} craftable=${craftable}`);
 const craftBefore = await page.evaluate(() => {
   const inv = window.__GIERA__.inventory;
   const total = (bag) => Object.values(bag ?? {}).reduce((sum, n) => sum + n, 0);
@@ -370,8 +405,8 @@ const craftAfter = await page.evaluate(() => {
 await page.screenshot({ path: resolve(EVIDENCE, "visible-07-craft-result.png") });
 check(
   "crafting an item",
-  crafted === null ? craftable === 0 : craftAfter > craftBefore,
-  crafted === null ? "no affordable recipe yet (materials missing)" : `crafted ${crafted}, inventory ${craftBefore}->${craftAfter}`
+  crafted !== null && craftAfter > craftBefore,
+  crafted === null ? `no affordable recipe; oak_log=${await page.evaluate(() => window.__GIERA__.inventory.blocks?.oak_log ?? 0)}` : `crafted ${crafted}, inventory ${craftBefore}->${craftAfter}`
 );
 const pausedByEscape = await closeOverlays();
 
@@ -558,12 +593,14 @@ for (let attempt = 0; attempt < 4 && Math.abs(trampolineVy - 22) >= 1.5; attempt
 await page.screenshot({ path: resolve(EVIDENCE, "visible-14-tycoon-trampoline.png") });
 check("trampoline bounce", Math.abs(trampolineVy - 22) < 1.5, `maxVy=${trampolineVy.toFixed(2)} (spec 22)`);
 
-// LAN modal UI
-await page.click(".hud-lan-btn");
+// LAN pause-menu UI
+await page.keyboard.press("Escape");
+await page.locator("#pause-lan").click();
 await pause(900);
 await page.screenshot({ path: resolve(EVIDENCE, "visible-15-lan.png") });
-const lanOpen = await page.evaluate(() => !!document.querySelector(".hud-lan-modal.hud-modal-open"));
-check("LAN modal opens", lanOpen, `open=${lanOpen}`);
+const lanOpen = await page.evaluate(() => !document.querySelector("#pause-lan-panel")?.hasAttribute("hidden"));
+check("LAN panel opens", lanOpen, `open=${lanOpen}`);
+await page.keyboard.press("Escape");
 await closeOverlays();
 
 check("no page errors during the session", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));

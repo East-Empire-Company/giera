@@ -15,6 +15,7 @@ const mutableFlatWorld = () => {
   const world: HouseWorld & { setBlock: (x: number, y: number, z: number, id: number) => void } = {
     getBlock: (x, y, z) => y <= 40 ? BLOCK_ID.grass : edits.get(`${x},${y},${z}`) ?? BLOCK_ID.air,
     surfaceColumnTop: () => 40,
+    hasEdit: (x, y, z) => edits.has(`${x},${y},${z}`),
     setBlock: (x, y, z, id) => edits.set(`${x},${y},${z}`, id),
   };
   return { world, edits };
@@ -31,6 +32,12 @@ describe("Iskra house plans", () => {
     expect(first!.blocks.length).toBeLessThanOrEqual(150);
     expect(new Set(first!.blocks.map(({ x, y, z }) => `${x},${y},${z}`)).size).toBe(first!.blocks.length);
     expect(first!.blocks.every(({ y, id }) => y > 40 && id !== BLOCK_ID.air)).toBe(true);
+  });
+  it("builds a narrow lookout tower when Iskra requests that archetype", () => {
+    const plan = createHousePlan(flatWorld(), player, 424242, undefined, "lookout_tower");
+    expect(plan?.archetype).toBe("lookout_tower");
+    expect(new Set(plan!.blocks.map(({ x }) => x)).size).toBeLessThanOrEqual(3);
+    expect(new Set(plan!.blocks.map(({ z }) => z)).size).toBeLessThanOrEqual(3);
   });
   it("spans both footprint axes when the player faces the X axis", () => {
     const plan = createHousePlan(flatWorld(), { x: 0, z: 0, yaw: Math.PI / 2 }, 424242)!;
@@ -65,6 +72,12 @@ describe("Iskra house plans", () => {
     const editsBefore = blocked.edits.size;
     expect(placeHousePlan(plan, blocked.world, new GameInventory())).toBeNull();
     expect(blocked.edits.size).toBe(editsBefore);
+    const editedAir = mutableFlatWorld();
+    const editedPlan = createHousePlan(editedAir.world, player, 424242)!;
+    const editedBlock = editedPlan.blocks[0];
+    editedAir.world.setBlock(editedBlock.x, editedBlock.y, editedBlock.z, BLOCK_ID.air);
+    expect(placeHousePlan(editedPlan, editedAir.world, new GameInventory())).toBeNull();
+    expect(editedAir.edits.size).toBe(1);
 
     const limited = mutableFlatWorld();
     const chunk = chunkKey(Math.floor(first.x / CHUNK_SIZE), Math.floor(first.y / CHUNK_SIZE), Math.floor(first.z / CHUNK_SIZE));

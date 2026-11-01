@@ -1,5 +1,6 @@
 import { CONCIERGE_TOOLS, type ConciergeToolName } from "../../shared/concierge-tools";
 import { createBackup, readBackups, restoreBackup, clearProgress, summarize, type BackupSummary } from "./backups";
+import type { HouseArchetype } from "../game/house-builder";
 
 export type ConciergeStatus = {
   started: boolean;
@@ -11,7 +12,7 @@ export type ConciergeStatus = {
 };
 
 export type ConciergePlayer = "ziemek" | "gniewko";
-export type ConciergeHouse = { blocks: number; style: "wood" | "stone" };
+export type ConciergeHouse = { blocks: number; style: "wood" | "stone"; archetype: HouseArchetype };
 export type ConciergeExpansion = { bought: boolean; stars: number; cost: number };
 
 export type ConciergeHost = {
@@ -20,7 +21,8 @@ export type ConciergeHost = {
   setVolume(level: number): number;
   setJumpHeight(player: ConciergePlayer, height: number): number;
   setFlying(player: ConciergePlayer, enabled: boolean): boolean;
-  buildHouse(player: ConciergePlayer): ConciergeHouse | null;
+  buildHouse(player: ConciergePlayer, archetype?: HouseArchetype): ConciergeHouse | null;
+  digMine(player: ConciergePlayer): number | null;
   buyExpansion(): ConciergeExpansion;
   teleportToSpawn(): void;
   reload(): void;
@@ -66,8 +68,18 @@ export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolN
     async build_house(params) {
       const target = resolveCheatPlayer(params, host.status().splitScreen);
       if (!target) return "Zapytaj, czy domek zbudować dla Ziemka czy Gniewka.";
-      const house = host.buildHouse(target);
-      return house ? "Domek z klocków już stoi!" : "Nie ma bezpiecznego miejsca na domek.";
+      const archetype =
+        params.archetype === "cabin" || params.archetype === "lookout_tower" ? params.archetype : undefined;
+      const house = host.buildHouse(target, archetype);
+      if (!house) return "Nie ma bezpiecznego miejsca na budowlę.";
+      return house.archetype === "lookout_tower" ? "Wieża strażnicza już stoi!" : "Domek z klocków już stoi!";
+    },
+
+    async dig_mine(params) {
+      const target = resolveCheatPlayer(params, host.status().splitScreen);
+      if (!target) return "Zapytaj, czy kopalnię wykopać dla Ziemka czy Gniewka.";
+      const blocks = host.digMine(target);
+      return blocks === null ? "Nie znalazłem bezpiecznego miejsca na kopalnię." : `Kopalnia gotowa. Tunel ma ${blocks} bloków.`;
     },
 
     async set_split_screen(params) {

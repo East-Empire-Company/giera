@@ -16,6 +16,38 @@ function makeVfx(seed = 424242): GameplayVfx {
 
 const origin = new THREE.Vector3(10, 20, 30);
 
+  it("expands and removes the impact ring after 0.25 seconds", () => {
+    const scene = new THREE.Scene();
+    const vfx = new GameplayVfx(scene, 424242, {
+      dirt01: new THREE.Texture(), dirt02: new THREE.Texture(), leaf01: new THREE.Texture(),
+      spark01: new THREE.Texture(), smoke01: new THREE.Texture(), star01: new THREE.Texture(),
+    });
+    vfx.emit("impact_ring", origin, { groundY: 19 });
+    const ring = scene.children.find((child): child is THREE.Mesh => child instanceof THREE.Mesh);
+    expect(ring?.visible).toBe(true);
+    expect(ring?.scale.x).toBeCloseTo(0.3);
+    vfx.update(0.125);
+    expect(ring?.scale.x).toBeCloseTo(0.75);
+    expect(ring?.visible).toBe(true);
+    vfx.update(0.13);
+    expect(ring?.visible).toBe(false);
+    vfx.dispose();
+  });
+
+  it("emits ten gravity-driven debris particles that bounce at ground height", () => {
+    const vfx = makeVfx();
+    vfx.emit("debris", origin, { groundY: 20, tint: 0x996633 });
+    expect(vfx.activeCount).toBe(10);
+    vfx.update(0.3);
+    const impactPositions = vfx.snapshot();
+    expect(impactPositions.every((particle) => particle.y >= 20)).toBe(true);
+    vfx.update(0.05);
+    const particles = vfx.snapshot();
+    expect(particles).toHaveLength(10);
+    expect(particles.every((particle) => particle.y >= 20)).toBe(true);
+    expect(particles.some((particle) => particle.y > 20)).toBe(true);
+  });
+
 describe("GameplayVfx bursts", () => {
   const cases: [GameplayVfxKind, number, number][] = [
     ["mine", 8, 0.45],

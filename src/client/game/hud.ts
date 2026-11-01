@@ -50,9 +50,7 @@ export class GameHUD {
   private inventoryOpen = false;
   readonly modeBtn: HTMLButtonElement;
   readonly inventoryBtn: HTMLButtonElement;
-  readonly lanBtn: HTMLButtonElement;
   readonly controlsBtn: HTMLButtonElement;
-  private readonly lanModal: HTMLElement;
   private readonly controlsModal: HTMLElement;
   private readonly npcPrompt: HTMLElement;
   private readonly npcModal: HTMLElement;
@@ -66,14 +64,12 @@ export class GameHUD {
   private readonly resourceGainCount: HTMLElement;
   private resourceGainUntil = 0;
   private npcDialogOpen = false;
-  private lanModalOpen = false;
   private controlsModalOpen = false;
   constructor(options: {
     inventory: GameInventory;
     objectives: ObjectiveManager;
     onCraft?: (recipeId: string) => void;
     onToggleSplitScreen?: () => boolean;
-    onConnectLan?: (url: string, room: string) => Promise<boolean>;
   }) {
     let root = document.querySelector<HTMLElement>("#hud-root");
     if (!root) {
@@ -169,43 +165,6 @@ export class GameHUD {
       const isSplit = options.onToggleSplitScreen?.() ?? false;
       this.modeBtn.textContent = isSplit ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
     });
-    // LAN button
-    this.lanBtn = document.createElement("button");
-    this.lanBtn.className = "hud-lan-btn";
-    this.lanBtn.textContent = "🌐 LAN";
-    this.lanBtn.addEventListener("click", () => this.toggleLanModal(options.onConnectLan));
-    this.container.appendChild(this.lanBtn);
-
-    // LAN Modal
-    this.lanModal = document.createElement("div");
-    this.lanModal.className = "hud-lan-modal";
-    this.lanModal.innerHTML = `
-      <div class="hud-modal-card hud-lan-card">
-        <header class="hud-modal-header">
-          <h2>Dołącz przez LAN</h2>
-          <button class="hud-modal-close" aria-label="Zamknij [Esc]">✕</button>
-        </header>
-        <div class="hud-modal-body">
-          <p>Graj wspólnie na dwóch komputerach w domowej sieci Wi-Fi.</p>
-          <form class="hud-lan-form" id="lan-form">
-            <label>
-              Adres serwera:
-              <input type="text" id="lan-url" value="ws://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}:8080/ws" />
-            </label>
-            <label>
-              Kod pokoju:
-              <input type="text" id="lan-room" value="DOM1" />
-            </label>
-            <div class="hud-lan-status" id="lan-status">Wpisz adres serwera uruchomionego na drugim Macu.</div>
-            <button type="submit" class="hud-craft-btn">Połącz z grą</button>
-          </form>
-        </div>
-      </div>
-    `;
-    this.container.appendChild(this.lanModal);
-
-    const lanClose = this.lanModal.querySelector(".hud-modal-close");
-    lanClose?.addEventListener("click", () => this.setLanModalOpen(false));
     this.container.appendChild(this.modeBtn);
     // Controls button (Xbox / Pad map)
     this.controlsBtn = document.createElement("button");
@@ -342,37 +301,6 @@ export class GameHUD {
       this.renderInventoryModal(inventory, onCraft);
     }
   }
-  toggleLanModal(onConnect?: (url: string, room: string) => Promise<boolean>): void {
-    this.setLanModalOpen(!this.lanModalOpen, onConnect);
-  }
-
-  setLanModalOpen(open: boolean, onConnect?: (url: string, room: string) => Promise<boolean>): void {
-    this.lanModalOpen = open;
-    this.lanModal.classList.toggle("hud-modal-open", open);
-    if (open && onConnect) {
-      const form = this.lanModal.querySelector<HTMLFormElement>("#lan-form");
-      const urlInput = this.lanModal.querySelector<HTMLInputElement>("#lan-url");
-      const roomInput = this.lanModal.querySelector<HTMLInputElement>("#lan-room");
-      const statusEl = this.lanModal.querySelector<HTMLElement>("#lan-status");
-      if (form && urlInput && roomInput && statusEl) {
-        form.onsubmit = async (e) => {
-          e.preventDefault();
-          statusEl.textContent = "Łączenie z serwerem LAN...";
-          try {
-            const ok = await onConnect(urlInput.value.trim(), roomInput.value.trim());
-            if (ok) {
-              statusEl.textContent = "Połączono! Świat zsynchronizowany.";
-              setTimeout(() => this.setLanModalOpen(false), 800);
-            } else {
-              statusEl.textContent = "Nie udało się połączyć. Upewnij się, że serwer działa.";
-            }
-          } catch {
-            statusEl.textContent = "Błąd połączenia z serwerem LAN.";
-          }
-        };
-      }
-    }
-  }
   toggleControlsModal(): void {
     this.setControlsModalOpen(!this.controlsModalOpen);
   }
@@ -386,9 +314,6 @@ export class GameHUD {
     return this.controlsModalOpen;
   }
 
-  isLanModalOpen(): boolean {
-    return this.lanModalOpen;
-  }
   isNpcDialogOpen(): boolean {
     return this.npcDialogOpen;
   }

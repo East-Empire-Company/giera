@@ -2,6 +2,7 @@ import {
   decodeBinaryChunkFrame,
   type ChunkPacket,
   type ClientMessage,
+  type PlayerProfile,
   type PlayerState,
   type ServerMessage,
 } from "../../shared/lan-protocol";
@@ -21,19 +22,32 @@ export class LanClient {
   private readonly url: string;
   private readonly room: string;
   private readonly playerName: string;
+  private readonly profile?: PlayerProfile;
+  private readonly host?: boolean;
+  private readonly roomName?: string;
+  private readonly seed?: number;
   private readonly callbacks: LanClientCallbacks;
   private seq = 0;
   private shouldReconnect = true;
+  private ownId: string | null = null;
 
   constructor(options: {
     url: string;
     room: string;
     playerName: string;
+    profile?: PlayerProfile;
+    host?: boolean;
+    roomName?: string;
+    seed?: number;
     callbacks?: LanClientCallbacks;
   }) {
     this.url = options.url;
     this.room = options.room;
     this.playerName = options.playerName;
+    this.profile = options.profile;
+    this.host = options.host;
+    this.roomName = options.roomName;
+    this.seed = options.seed;
     this.callbacks = options.callbacks ?? {};
   }
 
@@ -47,11 +61,13 @@ export class LanClient {
 
       this.ws.onopen = () => {
         this.callbacks.onStatusChange?.("connected");
-        this.send({
-          t: "hello",
-          name: this.playerName,
-          room: this.room,
-        });
+        const hello: ClientMessage = { t: "hello", name: this.playerName, room: this.room, profile: this.profile };
+        if (this.host) {
+          hello.host = true;
+          if (this.roomName) hello.roomName = this.roomName;
+          if (this.seed !== undefined) hello.seed = this.seed;
+        }
+        this.send(hello);
       };
 
       this.ws.onmessage = (event) => {
@@ -68,8 +84,10 @@ export class LanClient {
         } else if (typeof event.data === "string") {
           try {
             const msg = JSON.parse(event.data) as ServerMessage;
-            if (msg.t === "welcome") this.callbacks.onWelcome?.(msg);
-            else if (msg.t === "block") this.callbacks.onBlock?.(msg);
+            if (msg.t === "welcome") {
+              this.ownId = msg.id;
+              this.callbacks.onWelcome?.(msg);
+            } else if (msg.t === "block") this.callbacks.onBlock?.(msg);
             else if (msg.t === "player") this.callbacks.onPlayer?.(msg);
             else if (msg.t === "join") this.callbacks.onJoin?.(msg);
             else if (msg.t === "leave") this.callbacks.onLeave?.(msg);

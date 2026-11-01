@@ -76,6 +76,28 @@ describe("LanClient", () => {
     });
   });
 
+  it("includes host, roomName, and seed in hello when hosting", () => {
+    const client = new LanClient({
+      url: "ws://127.0.0.1:8080/ws",
+      room: "DOM1",
+      playerName: "Ziemek",
+      host: true,
+      roomName: "Dom",
+      seed: 424242,
+      callbacks: {},
+    });
+    client.connect();
+    FakeWebSocket.instances[0].open();
+    expect(FakeWebSocket.instances[0].parsedSent()[0]).toEqual({
+      t: "hello",
+      name: "Ziemek",
+      room: "DOM1",
+      host: true,
+      roomName: "Dom",
+      seed: 424242,
+    });
+  });
+
   it("drops outgoing messages while the socket is not open", () => {
     const client = makeClient({});
 

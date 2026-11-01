@@ -575,6 +575,10 @@ export class WorldRenderer {
     const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     return chunk.data[getBlockIndex(localX, localY, localZ)];
   }
+  hasEdit(x: number, y: number, z: number): boolean {
+    const key = chunkKey(Math.floor(x / CHUNK_SIZE), Math.floor(y / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE));
+    return this.edits.get(key)?.has(blockIndex(x, y, z)) ?? false;
+  }
 
   /** Same result as `topSolidY(getBlock)`, but looks each vertical chunk up once instead of once per block. */
   surfaceColumnTop(x: number, z: number): number {

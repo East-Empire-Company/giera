@@ -1,22 +1,22 @@
 import * as THREE from "three";
 import { sweepAABB, type AABB } from "../../shared/physics";
 import { Avatar, type AvatarClothing, type AvatarMotion } from "./avatar";
+import type { PlayerProfile } from "../../shared/lan-protocol";
 
 export type PlayerId = "p1" | "p2";
-
 export type ProtagonistProfile = {
   name: string;
   role: string;
   clothing: AvatarClothing;
 };
 
-export const PROTAGONISTS: Record<PlayerId, ProtagonistProfile> = {
-  p1: {
+export const PROTAGONISTS: Record<PlayerProfile, ProtagonistProfile> = {
+  ziemek: {
     name: "Ziemek",
     role: "Starszy brat — pixelowa bluza w creepery",
     clothing: { torso: "#22998a", arms: "#22998a", legs: "#24272e" },
   },
-  p2: {
+  gniewko: {
     name: "Gniewko",
     role: "Młodszy brat — białe polo i granatowe spodnie",
     clothing: { torso: "#f6f8fb", arms: "#f6f8fb", legs: "#1d2d48" },
@@ -33,7 +33,8 @@ const ARM_OFFSET = new THREE.Vector3(0.65, 0.15, 0);
 
 export class PlayerController {
   readonly id: PlayerId;
-  readonly profile: ProtagonistProfile;
+  characterProfile: PlayerProfile;
+  profile: ProtagonistProfile;
   readonly spawn: [number, number, number];
   readonly position: THREE.Vector3;
   readonly velocity: THREE.Vector3;
@@ -45,9 +46,11 @@ export class PlayerController {
   flying = false;
   avatar?: Avatar;
 
-  constructor(options: { id: PlayerId; spawn: [number, number, number]; yaw?: number }) {
+  constructor(options: { id: PlayerId; spawn: [number, number, number]; yaw?: number; profile?: PlayerProfile }) {
     this.id = options.id;
-    this.profile = PROTAGONISTS[this.id];
+    const defaultProfile: PlayerProfile = this.id === "p1" ? "ziemek" : "gniewko";
+    this.characterProfile = options.profile || defaultProfile;
+    this.profile = PROTAGONISTS[this.characterProfile];
     this.spawn = [...options.spawn];
     this.position = new THREE.Vector3(...options.spawn);
     this.velocity = new THREE.Vector3(0, 0, 0);
@@ -55,10 +58,15 @@ export class PlayerController {
   }
 
   async loadAvatar(): Promise<Avatar> {
-    const avatar = await Avatar.load(this.id === "p1" ? "playerOne" : "playerTwo", "#ffffff", this.profile.clothing, 0.85);
+    const modelId = this.characterProfile === "ziemek" ? "playerOne" : "playerTwo";
+    const avatar = await Avatar.load(modelId, "#ffffff", this.profile.clothing, 0.85);
     this.avatar = avatar;
     this.syncAvatar();
     return avatar;
+  }
+  setCharacterProfile(profile: PlayerProfile): void {
+    this.characterProfile = profile;
+    this.profile = PROTAGONISTS[profile];
   }
 
   setJumpHeight(height: number): number {

@@ -19,3 +19,6 @@ reason: intended worldgen/tycoon terrain change plus atlas re-encode to WebP (al
 ## 2026-10-30T23:29:04.294Z stage=goldens
 reason: HUD music pill replaced by 56x56 inventory button; headless chromium reports hover:none so inventory button stays hidden in golden captures
 
+## 2026-11-01T01:06:31.134Z stage=goldens
+reason: voxel AO anisotropy + range, smooth terrain deform, mining debris
+

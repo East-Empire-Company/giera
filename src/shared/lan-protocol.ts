@@ -1,8 +1,17 @@
-export const MAX_PLAYER_SPEED = 12; // blocks per second limit
+export const MAX_PLAYER_SPEED = 12; // horizontal blocks per second limit
+export const MAX_PLAYER_VERTICAL_SPEED = 48; // vertical blocks per second limit (covers free-fall from ~60 blocks)
+
+export type PlayerProfile = "ziemek" | "gniewko";
+
+export const PROFILE_LABEL: Record<PlayerProfile, string> = {
+  ziemek: "Ziemek",
+  gniewko: "Gniewko",
+};
 
 export type PlayerState = {
   id: string;
   name: string;
+  profile: PlayerProfile;
   x: number;
   y: number;
   z: number;
@@ -12,18 +21,35 @@ export type PlayerState = {
   slot?: number;
 };
 
+export const DEFAULT_LAN_PORT = 8080;
+export const MAX_ROOM_NAME_LENGTH = 32;
+
 export type ClientMessage =
-  | { t: "hello"; name: string; room: string }
+  | { t: "hello"; name: string; room: string; roomName?: string; host?: boolean; profile?: PlayerProfile; seed?: number }
   | { t: "need"; cx: number; cy: number; cz: number }
   | { t: "block"; x: number; y: number; z: number; id: number }
   | { t: "input"; seq: number; x: number; y: number; z: number; yaw: number; pitch: number; anim: string };
 
 export type ServerMessage =
-  | { t: "welcome"; id: string; seed: number; spawn: [number, number, number]; slot: number; players: PlayerState[] }
+  | { t: "welcome"; id: string; seed: number; spawn: [number, number, number]; slot: number; players: PlayerState[]; roomName: string; profile: PlayerProfile }
   | { t: "block"; x: number; y: number; z: number; id: number; by: string }
-  | { t: "player"; id: string; name: string; x: number; y: number; z: number; yaw: number; pitch: number; anim: string }
-  | { t: "join"; id: string; name: string; slot: number }
+  | { t: "player"; id: string; name: string; profile: PlayerProfile; x: number; y: number; z: number; yaw: number; pitch: number; anim: string }
+  | { t: "join"; id: string; name: string; profile: PlayerProfile; slot: number }
   | { t: "leave"; id: string };
+
+export type LanRoomSummary = {
+  code: string;
+  name: string;
+  players: number;
+  seed: number;
+};
+
+export type LanServerSummary = {
+  host: string;
+  ip: string;
+  port: number;
+  rooms: LanRoomSummary[];
+};
 export type ChunkPacket = {
   cx: number;
   cy: number;
@@ -89,12 +115,16 @@ export function decodeBinaryChunkFrame(data: Uint8Array): ChunkPacket[] {
   return chunks;
 }
 
-export function isValidPlayerSpeed(
+export function isValidPlayerMotion(
   prev: { x: number; y: number; z: number },
   curr: { x: number; y: number; z: number },
   deltaSeconds: number
 ): boolean {
   if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return false;
-  const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y, curr.z - prev.z);
-  return dist / deltaSeconds <= MAX_PLAYER_SPEED;
+  const horizontal = Math.hypot(curr.x - prev.x, curr.z - prev.z);
+  const vertical = Math.abs(curr.y - prev.y);
+  return horizontal / deltaSeconds <= MAX_PLAYER_SPEED &&
+         vertical / deltaSeconds <= MAX_PLAYER_VERTICAL_SPEED;
 }
+// Compatibility alias for existing callers/tests during transition to separate horizontal/vertical limits
+export const isValidPlayerSpeed = isValidPlayerMotion;
