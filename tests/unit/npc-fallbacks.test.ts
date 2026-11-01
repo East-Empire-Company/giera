@@ -6,21 +6,21 @@ describe("pre-generated NPC fallback lines", () => {
     for (const [npcId, lines] of Object.entries(NPC_FALLBACK_LINES)) {
       for (const line of lines) {
         const words = line.trim().split(/\s+/).length;
-        const budget = npcId === "papuga" ? 6 : 12;
+        const budget = npcId === "ciocia" ? 6 : 12;
         expect(words, `${npcId}: ${line}`).toBeLessThanOrEqual(budget);
       }
     }
   });
 
   it("picks the same line for the same question", () => {
-    expect(fallbackLine("mina", "Co mam zrobić?")).toBe(fallbackLine("mina", "Co mam zrobić?"));
+    expect(fallbackLine("tata", "Co mam zrobić?")).toBe(fallbackLine("tata", "Co mam zrobić?"));
   });
 
   it("uses persona-specific lines for each NPC", () => {
-    const mina = fallbackLine("mina", "hej");
-    const staszek = fallbackLine("staszek", "hej");
-    expect(NPC_FALLBACK_LINES.mina).toContain(mina);
-    expect(NPC_FALLBACK_LINES.staszek).toContain(staszek);
+    const tata = fallbackLine("tata", "hej");
+    const mama = fallbackLine("mama", "hej");
+    expect(NPC_FALLBACK_LINES.tata).toContain(tata);
+    expect(NPC_FALLBACK_LINES.mama).toContain(mama);
   });
 
   it("falls back to a generic line for unknown NPCs", () => {
@@ -30,7 +30,7 @@ describe("pre-generated NPC fallback lines", () => {
   });
 
   it("emits a brain-reply JSON payload without tool or walk_to", () => {
-    const parsed = JSON.parse(fallbackReplyContent("staszek", "Zrób mi kilof")) as {
+    const parsed = JSON.parse(fallbackReplyContent("mama", "Zrób mi kilof")) as {
       say: string;
       tool: string | null;
       walk_to: unknown;

@@ -58,7 +58,7 @@ export function createMinePlan(
         break;
       }
       for (let height = 1; height <= MINE_HEIGHT; height++) {
-        const y = floorY + height;
+        const y = floorY - height + 1;
         if (y < 1 || y >= WORLD_HEIGHT - 1 || world.hasEdit(x, y, z)) {
           blocked = true;
           break;

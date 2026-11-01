@@ -58,7 +58,7 @@ export class PlayerController {
   }
 
   async loadAvatar(): Promise<Avatar> {
-    const modelId = this.characterProfile === "ziemek" ? "playerOne" : "playerTwo";
+    const modelId = this.characterProfile === "ziemek" ? "ziemek" : "gniewko";
     const avatar = await Avatar.load(modelId, "#ffffff", this.profile.clothing, 0.85);
     this.avatar = avatar;
     this.syncAvatar();

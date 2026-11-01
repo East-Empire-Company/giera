@@ -6,11 +6,11 @@ import { GameInventory, MAX_EDITS_PER_CHUNK } from "../../src/client/game/invent
 
 describe("Iskra mine planning", () => {
   it("plans a bounded tunnel through untouched natural blocks only", () => {
-    const edited: Record<string, true> = { "0,41,8": true };
+    const edited: Record<string, true> = { "0,39,8": true };
     const world = {
       getBlock: (x: number, y: number, z: number) => {
         if (edited[`${x},${y},${z}`]) return BLOCK_ID.stone;
-        return y >= 40 && y <= 43 && x >= -2 && x <= 2 && z >= 0 && z <= 12 ? BLOCK_ID.stone : BLOCK_ID.air;
+        return y >= 39 && y <= 40 && x >= -2 && x <= 2 && z >= 0 && z <= 12 ? BLOCK_ID.stone : BLOCK_ID.air;
       },
       hasEdit: (x: number, y: number, z: number) => Boolean(edited[`${x},${y},${z}`]),
     };
@@ -19,16 +19,32 @@ describe("Iskra mine planning", () => {
     expect(plan!.blocks.length).toBeGreaterThanOrEqual(6);
     expect(plan!.blocks.length).toBeLessThanOrEqual(32);
     expect(plan!.blocks.every((block) => block.id === BLOCK_ID.stone)).toBe(true);
-    expect(plan!.blocks.some((block) => `${block.x},${block.y},${block.z}` === "0,41,1")).toBe(true);
-    expect(plan!.blocks.some((block) => `${block.x},${block.y},${block.z}` === "0,41,8")).toBe(false);
+    expect(plan!.blocks.some((block) => `${block.x},${block.y},${block.z}` === "0,40,1")).toBe(true);
+    expect(plan!.blocks.some((block) => `${block.x},${block.y},${block.z}` === "0,39,8")).toBe(false);
   });
+
+  it("starts mine tunnels below the surface for a standing player", () => {
+    const world = {
+      getBlock: (_x: number, y: number, _z: number) =>
+        y === 39 || y === 40 ? BLOCK_ID.stone : BLOCK_ID.air,
+      hasEdit: () => false,
+    };
+
+    const plan = createMinePlan(world, { x: 0.5, y: 41, z: 0.5, yaw: Math.PI });
+
+    expect(plan).not.toBeNull();
+    expect(plan!.blocks).toHaveLength(32);
+    expect(plan!.blocks.some((block) => block.y === 40)).toBe(true);
+    expect(plan!.blocks.some((block) => block.y === 39)).toBe(true);
+  });
+
   it("stops before wood, water, and bedrock", () => {
     for (const blocker of [BLOCK_ID.oak_log, BLOCK_ID.water, BLOCK_ID.bedrock]) {
       const world = {
         getBlock: (x: number, y: number, z: number) =>
-          x === 0 && y === 41 && z === 3
+          x === 0 && y === 40 && z === 3
             ? blocker
-            : y >= 40 && y <= 43 && x >= -2 && x <= 2 && z >= 0 && z <= 12
+            : y >= 39 && y <= 40 && x >= -2 && x <= 2 && z >= 0 && z <= 12
               ? BLOCK_ID.stone
               : BLOCK_ID.air,
         hasEdit: () => false,

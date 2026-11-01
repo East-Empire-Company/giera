@@ -3,9 +3,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
 export const NPC_VOICES: Record<string, string> = {
-  mina: "cgSgspJ2msm6clMCkdW9",
-  staszek: "0zoGygYjh97gnqQuHI0b",
-  papuga: "N2lVS1w4EtoT3dr4eOWO",
+  tata: "cgSgspJ2msm6clMCkdW9",
+  mama: "0zoGygYjh97gnqQuHI0b",
+  ciocia: "N2lVS1w4EtoT3dr4eOWO",
 };
 
 const MAX_TEXT = 200;
@@ -70,7 +70,7 @@ export async function handleNpcTts(req: Request, options: NpcTtsOptions = {}): P
   } catch {
     return json(400, { error: "Invalid JSON" });
   }
-  const npcId = typeof body.npcId === "string" && Object.hasOwn(NPC_VOICES, body.npcId) ? body.npcId : "mina";
+  const npcId = typeof body.npcId === "string" && Object.hasOwn(NPC_VOICES, body.npcId) ? body.npcId : "tata";
   const text = typeof body.text === "string" ? body.text.trim().slice(0, MAX_TEXT) : "";
   if (!text) return json(400, { error: "Empty text" });
 

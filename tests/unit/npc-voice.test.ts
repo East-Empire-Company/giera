@@ -89,7 +89,7 @@ async function readyManager(): Promise<AudioManager> {
 describe("AudioManager.speak", () => {
   it("plays the synthesized line at the distance-scaled volume and ducks the music under it", async () => {
     const manager = await readyManager();
-    await manager.speak("mina", "Cześć!", 0.6);
+    await manager.speak("tata", "Cześć!", 0.6);
     const voice = sources[1];
     expect(voice.starts).toEqual([10]);
     const voiceGain = gains[gains.length - 1];
@@ -100,15 +100,15 @@ describe("AudioManager.speak", () => {
 
   it("queues overlapping lines instead of talking over each other", async () => {
     const manager = await readyManager();
-    await manager.speak("mina", "Pierwsza linia", 1);
-    await manager.speak("staszek", "Druga linia", 1);
+    await manager.speak("tata", "Pierwsza linia", 1);
+    await manager.speak("mama", "Druga linia", 1);
     const [first, second] = sources.slice(1);
     expect(second.starts[0]).toBeGreaterThanOrEqual(first.starts[0] + 2);
   });
 
   it("does not request audio for NPCs that are too far away", async () => {
     const manager = await readyManager();
-    await manager.speak("mina", "Za daleko", 0.02);
+    await manager.speak("tata", "Za daleko", 0.02);
     expect(ttsCalls).toBe(0);
   });
 
@@ -118,13 +118,13 @@ describe("AudioManager.speak", () => {
     vi.stubGlobal("SpeechSynthesisUtterance", class { lang = ""; volume = 1; voice: unknown = null; constructor(public text: string) {} });
     vi.stubGlobal("speechSynthesis", { getVoices: () => [], speak: (u: { text: string; lang: string }) => spoken.push({ text: u.text, lang: u.lang }) });
     const manager = await readyManager();
-    await manager.speak("papuga", "Zabawa!", 1);
+    await manager.speak("ciocia", "Zabawa!", 1);
     expect(spoken).toEqual([{ text: "Zabawa!", lang: "pl-PL" }]);
   });
 
   it("stays silent until the audio context has been allowed to run", async () => {
     const manager = new AudioManager();
-    await manager.speak("mina", "Hej", 1);
+    await manager.speak("tata", "Hej", 1);
     expect(ttsCalls).toBe(0);
   });
 });
@@ -142,7 +142,7 @@ describe("AudioManager.playPlaylist", () => {
     expect(manager.setMusicVolume(0.35)).toBeCloseTo(0.35);
     expect(manager.setSpeechVolume(0.6)).toBeCloseTo(0.6);
     await manager.playPlaylist();
-    await manager.speak("mina", "Cześć!", 1);
+    await manager.speak("tata", "Cześć!", 1);
 
     expect(gains[0].gain.value).toBeCloseTo(0.8);
     expect(gains[1].gain.value).toBeCloseTo(0.35);

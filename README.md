@@ -8,3 +8,7 @@ Mining stops at player edits, wood, water, bedrock, or occupied space.
 World edits persist in the save and sync to connected LAN players.
 
 Run `bun run concierge:provision` to publish tool schemas and prompts to ElevenLabs.
+
+## LAN multiplayer
+
+Manual joins adopt the room seed and reconnect before play.

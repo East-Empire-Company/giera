@@ -62,7 +62,7 @@ describe("fallbackSay", () => {
 describe("client NPC resilience", () => {
   it("retries a rate-limited reply and returns the recovered answer", async () => {
     let attempts = 0;
-    const reply = await reasonNpc("mina", "hej", [], "/npc/reason", {
+    const reply = await reasonNpc("tata", "hej", [], "/npc/reason", {
       attempts: 3,
       baseMs: 10,
       jitterRatio: 0,
@@ -82,7 +82,7 @@ describe("client NPC resilience", () => {
   });
 
   it("returns a pre-generated persona line when every retry fails", async () => {
-    const reply = await reasonNpc("staszek", "zrób mi kilof", [], "/npc/reason", {
+    const reply = await reasonNpc("mama", "zrób mi kilof", [], "/npc/reason", {
       attempts: 2,
       baseMs: 10,
       jitterRatio: 0,
@@ -95,7 +95,7 @@ describe("client NPC resilience", () => {
   });
 
   it("returns a pre-generated persona line when the server is unreachable", async () => {
-    const reply = await reasonNpc("papuga", "siema", [], "/npc/reason", {
+    const reply = await reasonNpc("ciocia", "siema", [], "/npc/reason", {
       attempts: 2,
       baseMs: 10,
       jitterRatio: 0,
@@ -110,7 +110,7 @@ describe("client NPC resilience", () => {
 
   it("falls back rather than exceeding the total response deadline", async () => {
     let attempts = 0;
-    const reply = await reasonNpc("mina", "hej", [], "/npc/reason", {
+    const reply = await reasonNpc("tata", "hej", [], "/npc/reason", {
       attempts: 3,
       timeoutMs: 5,
       jitterRatio: 0,
@@ -126,7 +126,7 @@ describe("client NPC resilience", () => {
     expect(reply.fallback).toBe(true);
   });
   it("flags replies the server already answered with a fallback", async () => {
-    const reply = await reasonNpc("mina", "hej", [], "/npc/reason", {
+    const reply = await reasonNpc("tata", "hej", [], "/npc/reason", {
       attempts: 1,
       sleepFn: async () => {},
       fetchFn: async () =>

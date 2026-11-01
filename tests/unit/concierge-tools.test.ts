@@ -25,15 +25,15 @@ describe("Iskra world editing tools", () => {
 });
 
 describe("concierge cheat actions", () => {
-  const create = (splitScreen: boolean) => {
-    const players = {
-      ziemek: new PlayerController({ id: "p1", spawn: [0, 40, 0] }),
-      gniewko: new PlayerController({ id: "p2", spawn: [5, 40, 0] }),
-    };
+  const create = (splitScreen: boolean, activePlayer: ConciergePlayer = "ziemek") => {
+    const p1 = new PlayerController({ id: "p1", spawn: [0, 40, 0], profile: activePlayer });
+    const p2Profile = activePlayer === "ziemek" ? "gniewko" : "ziemek";
+    const p2 = new PlayerController({ id: "p2", spawn: [5, 40, 0], profile: p2Profile });
+    const players = { ziemek: activePlayer === "ziemek" ? p1 : p2, gniewko: activePlayer === "gniewko" ? p1 : p2 };
     const mineTargets: ConciergePlayer[] = [];
     const houseRequests: { player: ConciergePlayer; archetype?: "cabin" | "lookout_tower" }[] = [];
     const host: ConciergeHost = {
-      status: () => ({ started: true, splitScreen, volume: 0.8, coins: 0, stars: 0, tier: 1 }),
+      status: () => ({ started: true, splitScreen, activePlayer, volume: 0.8, coins: 0, stars: 0, tier: 1 }),
       setSplitScreen: () => {},
       setVolume: (level) => level,
       teleportToSpawn: () => {},
@@ -86,6 +86,16 @@ describe("concierge cheat actions", () => {
     expect(players.gniewko.flying).toBe(true);
     expect(players.ziemek.flying).toBe(false);
   });
+
+  it("routes solo cheats to the active Gniewko profile", async () => {
+    const { players, tools } = create(false, "gniewko");
+
+    await tools.set_flight({ enabled: true });
+
+    expect(players.gniewko.flying).toBe(true);
+    expect(players.ziemek.flying).toBe(false);
+  });
+
 
   it("asks which child should get a cheat in split screen", async () => {
     const { players, tools } = create(true);

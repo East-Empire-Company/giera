@@ -1,4 +1,3 @@
-import { detailCharacter, type CharacterKind } from "./character-detail";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
@@ -9,21 +8,21 @@ export type PlayerAvatarId = keyof typeof assetManifest.models;
 export type AvatarMotion = "idle" | "walk" | "sprint" | "jump" | "mine";
 
 export const ANIM_MAP: Record<AvatarMotion, string[]> = {
-  idle: ["Idle_A", "Idle_B"],
-  walk: ["Walking_A", "Walking_B", "Walking_C"],
-  sprint: ["Running_A", "Running_B"],
-  jump: ["Jump_Start", "Jump_Full_Short", "Jump_Idle"],
-  mine: ["Use_Item", "Hit_A", "Interact"],
+  idle: ["idle_neutral", "Idle_A", "Idle_B"],
+  walk: ["walk", "walk_relaxed", "Walking_A", "Walking_B", "Walking_C"],
+  sprint: ["run", "Running_A", "Running_B"],
+  jump: ["jump", "Jump_Start", "Jump_Full_Short", "Jump_Idle"],
+  mine: ["kicks", "punches", "Use_Item", "Hit_A", "Interact"],
 };
 
 export type AvatarOneShot = "place" | "craft" | "pickup" | "land" | "hit";
 
 export const ONE_SHOT_MAP: Record<AvatarOneShot, string[]> = {
-  place: ["Interact", "Use_Item"],
-  craft: ["Use_Item", "Interact"],
-  pickup: ["PickUp", "Interact"],
-  land: ["Jump_Land"],
-  hit: ["Hit_A", "Throw"],
+  place: ["interact", "Interact", "Use_Item"],
+  craft: ["interact", "Use_Item", "Interact"],
+  pickup: ["wave", "PickUp", "Interact"],
+  land: ["jump", "Jump_Land"],
+  hit: ["punches", "kicks", "Hit_A", "Throw"],
 };
 
 export function resolveClip(candidates: string[], available: string[]): string | null {
@@ -32,17 +31,18 @@ export function resolveClip(candidates: string[], available: string[]): string |
   return null;
 }
 
-export function kaykitPart(name: string): "torso" | "arms" | "legs" | null {
-  if (/(body|chest|torso)/i.test(name)) return "torso";
-  if (/arm/i.test(name)) return "arms";
-  if (/leg/i.test(name)) return "legs";
-  return null;
+function findBone(root: THREE.Object3D, candidates: string[]): THREE.Bone | undefined {
+  const lowered = candidates.map((candidate) => candidate.toLowerCase());
+  let found: THREE.Bone | undefined;
+  root.traverse((object) => {
+    if (found || !(object instanceof THREE.Bone)) return;
+    const name = object.name.toLowerCase();
+    if (lowered.some((candidate) => candidate.endsWith("*") ? name.startsWith(candidate.slice(0, -1)) : name === candidate)) {
+      found = object;
+    }
+  });
+  return found;
 }
-
-const ANIM_FILES = [
-  "assets/models/kaykit/anims/Rig_Medium_MovementBasic.glb",
-  "assets/models/kaykit/anims/Rig_Medium_General.glb",
-];
 
 export type AvatarClothing = { torso: string; arms: string; legs: string };
 
@@ -65,16 +65,23 @@ export class Avatar {
     this.object = object;
     this.mixer = new THREE.AnimationMixer(object);
     for (const clip of animations) this.actions[clip.name.toLowerCase()] = this.mixer.clipAction(clip);
-    object.traverse((o) => {
-      if (!(o instanceof THREE.Bone)) return;
-      const n = o.name.toLowerCase();
-      if (n === "spine") this.bones.spine = o;
-      else if (n === "chest") this.bones.chest = o;
-      else if (n === "head") this.bones.head = o;
-      else if (n === "hips") this.bones.hips = o;
-      else if (n === "upperarm.l") this.bones.armL = o;
-      else if (n === "upperarm.r") this.bones.armR = o;
+
+    const accuBones: THREE.Bone[] = [];
+    object.traverse((child) => {
+      if (child instanceof THREE.Bone && child.name.toLowerCase().startsWith("spine006")) accuBones.push(child);
     });
+    this.bones.hips = findBone(object, ["hips", "mixamorig:hips", "spine006*"]) ?? accuBones[0];
+    this.bones.spine =
+      findBone(object, ["spine", "mixamorig:spine"]) ??
+      accuBones.find((bone) => bone.parent === this.bones.hips) ??
+      accuBones[1];
+    this.bones.chest =
+      findBone(object, ["chest", "spine1", "mixamorig:spine1"]) ??
+      accuBones.find((bone) => bone.parent === this.bones.spine) ??
+      accuBones[2];
+    this.bones.head = findBone(object, ["head", "mixamorig:head"]);
+    this.bones.armL = findBone(object, ["upperarm.l", "mixamorig:leftarm", "upperarm_left"]);
+    this.bones.armR = findBone(object, ["upperarm.r", "mixamorig:rightarm", "upperarm_right"]);
     this.setMotion("idle");
   }
 
@@ -84,29 +91,12 @@ export class Avatar {
     clothing?: AvatarClothing,
     scale = 0.85
   ): Promise<Avatar> {
+    void accentColor;
+    void clothing;
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-    const [model, ...animGltfs] = await Promise.all([
-      withRetry(() => loader.loadAsync(`/${assetManifest.models[id]}`)),
-      ...ANIM_FILES.map((file) => withRetry(() => loader.loadAsync(`/${file}`))),
-    ]);
-    const accent = new THREE.Color(accentColor);
+    const model = await withRetry(() => loader.loadAsync(`/${assetManifest.models[id]}`));
     model.scene.scale.setScalar(scale);
-    model.scene.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return;
-      const part = kaykitPart(object.name);
-      const partColor = part ? clothing?.[part] : undefined;
-      const targetColor = partColor ? new THREE.Color(partColor) : accent;
-      const weight = partColor ? 0.85 : 0.08;
-      const tint = (material: THREE.Material): THREE.Material => {
-        const copy = material.clone();
-        if ("color" in copy && copy.color instanceof THREE.Color) copy.color.lerp(targetColor, weight);
-        return copy;
-      };
-      object.material = Array.isArray(object.material) ? object.material.map(tint) : tint(object.material);
-    });
-    const kind: CharacterKind = id === "playerOne" ? "ziemek" : id === "playerTwo" ? "gniewko" : "generic";
-    detailCharacter(model.scene, kind, clothing);
-    return new Avatar(model.scene, [...model.animations, ...animGltfs.flatMap((gltf) => gltf.animations)]);
+    return new Avatar(model.scene, model.animations);
   }
 
   get currentMotion(): AvatarMotion {

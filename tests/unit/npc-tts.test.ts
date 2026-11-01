@@ -26,11 +26,11 @@ describe("handleNpcTts", () => {
       return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
     }) as unknown as typeof fetch;
     const options = { apiKey: "k", cacheDir, fetchFn };
-    const first = await handleNpcTts(request({ npcId: "staszek", text: "Cześć, zbuduj domek!" }), options);
+    const first = await handleNpcTts(request({ npcId: "mama", text: "Cześć, zbuduj domek!" }), options);
     expect(first.headers.get("content-type")).toBe("audio/mpeg");
     expect([...new Uint8Array(await first.arrayBuffer())]).toEqual([1, 2, 3]);
     resetNpcTtsState();
-    const second = await handleNpcTts(request({ npcId: "staszek", text: "Cześć, zbuduj domek!" }), options);
+    const second = await handleNpcTts(request({ npcId: "mama", text: "Cześć, zbuduj domek!" }), options);
     expect([...new Uint8Array(await second.arrayBuffer())]).toEqual([1, 2, 3]);
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toContain("/v1/text-to-speech/0zoGygYjh97gnqQuHI0b");
@@ -38,9 +38,9 @@ describe("handleNpcTts", () => {
   });
 
   it("answers 503 when no API key is configured and 400 for empty text", async () => {
-    const noKey = await handleNpcTts(request({ npcId: "mina", text: "hej" }), { apiKey: "", cacheDir });
+    const noKey = await handleNpcTts(request({ npcId: "tata", text: "hej" }), { apiKey: "", cacheDir });
     expect(noKey.status).toBe(503);
-    const empty = await handleNpcTts(request({ npcId: "mina", text: "   " }), { apiKey: "k", cacheDir });
+    const empty = await handleNpcTts(request({ npcId: "tata", text: "   " }), { apiKey: "k", cacheDir });
     expect(empty.status).toBe(400);
   });
 
@@ -51,8 +51,8 @@ describe("handleNpcTts", () => {
       return new Response("nope", { status: 500 });
     }) as unknown as typeof fetch;
     const options = { apiKey: "k", cacheDir, fetchFn };
-    expect((await handleNpcTts(request({ npcId: "mina", text: "hej" }), options)).status).toBe(502);
-    expect((await handleNpcTts(request({ npcId: "mina", text: "hej" }), options)).status).toBe(502);
+    expect((await handleNpcTts(request({ npcId: "tata", text: "hej" }), options)).status).toBe(502);
+    expect((await handleNpcTts(request({ npcId: "tata", text: "hej" }), options)).status).toBe(502);
     expect(calls).toBe(2);
   });
 
@@ -61,7 +61,7 @@ describe("handleNpcTts", () => {
     const options = { apiKey: "k", cacheDir, fetchFn };
     let limited = 0;
     for (let i = 0; i < 40; i++) {
-      const res = await handleNpcTts(request({ npcId: "papuga", text: `linia ${i}` }, "9.9.9.9"), options);
+      const res = await handleNpcTts(request({ npcId: "ciocia", text: `linia ${i}` }, "9.9.9.9"), options);
       if (res.status === 429) limited++;
     }
     expect(limited).toBe(10);

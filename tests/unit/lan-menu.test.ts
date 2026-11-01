@@ -21,13 +21,13 @@ const FAKE_SERVERS: LanServerSummary[] = [
 
 function makeController(overrides: {
   onHost?: ReturnType<typeof vi.fn<(roomName: string, seed: number) => Promise<boolean>>>;
-  onJoin?: ReturnType<typeof vi.fn<(url: string, room: string, seed: number) => Promise<boolean>>>;
+  onJoin?: ReturnType<typeof vi.fn<(url: string, room: string) => Promise<boolean>>>;
   onScan?: ReturnType<typeof vi.fn<() => Promise<LanServerSummary[]>>>;
   onClose?: ReturnType<typeof vi.fn<() => void>>;
 } = {}): { controller: LanMenuController; root: HTMLElement; fns: Record<string, ReturnType<typeof vi.fn>> } {
   const root = makeRoot();
   const onHost = overrides.onHost ?? vi.fn<(roomName: string, seed: number) => Promise<boolean>>().mockResolvedValue(true);
-  const onJoin = overrides.onJoin ?? vi.fn<(url: string, room: string, seed: number) => Promise<boolean>>().mockResolvedValue(true);
+  const onJoin = overrides.onJoin ?? vi.fn<(url: string, room: string) => Promise<boolean>>().mockResolvedValue(true);
   const onScan = overrides.onScan ?? vi.fn<() => Promise<LanServerSummary[]>>().mockResolvedValue(FAKE_SERVERS);
   const onClose = overrides.onClose ?? vi.fn<() => void>();
   const controller = new LanMenuController({ root, onHost, onJoin, onScan, onClose });
@@ -67,7 +67,7 @@ describe("LanMenuController", () => {
     });
   });
 
-  it("clicking a room card calls onJoin with the server URL, room code, and seed", async () => {
+  it("clicking a room card calls onJoin with the server URL and room code", async () => {
     const { controller, root, fns } = makeController();
     controller.openMenu();
     const joinBtn = Array.from(root.querySelectorAll("button")).find((b) => b.textContent === "🔍 Dołącz do gry")!;
@@ -78,7 +78,7 @@ describe("LanMenuController", () => {
     const card = root.querySelector(".lan-room-card") as HTMLButtonElement;
     card.click();
     await vi.waitFor(() => {
-      expect(fns.onJoin).toHaveBeenCalledWith("ws://192.168.1.10:8080/ws", "DOM1", 424242);
+      expect(fns.onJoin).toHaveBeenCalledWith("ws://192.168.1.10:8080/ws", "DOM1");
     });
   });
 
@@ -95,7 +95,7 @@ describe("LanMenuController", () => {
     const connectBtn = Array.from(root.querySelectorAll("button")).find((b) => b.textContent === "✅ Połącz")!;
     connectBtn.click();
     await vi.waitFor(() => {
-      expect(fns.onJoin).toHaveBeenCalledWith("ws://127.0.0.1:8791/ws", "DOM1", 0);
+      expect(fns.onJoin).toHaveBeenCalledWith("ws://127.0.0.1:8791/ws", "DOM1");
     });
   });
   it("does not let a pending scan overwrite manual connection status", async () => {

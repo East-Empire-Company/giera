@@ -23,7 +23,7 @@ describe("server NPC reason resilience", () => {
 
   it("passes a successful upstream reply through untouched", async () => {
     const content = '{"say": "Idź na północ", "tool": null}';
-    const res = await handleNpcReason(request({ npcId: "mina", message: "hej" }), {
+    const res = await handleNpcReason(request({ npcId: "tata", message: "hej" }), {
       proxyFn: async () => fallbackBody(content),
     });
     expect(res.status).toBe(200);
@@ -34,7 +34,7 @@ describe("server NPC reason resilience", () => {
 
   it("answers with a pre-generated line when the LLM is rate limited", async () => {
     let proxyCalls = 0;
-    const res = await handleNpcReason(request({ npcId: "staszek", message: "zrób kilof" }), {
+    const res = await handleNpcReason(request({ npcId: "mama", message: "zrób kilof" }), {
       proxyFn: async () => {
         proxyCalls++;
         return new Response("rate limited", { status: 429 });
@@ -50,7 +50,7 @@ describe("server NPC reason resilience", () => {
   });
 
   it("answers with a pre-generated line when the LLM fails", async () => {
-    const res = await handleNpcReason(request({ npcId: "papuga", message: "hej" }), {
+    const res = await handleNpcReason(request({ npcId: "ciocia", message: "hej" }), {
       proxyFn: async () => new Response("boom", { status: 500 }),
     });
     expect(res.status).toBe(200);
@@ -59,7 +59,7 @@ describe("server NPC reason resilience", () => {
     expect(JSON.parse(body.choices[0].message.content).say.length).toBeGreaterThan(0);
   });
   it("answers with a pre-generated line when the upstream connection throws", async () => {
-    const res = await handleNpcReason(request({ npcId: "mina", message: "hei" }), {
+    const res = await handleNpcReason(request({ npcId: "tata", message: "hei" }), {
       proxyFn: async () => { throw new Error("socket hang up"); },
     });
     expect(res.status).toBe(200);
@@ -75,10 +75,10 @@ describe("server NPC reason resilience", () => {
       return fallbackBody('{"say": "ok", "tool": null}');
     };
     for (let i = 0; i < 10; i++) {
-      const res = await handleNpcReason(request({ npcId: "mina", message: `pytanie ${i}` }), { proxyFn });
+      const res = await handleNpcReason(request({ npcId: "tata", message: `pytanie ${i}` }), { proxyFn });
       expect(res.status).toBe(200);
     }
-    const limited = await handleNpcReason(request({ npcId: "mina", message: "za dużo" }), { proxyFn });
+    const limited = await handleNpcReason(request({ npcId: "tata", message: "za dużo" }), { proxyFn });
     expect(limited.status).toBe(200);
     const body = (await limited.json()) as { fallback?: boolean };
     expect(body.fallback).toBe(true);
@@ -91,7 +91,7 @@ describe("server NPC reason resilience", () => {
       { proxyFn: async () => fallbackBody("{}") }
     );
     expect(badJson.status).toBe(400);
-    const empty = await handleNpcReason(request({ npcId: "mina", message: "  " }), {
+    const empty = await handleNpcReason(request({ npcId: "tata", message: "  " }), {
       proxyFn: async () => fallbackBody("{}"),
     });
     expect(empty.status).toBe(400);

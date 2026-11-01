@@ -11,21 +11,19 @@ test.skip(!WS_URL, "GIERA_TEST_WS not set — run through the pipeline orchestra
 
 type G = { __GIERA__: any };
 
-async function boot(page: Page): Promise<void> {
-  await page.goto("/?seed=424242&qa=1");
+async function boot(page: Page, seed: number): Promise<void> {
+  await page.goto(`/?seed=${seed}&qa=1`);
   await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 30_000 });
   await page.waitForFunction(() => (window as unknown as G).__GIERA__?.qa?.frame > 30, null, { timeout: 20_000 });
 }
 
-async function connect(page: Page): Promise<void> {
+async function manualJoin(page: Page, room: string): Promise<void> {
   await page.keyboard.press("Escape");
   await page.locator("#pause-lan").click();
   await page.locator("#pause-lan-panel button:has-text('Dołącz')").click();
   await page.fill("#lan-manual-url", WS_URL!);
-  await page.fill("#lan-manual-room", ROOM);
+  await page.fill("#lan-manual-room", room);
   await page.locator("#pause-lan-panel button:has-text('Połącz')").click();
-  await expect(page.locator("#lan-status")).toHaveText(/Połączono/, { timeout: 10_000 });
-  await page.locator("#pause-resume").click();
 }
 
 test("lan: two clients join one room, exchange a block edit, server persists the room", async ({ browser }) => {
@@ -39,11 +37,48 @@ test("lan: two clients join one room, exchange a block edit, server persists the
   A.on("pageerror", (e) => errorsA.push(e.message));
   B.on("pageerror", (e) => errorsB.push(e.message));
 
-  await boot(A);
-  await boot(B);
-  await connect(A);
-  await connect(B);
+  const initialSeedA = 111111;
+  await boot(A, initialSeedA);
+  await manualJoin(A, ROOM);
+  await A.waitForFunction(
+    (initialSeed) => {
+      const game = (window as unknown as G).__GIERA__;
+      const status = document.querySelector("#lan-status")?.textContent;
+      return game?.ready && (
+        game.seed !== initialSeed ||
+        (status === "Połączono" && sessionStorage.getItem("giera.pendingLanJoin") === null)
+      );
+    },
+    initialSeedA,
+    { timeout: 30_000 },
+  );
+  const roomSeed = await A.evaluate(() => (window as unknown as G).__GIERA__.seed);
+  if (roomSeed === initialSeedA) {
+    await A.locator("#pause-resume").click();
+  } else {
+    await A.locator("#launch-start").click();
+  }
+  const httpBase = WS_URL!.replace(/^ws:/, "http:").replace(/\/ws$/, "");
+  const roomPlayers = () =>
+    A.evaluate(async ([base, code]) => {
+      const response = await fetch(`${base}/lan/rooms`);
+      const server = (await response.json()) as { rooms: { code: string; players: number }[] };
+      return server.rooms.find((room) => room.code === code)?.players ?? 0;
+    }, [httpBase, ROOM]);
+  await expect.poll(roomPlayers, { timeout: 20_000 }).toBe(1);
 
+  const initialSeedB = roomSeed === 424242 ? 424243 : 424242;
+  await boot(B, initialSeedB);
+  await manualJoin(B, ROOM);
+  await B.waitForFunction(
+    (seed) => {
+      const game = (window as unknown as G).__GIERA__;
+      return game?.ready === true && game.seed === seed;
+    },
+    roomSeed,
+    { timeout: 30_000 },
+  );
+  await B.locator("#launch-start").click();
   const origin = (page: Page) =>
     page.evaluate(() => {
       const g = (window as unknown as G).__GIERA__;
@@ -198,9 +233,17 @@ test("lan: two clients join one room, exchange a block edit, server persists the
     { timeout: 20_000 }
   );
 
-  await expect.poll(() => existsSync(SAVE_FILE), { timeout: 40_000, intervals: [500] }).toBe(true);
-  const saved = JSON.parse(readFileSync(SAVE_FILE, "utf8")) as { edits?: Record<string, number> };
-  expect(saved.edits?.[`${placed.x},${placed.y},${placed.z}`]).toBe(placed.id);
+  const editKey = `${placed.x},${placed.y},${placed.z}`;
+  await expect
+    .poll(
+      () => {
+        if (!existsSync(SAVE_FILE)) return undefined;
+        const saved = JSON.parse(readFileSync(SAVE_FILE, "utf8")) as { edits?: Record<string, number> };
+        return saved.edits?.[editKey];
+      },
+      { timeout: 40_000, intervals: [500] },
+    )
+    .toBe(placed.id);
 
   expect(errorsA).toEqual([]);
   expect(errorsB).toEqual([]);

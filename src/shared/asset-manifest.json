@@ -17,10 +17,13 @@
     "default_mineral_gold": "assets/textures/tiles/default_mineral_gold.png"
   },
   "models": {
-    "playerOne": "assets/models/kaykit/knight.glb",
-    "playerTwo": "assets/models/kaykit/rogue.glb",
-    "mina": "assets/models/kaykit/mage.glb",
-    "staszek": "assets/models/kaykit/ranger.glb",
+    "ziemek": "assets/models/characters/ziemek.glb",
+    "gniewko": "assets/models/characters/gniewko.glb",
+    "tata": "assets/models/characters/tata.glb",
+    "mama": "assets/models/characters/mama.glb",
+    "ciocia": "assets/models/characters/ciocia.glb",
+    "playerOne": "assets/models/characters/ziemek.glb",
+    "playerTwo": "assets/models/characters/gniewko.glb",
     "factoryConveyor": "assets/models/kenney-factory-kit/conveyor.glb",
     "factoryLongConveyor": "assets/models/kenney-factory-kit/conveyor-long.glb",
     "factoryMachine": "assets/models/kenney-factory-kit/machine.glb",
@@ -30,7 +33,7 @@
     "factoryGear": "assets/models/kenney-factory-kit/cog-a.glb"
   },
   "concierge": {
-    "iskra": "assets/models/concierge/iskra.glb"
+    "iskra": "assets/models/characters/tata.glb"
   },
   "modelTextures": {
     "factoryKit": "assets/models/kenney-factory-kit/Textures/colormap.png"

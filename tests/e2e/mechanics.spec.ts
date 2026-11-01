@@ -249,7 +249,7 @@ function collectErrors(page: Page): string[] {
 }
 
 test.describe("Giera mechanics (qa deterministic)", () => {
-  test("heroes render rigged KayKit models tinted with concept clothing colors", async ({ page }) => {
+  test("heroes render rigged GLB character models with skinned meshes", async ({ page }) => {
     test.setTimeout(60_000);
     const errors = collectErrors(page);
     await boot(page);
@@ -266,43 +266,30 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     }, null, { timeout: 30_000 });
     const visuals = await page.evaluate(() => {
       const g = (window as unknown as { __GIERA__: any }).__GIERA__;
-      const partColors = (avatar: any, pattern: RegExp) => {
-        const colors: number[][] = [];
+      const skinnedInfo = (avatar: any) => {
+        let count = 0;
+        let hasGeometry = false;
+        let hasMaterial = false;
         avatar.object.traverse((node: any) => {
-          if (node.isSkinnedMesh && pattern.test(node.name)) {
-            colors.push([
-              node.material.color.r,
-              node.material.color.g,
-              node.material.color.b,
-            ]);
+          if (node.isSkinnedMesh) {
+            count++;
+            if (node.geometry?.attributes?.position) hasGeometry = true;
+            if (node.material) hasMaterial = true;
           }
         });
-        return colors;
+        return { count, hasGeometry, hasMaterial };
       };
       return {
-        p1Body: partColors(g.player.avatar, /Body/i),
-        p1Legs: partColors(g.player.avatar, /Leg/i),
-        p2Body: partColors(g.player2.avatar, /Body/i),
-        p2Legs: partColors(g.player2.avatar, /Leg/i),
+        p1: skinnedInfo(g.player.avatar),
+        p2: skinnedInfo(g.player2.avatar),
       };
     });
-    expect(visuals.p1Body.length).toBeGreaterThan(0);
-    expect(visuals.p1Legs.length).toBeGreaterThan(0);
-    expect(visuals.p2Body.length).toBeGreaterThan(0);
-    expect(visuals.p2Legs.length).toBeGreaterThan(0);
-    for (const [r, g, b] of visuals.p1Body) {
-      expect(g).toBeGreaterThan(r + 0.15);
-      expect(b).toBeGreaterThan(r);
-    }
-    for (const [r, g, b] of visuals.p1Legs) {
-      expect(Math.max(r, g, b)).toBeLessThan(0.4);
-    }
-    for (const [r, g, b] of visuals.p2Body) {
-      expect(Math.min(r, g, b)).toBeGreaterThan(0.85);
-    }
-    for (const [r, , b] of visuals.p2Legs) {
-      expect(b).toBeGreaterThan(r);
-    }
+    expect(visuals.p1.count).toBeGreaterThan(0);
+    expect(visuals.p1.hasGeometry).toBe(true);
+    expect(visuals.p1.hasMaterial).toBe(true);
+    expect(visuals.p2.count).toBeGreaterThan(0);
+    expect(visuals.p2.hasGeometry).toBe(true);
+    expect(visuals.p2.hasMaterial).toBe(true);
     expect(errors).toEqual([]);
   });
   test("boot: qa fixed-delta loop advances sim and frame counters", async ({ page }) => {
@@ -827,8 +814,8 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await boot(page);
     await page.evaluate(() => {
       const g = (window as unknown as G).__GIERA__;
-      const mina = g.npcManager.npcs.find((n) => n.name === "Mina")!;
-      g.player.position.set(mina.position.x, mina.position.y + 0.5, mina.position.z + 0.8);
+      const tata = g.npcManager.npcs.find((n) => n.name === "Tata")!;
+      g.player.position.set(tata.position.x, tata.position.y + 0.5, tata.position.z + 0.8);
       g.player.velocity.set(0, 0, 0);
       g.player.syncAvatar();
     });
@@ -854,9 +841,9 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await page.evaluate(() => {
       const game = window.__GIERA__;
       if (!game) throw new Error("Giera did not boot");
-      const mina = game.npcManager.npcs.find((n) => n.def.name === "Mina");
-      if (!mina) throw new Error("Mina is unavailable");
-      game.player.position.set(mina.position.x, mina.position.y + 0.5, mina.position.z + 0.8);
+      const tata = game.npcManager.npcs.find((n) => n.def.name === "Tata");
+      if (!tata) throw new Error("Tata is unavailable");
+      game.player.position.set(tata.position.x, tata.position.y + 0.5, tata.position.z + 0.8);
       game.player.velocity.set(0, 0, 0);
       game.player.syncAvatar();
     });
@@ -890,9 +877,9 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await page.evaluate(() => {
       const game = window.__GIERA__;
       if (!game) throw new Error("Giera did not boot");
-      const mina = game.npcManager.npcs.find((n) => n.def.name === "Mina");
-      if (!mina) throw new Error("Mina is unavailable");
-      game.player.position.set(mina.position.x, mina.position.y + 0.5, mina.position.z + 0.8);
+      const tata = game.npcManager.npcs.find((n) => n.def.name === "Tata");
+      if (!tata) throw new Error("Tata is unavailable");
+      game.player.position.set(tata.position.x, tata.position.y + 0.5, tata.position.z + 0.8);
       game.player.velocity.set(0, 0, 0);
       game.player.syncAvatar();
     });

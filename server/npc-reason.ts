@@ -80,7 +80,7 @@ export async function handleNpcReason(req: Request, options?: NpcReasonOptions):
       headers: { "content-type": "application/json" },
     });
   }
-  const npcId = typeof body.npcId === "string" && Object.hasOwn(NPC_TOOLS, body.npcId) ? body.npcId : "mina";
+  const npcId = typeof body.npcId === "string" && Object.hasOwn(NPC_TOOLS, body.npcId) ? body.npcId : "tata";
   const message = typeof body.message === "string" ? body.message.slice(0, 300) : "";
   if (!message.trim()) {
     return new Response(JSON.stringify({ error: "Empty message" }), {

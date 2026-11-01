@@ -64,6 +64,17 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
     await expect(page.locator("#hud-root .hud-music-btn")).toHaveCount(0);
     expect(await page.evaluate(() => window.__GIERA__?.audio.playingMusic)).toBe("sigma_protocol");
   });
+
+  test("launch: applies the selected solo profile before gameplay", async ({ page }) => {
+    await page.goto("/?seed=424242");
+    await page.waitForFunction(() => window.__GIERA__?.ready === true);
+    await page.locator("#launch-profile-gniewko").click();
+    await page.getByRole("button", { name: "Rozpocznij grę" }).click();
+
+    await page.waitForFunction(() => window.__GIERA__?.player.profile.name === "Gniewko");
+    expect(await page.evaluate(() => window.__GIERA__?.player2?.profile.name)).toBe("Ziemek");
+  });
+
   test("gameplay: HUD becomes visible and interactive after launch", async ({ page }) => {
     await page.goto("/?seed=424242");
     await page.waitForFunction(() => window.__GIERA__?.ready === true);

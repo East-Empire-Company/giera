@@ -5,6 +5,7 @@ import type { HouseArchetype } from "../game/house-builder";
 export type ConciergeStatus = {
   started: boolean;
   splitScreen: boolean;
+  activePlayer: ConciergePlayer;
   volume: number;
   coins: number;
   stars: number;
@@ -37,11 +38,18 @@ const clampVolume = (value: unknown): number => {
 
 const describeBackup = (backup: BackupSummary): string => `${backup.label} (${backup.id})`;
 
-const resolveCheatPlayer = (params: Record<string, unknown>, splitScreen: boolean): ConciergePlayer | null => {
-  if (params.player === "ziemek") return "ziemek";
-  if (params.player === "gniewko") return splitScreen ? "gniewko" : null;
-  return splitScreen ? null : "ziemek";
+const resolveCheatPlayer = (params: Record<string, unknown>, status: ConciergeStatus): ConciergePlayer | null => {
+  const requested = params.player;
+  if (requested === "ziemek" || requested === "gniewko") {
+    return status.splitScreen || requested === status.activePlayer ? requested : null;
+  }
+  return status.splitScreen ? null : status.activePlayer;
 };
+
+const missingCheatPlayer = (status: ConciergeStatus, splitScreenPrompt: string): string =>
+  status.splitScreen
+    ? splitScreenPrompt
+    : `W trybie jednego gracza aktywny jest ${status.activePlayer === "ziemek" ? "Ziemek" : "Gniewko"}.`;
 export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolName, ConciergeToolHandler> {
   return {
     async get_status() {
@@ -49,8 +57,9 @@ export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolN
       return JSON.stringify(status);
     },
     async set_jump_height(params) {
-      const target = resolveCheatPlayer(params, host.status().splitScreen);
-      if (!target) return "Zapytaj, czy chodzi o Ziemka czy Gniewka.";
+      const status = host.status();
+      const target = resolveCheatPlayer(params, status);
+      if (!target) return missingCheatPlayer(status, "Zapytaj, czy chodzi o Ziemka czy Gniewka.");
       const height = params.height_blocks;
       if (typeof height !== "number" || !Number.isFinite(height)) return "Zapytaj, jak wysoko ma skakać.";
       host.setJumpHeight(target, height);
@@ -58,16 +67,18 @@ export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolN
     },
 
     async set_flight(params) {
-      const target = resolveCheatPlayer(params, host.status().splitScreen);
-      if (!target) return "Zapytaj, czy chodzi o Ziemka czy Gniewka.";
+      const status = host.status();
+      const target = resolveCheatPlayer(params, status);
+      if (!target) return missingCheatPlayer(status, "Zapytaj, czy chodzi o Ziemka czy Gniewka.");
       if (typeof params.enabled !== "boolean") return "Zapytaj, czy włączyć latanie.";
       const enabled = host.setFlying(target, params.enabled);
       return enabled ? "Latanie włączone! Spacja w górę, Shift w dół." : "Latanie wyłączone.";
     },
 
     async build_house(params) {
-      const target = resolveCheatPlayer(params, host.status().splitScreen);
-      if (!target) return "Zapytaj, czy domek zbudować dla Ziemka czy Gniewka.";
+      const status = host.status();
+      const target = resolveCheatPlayer(params, status);
+      if (!target) return missingCheatPlayer(status, "Zapytaj, czy domek zbudować dla Ziemka czy Gniewka.");
       const archetype =
         params.archetype === "cabin" || params.archetype === "lookout_tower" ? params.archetype : undefined;
       const house = host.buildHouse(target, archetype);
@@ -76,8 +87,9 @@ export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolN
     },
 
     async dig_mine(params) {
-      const target = resolveCheatPlayer(params, host.status().splitScreen);
-      if (!target) return "Zapytaj, czy kopalnię wykopać dla Ziemka czy Gniewka.";
+      const status = host.status();
+      const target = resolveCheatPlayer(params, status);
+      if (!target) return missingCheatPlayer(status, "Zapytaj, czy kopalnię wykopać dla Ziemka czy Gniewka.");
       const blocks = host.digMine(target);
       return blocks === null ? "Nie znalazłem bezpiecznego miejsca na kopalnię." : `Kopalnia gotowa. Tunel ma ${blocks} bloków.`;
     },

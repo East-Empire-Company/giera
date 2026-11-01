@@ -6,7 +6,7 @@ const newInventory = () => ({ blocks: {} as Record<string, number>, items: {} as
 describe("NPC bridge give_block", () => {
   it.each([1, 8, 16])("gives exactly %i blocks", (count) => {
     const inv = newInventory();
-    const res = executeNpcClientTool("mina", "give_block", { block_type: "planks", count }, inv);
+    const res = executeNpcClientTool("tata", "give_block", { block_type: "planks", count }, inv);
     expect(res.success).toBe(true);
     expect(inv.blocks).toEqual({ planks: count });
     expect(inv.items).toEqual({});
@@ -15,7 +15,7 @@ describe("NPC bridge give_block", () => {
   it("adds to an existing stack", () => {
     const inv = newInventory();
     inv.blocks.planks = 5;
-    executeNpcClientTool("mina", "give_block", { block_type: "planks", count: 3 }, inv);
+    executeNpcClientTool("tata", "give_block", { block_type: "planks", count: 3 }, inv);
     expect(inv.blocks.planks).toBe(8);
   });
 
@@ -35,28 +35,28 @@ describe("NPC bridge give_block", () => {
   ])("rejects count %s and leaves the inventory untouched", (_name, count) => {
     const inv = newInventory();
     inv.blocks.planks = 2;
-    const res = executeNpcClientTool("mina", "give_block", { block_type: "planks", count }, inv);
+    const res = executeNpcClientTool("tata", "give_block", { block_type: "planks", count }, inv);
     expect(res.success).toBe(false);
     expect(inv).toEqual({ blocks: { planks: 2 }, items: {} });
   });
 
   it.each(["bedrock", "stone", "", "constructor", "PLANKS"])("rejects block_type %j", (blockType) => {
     const inv = newInventory();
-    const res = executeNpcClientTool("mina", "give_block", { block_type: blockType, count: 1 }, inv);
+    const res = executeNpcClientTool("tata", "give_block", { block_type: blockType, count: 1 }, inv);
     expect(res.success).toBe(false);
     expect(inv).toEqual(newInventory());
   });
 
   it.each([undefined, null, 5, ["planks"], { toString: () => "planks" }])("rejects non-string block_type %j", (blockType) => {
     const inv = newInventory();
-    const res = executeNpcClientTool("mina", "give_block", { block_type: blockType, count: 1 }, inv);
+    const res = executeNpcClientTool("tata", "give_block", { block_type: blockType, count: 1 }, inv);
     expect(res.success).toBe(false);
     expect(inv).toEqual(newInventory());
   });
 
   it.each(ALLOWED_NPC_BLOCKS)("allows %s", (blockType) => {
     const inv = newInventory();
-    expect(executeNpcClientTool("mina", "give_block", { block_type: blockType, count: 2 }, inv).success).toBe(true);
+    expect(executeNpcClientTool("tata", "give_block", { block_type: blockType, count: 2 }, inv).success).toBe(true);
     expect(inv.blocks[blockType]).toBe(2);
   });
 });
@@ -64,7 +64,7 @@ describe("NPC bridge give_block", () => {
 describe("NPC bridge give_quest", () => {
   it.each(["gather_wood", "craft_planks", "craft_sticks", "find_stone", "craft_tool", "build_house"])("sets step %s", (step) => {
     const seen: string[] = [];
-    const res = executeNpcClientTool("mina", "give_quest", { step_id: step }, undefined, (s) => seen.push(s));
+    const res = executeNpcClientTool("tata", "give_quest", { step_id: step }, undefined, (s) => seen.push(s));
     expect(res.success).toBe(true);
     expect(seen).toEqual([step]);
   });
@@ -73,7 +73,7 @@ describe("NPC bridge give_quest", () => {
     "rejects step %j without invoking the callback",
     (step) => {
       const seen: string[] = [];
-      const res = executeNpcClientTool("mina", "give_quest", { step_id: step }, undefined, (s) => seen.push(s));
+      const res = executeNpcClientTool("tata", "give_quest", { step_id: step }, undefined, (s) => seen.push(s));
       expect(res.success).toBe(false);
       expect(seen).toEqual([]);
     },
@@ -83,7 +83,7 @@ describe("NPC bridge give_quest", () => {
 describe("NPC bridge permissions and unknown tools", () => {
   it("rejects an unknown tool", () => {
     const inv = newInventory();
-    expect(executeNpcClientTool("mina", "delete_world", {}, inv).success).toBe(false);
+    expect(executeNpcClientTool("tata", "delete_world", {}, inv).success).toBe(false);
     expect(inv).toEqual(newInventory());
   });
 
@@ -109,9 +109,9 @@ describe("NPC bridge permissions and unknown tools", () => {
     }
   });
 
-  it("denies give_quest to papuga and share_map_hint to papuga", () => {
-    expect(executeNpcClientTool("papuga", "give_quest", { step_id: "craft_planks" }).success).toBe(false);
-    expect(executeNpcClientTool("papuga", "share_map_hint", { topic: "drzewa" }).success).toBe(false);
+  it("denies give_quest to ciocia and share_map_hint to ciocia", () => {
+    expect(executeNpcClientTool("ciocia", "give_quest", { step_id: "craft_planks" }).success).toBe(false);
+    expect(executeNpcClientTool("ciocia", "share_map_hint", { topic: "drzewa" }).success).toBe(false);
   });
 
   it.each(["unknown_npc", "", "constructor", "__proto__", "toString"])("denies every tool to NPC id %j", (npc) => {
@@ -128,14 +128,14 @@ describe("NPC bridge share_map_hint", () => {
     ["woda", "woda"],
     ["dom", "polana"],
   ])("answers a topic hint for %s", (topic, fragment) => {
-    const res = executeNpcClientTool("mina", "share_map_hint", { topic });
+    const res = executeNpcClientTool("tata", "share_map_hint", { topic });
     expect(res.success).toBe(true);
     expect(res.hint?.toLowerCase()).toContain(fragment);
   });
 
   it("falls back to a generic hint for unknown or missing topics", () => {
-    const generic = executeNpcClientTool("mina", "share_map_hint", { topic: "xyz" }).hint;
+    const generic = executeNpcClientTool("tata", "share_map_hint", { topic: "xyz" }).hint;
     expect(generic).toBeTruthy();
-    expect(executeNpcClientTool("mina", "share_map_hint", {}).hint).toBe(generic);
+    expect(executeNpcClientTool("tata", "share_map_hint", {}).hint).toBe(generic);
   });
 });

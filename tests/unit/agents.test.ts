@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const AGENT_IDS = ["mina", "staszek", "papuga"];
+const AGENT_IDS = ["tata", "mama", "ciocia"];
 
 describe("ElevenLabs Agent configurations", () => {
   for (const id of AGENT_IDS) {

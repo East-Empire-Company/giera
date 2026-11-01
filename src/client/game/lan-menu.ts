@@ -2,7 +2,7 @@ import type { LanServerSummary } from "../../shared/lan-protocol";
 
 export type LanMenuCallbacks = {
   onHost: (roomName: string, seed: number) => Promise<boolean>;
-  onJoin: (url: string, room: string, seed: number) => Promise<boolean>;
+  onJoin: (url: string, room: string) => Promise<boolean>;
   onScan: () => Promise<LanServerSummary[]>;
   onClose: () => void;
 };
@@ -188,7 +188,7 @@ export class LanMenuController {
         return;
       }
       this.setStatus("Łączenie...");
-      const ok = await this.callbacks.onJoin(url, room, 0);
+      const ok = await this.callbacks.onJoin(url, room);
       if (ok) {
         this.setStatus("Połączono");
       } else {
@@ -240,7 +240,7 @@ export class LanMenuController {
         card.addEventListener("click", async () => {
           const url = `ws://${server.ip}:${server.port}/ws`;
           this.setStatus("Łączenie...");
-          const ok = await this.callbacks.onJoin(url, room.code, room.seed);
+          const ok = await this.callbacks.onJoin(url, room.code);
           if (ok) {
             this.setStatus("Połączono");
           } else {

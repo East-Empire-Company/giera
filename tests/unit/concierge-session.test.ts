@@ -20,6 +20,7 @@ const host: ConciergeHost = {
   status: () => ({
     started: false,
     splitScreen: false,
+    activePlayer: "ziemek",
     volume: 0.8,
     coins: 0,
     stars: 0,
@@ -96,7 +97,7 @@ describe("ConciergeSession", () => {
     const terrain = new Map<string, number>();
     const edited = new Set<string>();
     for (let x = -2; x <= 2; x++) {
-      for (let y = 41; y <= 42; y++) {
+      for (let y = 39; y <= 40; y++) {
         for (let z = 0; z <= 12; z++) terrain.set(`${x},${y},${z}`, BLOCK_ID.stone);
       }
     }
@@ -133,8 +134,8 @@ describe("ConciergeSession", () => {
     const response = await tools!.dig_mine({});
 
     expect(response).toContain("32 bloków");
-    expect(terrain.get("0,41,1")).toBe(BLOCK_ID.air);
-    expect(terrain.get("0,41,2")).toBe(BLOCK_ID.air);
+    expect(terrain.get("0,40,1")).toBe(BLOCK_ID.air);
+    expect(terrain.get("0,39,1")).toBe(BLOCK_ID.air);
     expect(Object.values(inventory.toJSON().chunkEdits).reduce((sum, count) => sum + count, 0)).toBe(32);
     await h.session.close();
   });

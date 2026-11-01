@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import "./style.css";
 import { AudioManager, MUSIC_PLAYLIST } from "./client/audio/sound";
+import { BeatTracker } from "./client/audio/beat-tracker";
 import { MicController } from "./client/audio/mic";
 import { LanClient } from "./client/net/client";
 import { scanLanServers } from "./client/net/discovery";
@@ -149,7 +150,11 @@ async function boot(): Promise<void> {
   let paused = false;
   let suppressGamepadJumpUntilRelease = false;
   const audio = new AudioManager();
-  void audio.preload(MUSIC_PLAYLIST).catch(() => {});
+  const beatTracker = new BeatTracker();
+  void audio.preload(MUSIC_PLAYLIST).then(() => {
+    const tap = audio.tapMusicBus();
+    if (tap) beatTracker.attach(tap.bus, tap.ctx);
+  }).catch(() => {});
   const renderer = createRenderer(canvas, {
     antialias: !lowPower,
     shadows: !lowPower,
@@ -501,6 +506,17 @@ async function boot(): Promise<void> {
   if (!launchRoot || !launchStart || !launchMode) {
     throw new Error("Giera launch menu elements are missing");
   }
+  const applyLaunchProfile = (targetPlayer: PlayerController, profile: PlayerProfile): void => {
+    if (targetPlayer.characterProfile === profile) return;
+    const oldObject = targetPlayer.avatar?.object;
+    if (oldObject) scene.remove(oldObject);
+    targetPlayer.setCharacterProfile(profile);
+    void targetPlayer.loadAvatar().then((nextAvatar) => {
+      scene.add(nextAvatar.object);
+      targetPlayer.syncAvatar();
+    });
+  };
+
   const launchMenu = new LaunchMenuController({
     root: launchRoot,
     startButton: launchStart,
@@ -514,6 +530,9 @@ async function boot(): Promise<void> {
       }
       attachTouchControls();
       suppressGamepadJumpUntilRelease = source === "gamepad";
+      applyLaunchProfile(player, settings.profile);
+      applyLaunchProfile(player2, settings.profile === "ziemek" ? "gniewko" : "ziemek");
+      splitScreen.setSplitScreen(settings.splitScreen);
       hud.modeBtn.textContent = settings.splitScreen ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
       const pending = sessionStorage.getItem("giera.pendingLanJoin");
       if (pending) {
@@ -541,6 +560,7 @@ async function boot(): Promise<void> {
 
   let houseBuildSequence = 0;
   const playerForConcierge = (target: ConciergePlayer): PlayerController => {
+    if (!splitScreen.isSplitScreen) return player;
     const name = target === "gniewko" ? "Gniewko" : "Ziemek";
     return player.profile.name === name ? player : player2;
   };
@@ -549,7 +569,7 @@ async function boot(): Promise<void> {
       Math.hypot(x - otherX, z - otherZ) < radius + otherRadius;
     if (overlaps(player.position.x, player.position.z, 0.8) || overlaps(player2.position.x, player2.position.z, 0.8)) return true;
     for (const npc of npcManager.npcs) {
-      if (overlaps(npc.position.x, npc.position.z, npc.def.id === "papuga" ? 0.3 : 0.6)) return true;
+      if (overlaps(npc.position.x, npc.position.z, 0.6)) return true;
     }
     const tycoonOccupied = (plot: TycoonManager): boolean => {
       if (
@@ -574,6 +594,7 @@ async function boot(): Promise<void> {
     status: () => ({
       started: gameStarted,
       splitScreen: splitScreen.isSplitScreen,
+      activePlayer: player.characterProfile,
       volume: audio.volume,
       coins: tycoon.vaultCoins,
       stars: tycoon.collectedStars,
@@ -685,11 +706,11 @@ async function boot(): Promise<void> {
         },
       });
     },
-    onJoin: async (url, room, roomSeed) => {
+    onJoin: async (url, room) => {
       return connectLan(url, room, {
         host: false,
         onConnected: (welcomeSeed) => {
-          if (roomSeed && welcomeSeed !== seed) {
+          if (welcomeSeed !== seed) {
             sessionStorage.setItem("giera.pendingLanJoin", JSON.stringify({ url, room, host: false }));
             window.location.href = `?seed=${welcomeSeed}`;
           }
@@ -1083,6 +1104,8 @@ async function boot(): Promise<void> {
       tycoon.updateVisuals(menuDelta);
       menuStage.update(menuDelta, camera, tycoon.origin);
       postfx.noteFrame(menuDelta);
+      beatTracker.update();
+      postfx.setBeatPulse(beatTracker.beatPulse);
       postfx.renderSolo();
       previous = now;
       return;
@@ -1091,6 +1114,8 @@ async function boot(): Promise<void> {
     const delta = qa ? (qaState.paused ? 0 : 1 / 60) : Math.min(0.05, Math.max(0, (now - previous) / 1000));
     previous = now;
     if (paused) {
+      beatTracker.update();
+      postfx.setBeatPulse(beatTracker.beatPulse);
       if (splitScreen.isSplitScreen) postfx.renderSplit(camera, camera2);
       else postfx.renderSolo();
       return;
@@ -1222,7 +1247,7 @@ async function boot(): Promise<void> {
 
     {
       const solid = (x: number, y: number, z: number): boolean => world.getBlock(x, y, z) !== 0;
-      const npcBodies = npcManager.npcs.map((n) => ({ x: n.position.x, y: n.position.y, z: n.position.z, radius: n.def.id === "papuga" ? 0.2 : 0.4, height: n.def.id === "papuga" ? 0.6 : 1.8 }));
+      const npcBodies = npcManager.npcs.map((n) => ({ x: n.position.x, y: n.position.y, z: n.position.z, radius: 0.4, height: 1.8 }));
       const statics = [
         ...npcBodies,
         { x: trainingDummy.position.x, y: trainingDummy.position.y, z: trainingDummy.position.z, radius: 0.4, height: 1.6 },
@@ -1343,7 +1368,7 @@ async function boot(): Promise<void> {
     {
       const gb2 = (x: number, y: number, z: number): number => world.getBlock(x, y, z);
       for (const n of npcManager.npcs) {
-        const o = n.avatar?.object ?? n.customObject;
+        const o = n.avatar?.object;
         if (!o) continue;
         const target = smoothGroundOffset(gb2, n.position.x, n.position.z, n.position.y);
         const prev = (o.userData.groundOffset as number | undefined) ?? target;
@@ -1358,7 +1383,7 @@ async function boot(): Promise<void> {
     hud.updateNpcSpeech((npcId) => {
       const n = npcManager.npcs.find((m) => m.def.id === npcId);
       if (!n) return null;
-      const headY = n.def.id === "papuga" ? 1.2 : 2.2;
+      const headY = 2.2;
       speechProjector.set(n.position.x, n.position.y + headY, n.position.z).project(camera);
       if (speechProjector.z > 1) return null;
       return {
@@ -1583,6 +1608,8 @@ async function boot(): Promise<void> {
     }
 
     postfx.noteFrame(realDelta);
+    beatTracker.update();
+    postfx.setBeatPulse(beatTracker.beatPulse);
     const width = window.innerWidth;
     const height = window.innerHeight;
     const viewports = getSplitViewports(width, height, splitScreen.isSplitScreen);

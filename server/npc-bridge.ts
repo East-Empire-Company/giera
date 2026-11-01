@@ -7,9 +7,9 @@ export type ToolExecutionResult = {
 export const ALLOWED_NPC_BLOCKS = ["planks", "cobblestone", "glass", "iron_block"] as const;
 
 export const NPC_ALLOWED_TOOLS: Record<string, string[]> = {
-  mina: ["give_block", "give_quest", "share_map_hint"],
-  staszek: ["give_block", "share_map_hint"],
-  papuga: ["give_block"],
+  tata: ["give_block", "give_quest", "share_map_hint"],
+  mama: ["give_block", "share_map_hint"],
+  ciocia: ["give_block"],
 };
 
 export function executeNpcClientTool(

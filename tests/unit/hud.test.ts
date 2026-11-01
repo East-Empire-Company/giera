@@ -185,13 +185,13 @@ describe("GameHUD child-friendly visual interface", () => {
     const objectives = new ObjectiveManager();
     const hud = new GameHUD({ inventory, objectives });
 
-    hud.showNpcSpeech("mina", "Mina", "Zbierz drewno!");
+    hud.showNpcSpeech("tata", "Tata", "Zbierz drewno!");
     const bubble = document.querySelector(".hud-npc-speech")!;
     expect(bubble).not.toBeNull();
-    expect(bubble.querySelector(".hud-npc-speech-name")?.textContent).toBe("Mina:");
+    expect(bubble.querySelector(".hud-npc-speech-name")?.textContent).toBe("Tata:");
     expect(bubble.querySelector(".hud-npc-speech-text")?.textContent).toBe("Zbierz drewno!");
 
-    hud.updateNpcSpeech((id) => (id === "mina" ? { x: 120, y: 80, visible: true } : null));
+    hud.updateNpcSpeech((id) => (id === "tata" ? { x: 120, y: 80, visible: true } : null));
     expect(bubble.classList.contains("visible")).toBe(true);
     expect((bubble as HTMLElement).style.left).toBe("120px");
     expect((bubble as HTMLElement).style.top).toBe("80px");
@@ -199,7 +199,7 @@ describe("GameHUD child-friendly visual interface", () => {
     hud.updateNpcSpeech(() => null);
     expect(bubble.classList.contains("visible")).toBe(false);
 
-    hud.showNpcSpeech("mina", "Mina", "Nowa wiadomość");
+    hud.showNpcSpeech("tata", "Tata", "Nowa wiadomość");
     expect(bubble.querySelector(".hud-npc-speech-text")?.textContent).toBe("Nowa wiadomość");
     expect(document.querySelectorAll(".hud-npc-speech").length).toBe(1);
   });

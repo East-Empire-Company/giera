@@ -5,7 +5,7 @@ import { paletteColor, variationColor } from "../../src/client/render/ground-dec
 
 describe("adaptive bloom", () => {
   it("skips bloom rendering when disabled and restores its blend opacity", () => {
-    const bloom = new AdaptiveBloomEffect();
+    const bloom = new AdaptiveBloomEffect({ intensity: 0.14 });
     let rendererAccesses = 0;
     const renderer = new Proxy(
       {},
