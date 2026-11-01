@@ -18,4 +18,4 @@ jobs:
           ssh-keyscan -H mac-studio-jakub.tail5d39b4.ts.net >> ~/.ssh/known_hosts 2>/dev/null
 
           ssh -o StrictHostKeyChecking=accept-new jakubsikora@mac-studio-jakub.tail5d39b4.ts.net \
-            'cd ~/Repos/personal/giera && git pull origin main && bun run deploy'
+            'export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH && cd ~/Repos/personal/giera && git pull origin main && bun run deploy'
