@@ -1,0 +1,41 @@
+name: build-xbox
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'platform/xbox-uwp-giera/**'
+      - 'src/**'
+      - 'public/**'
+      - '.forgejo/workflows/build-xbox.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H desktop-fjvada8.tail5d39b4.ts.net >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Build Xbox MSIX on Windows desktop
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new jakubsikora@desktop-fjvada8.tail5d39b4.ts.net \
+            'cd C:\Users\jakubsikora\Repos\personal\giera && git pull origin main && bun install --frozen-lockfile && bun run build && bun platform/xbox-uwp-giera/sync-web.ts --skip-build && powershell -ExecutionPolicy Bypass -File platform/xbox-uwp-giera/build-giera.ps1'
+
+      - name: Fetch MSIX artifacts
+        run: |
+          mkdir -p artifacts
+          scp -r jakubsikora@desktop-fjvada8.tail5d39b4.ts.net:'C:/Users/jakubsikora/Repos/personal/giera/platform/xbox-uwp-giera/Appackages/*.msix' artifacts/ 2>/dev/null || true
+          ls -la artifacts/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: giera-msix
+          path: artifacts/*.msix
+          if-no-files-found: warn
+          retention-days: 14
