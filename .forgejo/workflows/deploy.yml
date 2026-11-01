@@ -17,5 +17,5 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H mac-studio-jakub.tail5d39b4.ts.net >> ~/.ssh/known_hosts 2>/dev/null
 
-          ssh -o StrictHostKeyChecking=accept-new jakub@mac-studio-jakub.tail5d39b4.ts.net \
+          ssh -o StrictHostKeyChecking=accept-new jakubsikora@mac-studio-jakub.tail5d39b4.ts.net \
             'cd ~/Repos/personal/giera && git pull origin main && bun run deploy'
