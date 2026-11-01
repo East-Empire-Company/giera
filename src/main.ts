@@ -3,6 +3,8 @@ import "./style.css";
 import { AudioManager, MUSIC_PLAYLIST } from "./client/audio/sound";
 import { MicController } from "./client/audio/mic";
 import { LanClient } from "./client/net/client";
+import { scanLanServers } from "./client/net/discovery";
+import { DEFAULT_LAN_PORT, type PlayerProfile } from "./shared/lan-protocol";
 import { PlayerController } from "./client/entities/player";
 import { NPCManager } from "./client/entities/npc";
 import { ambientNpcChatterEnabled, chatterDelayMs, fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
@@ -37,6 +39,7 @@ import { hostBridgeAvailable, postHostDiagnostic, postHostMessage } from "./clie
 import { resolveWorldSeed } from "./client/startup/world-seed";
 import { LaunchMenuController } from "./client/startup/launch-menu";
 import { PauseMenuController } from "./client/game/pause-menu";
+import { LanMenuController } from "./client/game/lan-menu";
 import { ConciergeSession } from "./client/concierge/session";
 import type { ConciergeHost, ConciergePlayer } from "./client/concierge/actions";
 import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "./shared/blocks";
@@ -164,8 +167,10 @@ async function boot(): Promise<void> {
   const seed = urlHasSeed ? chooseSeed() : saved?.seed ?? chooseSeed();
   updateSeedUrl(seed);
   const spawnY = surfaceHeight(3, 5, seed) + 1;
-  const player = new PlayerController({ id: "p1", spawn: [3, spawnY, 5] });
-  const player2 = new PlayerController({ id: "p2", spawn: [4.5, spawnY, 5] });
+  const savedProfile = (localStorage.getItem("giera.profile") as PlayerProfile | null) || "ziemek";
+  const player = new PlayerController({ id: "p1", spawn: [3, spawnY, 5], profile: savedProfile });
+  const player2Profile = savedProfile === "ziemek" ? "gniewko" : "ziemek";
+  const player2 = new PlayerController({ id: "p2", spawn: [4.5, spawnY, 5], profile: player2Profile });
   const npcManager = new NPCManager();
   const [assets, avatar, avatar2] = await Promise.all([
     assetsPromise,
@@ -177,6 +182,11 @@ async function boot(): Promise<void> {
   scene.add(avatar.object);
   scene.add(avatar2.object);
   let lanClient: LanClient | null = null;
+  let ownId: string | null = null;
+  const remoteTarget = new THREE.Vector3();
+  let remoteYaw = 0;
+  let remotePitch = 0;
+  let remoteActive = false;
   const crackTexture = new THREE.TextureLoader().load("/assets/textures/crackover.png");
   crackTexture.magFilter = THREE.NearestFilter;
   const crackMaterial = new THREE.MeshBasicMaterial({
@@ -408,41 +418,68 @@ async function boot(): Promise<void> {
       }
       return isSplit;
     },
-    onConnectLan: async (url, room) => {
-      lanClient?.disconnect();
-      return new Promise<boolean>((resolve) => {
-        lanClient = new LanClient({
-          url,
-          room,
-          playerName: player.profile.name,
-          callbacks: {
-            onWelcome: (welcome) => {
-              setOwnTycoonSlot(welcome.slot ?? 0);
-              clearRemoteTycoons();
-              for (const p of welcome.players) spawnRemoteTycoon(p.id, p.name, p.slot ?? 0);
-              resolve(true);
-            },
-            onJoin: (join) => spawnRemoteTycoon(join.id, join.name, join.slot ?? 0),
-            onLeave: (leave) => {
-              remoteTycoons.get(leave.id)?.dispose();
-              remoteTycoons.delete(leave.id);
-            },
-            onBlock: (b) => {
-              world.setBlock(b.x, b.y, b.z, b.id, false);
-            },
-            onPlayer: (p) => {
-              player2.position.set(p.x, p.y, p.z);
-              player2.yaw = p.yaw;
-              player2.pitch = p.pitch;
-              player2.syncAvatar();
-            },
-          },
-        });
-        lanClient.connect();
-        setTimeout(() => resolve(false), 4000);
-      });
-    },
   });
+
+  function connectLan(url: string, room: string, opts: { host?: boolean; roomName?: string; seed?: number; onConnected?: (welcomeSeed: number) => void } = {}): Promise<boolean> {
+    lanClient?.disconnect();
+    return new Promise<boolean>((resolve) => {
+      lanClient = new LanClient({
+        url,
+        room,
+        playerName: player.profile.name,
+        profile: player.characterProfile,
+        host: opts.host,
+        roomName: opts.roomName,
+        seed: opts.seed,
+        callbacks: {
+          onWelcome: (welcome) => {
+            ownId = welcome.id;
+            splitScreen.setSplitScreen(false);
+            hud.modeBtn.textContent = "Tryb: 1 Gracz";
+            setOwnTycoonSlot(welcome.slot ?? 0);
+            clearRemoteTycoons();
+            for (const p of welcome.players) spawnRemoteTycoon(p.id, p.name, p.slot ?? 0);
+            opts.onConnected?.(welcome.seed);
+            resolve(true);
+          },
+          onJoin: (join) => {
+            if (join.id !== ownId) spawnRemoteTycoon(join.id, join.name, join.slot ?? 0);
+          },
+          onLeave: (leave) => {
+            const remote = remoteTycoons.get(leave.id);
+            if (remote) {
+              remote.dispose();
+              remoteTycoons.delete(leave.id);
+            }
+          },
+          onStatusChange: (status) => {
+            if (status === "disconnected") remoteActive = false;
+          },
+          onBlock: (b) => {
+            world.setBlock(b.x, b.y, b.z, b.id, false);
+          },
+          onPlayer: (p) => {
+            if (ownId && p.id === ownId) return;
+            if (p.profile && player2.characterProfile !== p.profile) {
+              player2.setCharacterProfile(p.profile);
+              const oldObject = player2.avatar?.object;
+              if (oldObject) scene.remove(oldObject);
+              player2.loadAvatar().then((avatar) => {
+                scene.add(avatar.object);
+                player2.syncAvatar();
+              });
+            }
+            remoteTarget.set(p.x, p.y, p.z);
+            remoteYaw = p.yaw;
+            remotePitch = p.pitch;
+            remoteActive = true;
+          },
+        },
+      });
+      lanClient.connect();
+      setTimeout(() => resolve(false), 4000);
+    });
+  }
 
   const touchAvailable = "ontouchstart" in window || (navigator.maxTouchPoints ?? 0) > 0;
   let touchControlsAttached = false;
@@ -472,13 +509,14 @@ async function boot(): Promise<void> {
       suppressGamepadJumpUntilRelease = source === "gamepad";
       splitScreen.setSplitScreen(settings.splitScreen);
       hud.modeBtn.textContent = settings.splitScreen ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
-      canvas.inert = false;
-      hudRoot?.removeAttribute("inert");
-      if (hudRoot) hudRoot.style.visibility = "";
-      canvas.focus({ preventScroll: true });
-      attachTouchControls();
-      void audio.playPlaylist().catch(() => {});
-      void conciergeSession.close("menu");
+      const pending = sessionStorage.getItem("giera.pendingLanJoin");
+      if (pending) {
+        sessionStorage.removeItem("giera.pendingLanJoin");
+        try {
+          const { url, room } = JSON.parse(pending) as { url: string; room: string };
+          void connectLan(url, room, { host: false });
+        } catch { /* ignore malformed pending join */ }
+      }
     },
   });
 
@@ -501,7 +539,18 @@ async function boot(): Promise<void> {
     const overlaps = (otherX: number, otherZ: number, otherRadius: number): boolean =>
       Math.hypot(x - otherX, z - otherZ) < radius + otherRadius;
     if (overlaps(player.position.x, player.position.z, 0.8) || overlaps(player2.position.x, player2.position.z, 0.8)) return true;
-    if (overlaps(trainingDummy.position.x, trainingDummy.position.z, 0.7)) return true;
+const reloadControllerAvatar = (controller: PlayerController) => {
+  const oldObject = controller.avatar?.object;
+  if (oldObject) scene.remove(oldObject);
+  controller.loadAvatar().then((avatar) => {
+    scene.add(avatar.object);
+    controller.syncAvatar();
+  });
+};
+  const playerForConcierge = (target: ConciergePlayer): PlayerController => {
+    const name = target === "gniewko" ? "Gniewko" : "Ziemek";
+    return player.profile.name === name ? player : player2;
+  };
     for (const npc of npcManager.npcs) {
       if (overlaps(npc.position.x, npc.position.z, npc.def.id === "papuga" ? 0.3 : 0.6)) return true;
     }
@@ -600,6 +649,47 @@ async function boot(): Promise<void> {
       void conciergeSession.close("menu");
       canvas.focus({ preventScroll: true });
     },
+  });
+
+  const pauseLanPanel = document.querySelector<HTMLElement>("#pause-lan-panel");
+  const pauseLanBtn = document.querySelector<HTMLButtonElement>("#pause-lan");
+  const lanMenu = new LanMenuController({
+    root: pauseLanPanel!,
+    onHost: async (roomName, hostSeed) => {
+      const code = Math.random().toString(36).slice(2, 6).toUpperCase();
+      const url = `ws://${window.location.hostname}:${DEFAULT_LAN_PORT}/ws`;
+      return connectLan(url, code, {
+        host: true,
+        roomName,
+        seed: hostSeed || seed,
+        onConnected: (welcomeSeed) => {
+          if (welcomeSeed !== seed) {
+            sessionStorage.setItem("giera.pendingLanJoin", JSON.stringify({ url, room: code, host: false }));
+            window.location.href = `?seed=${welcomeSeed}`;
+          }
+        },
+      });
+    },
+    onJoin: async (url, room, roomSeed) => {
+      return connectLan(url, room, {
+        host: false,
+        onConnected: (welcomeSeed) => {
+          if (roomSeed && welcomeSeed !== seed) {
+            sessionStorage.setItem("giera.pendingLanJoin", JSON.stringify({ url, room, host: false }));
+            window.location.href = `?seed=${welcomeSeed}`;
+          }
+        },
+      });
+    },
+    onScan: () => scanLanServers({ port: DEFAULT_LAN_PORT }),
+    onClose: () => {
+      pauseMenu.sync();
+      pauseResume?.focus({ preventScroll: true });
+    },
+  });
+
+  pauseLanBtn?.addEventListener("click", () => {
+    if (pauseMenu.isOpen) lanMenu.openMenu();
   });
 
   const conciergeSession = new ConciergeSession({
@@ -846,9 +936,7 @@ async function boot(): Promise<void> {
         hud.setInventoryOpen(false);
       } else if (hud.isControlsModalOpen()) {
         hud.setControlsModalOpen(false);
-      } else if (hud.isLanModalOpen()) {
-        hud.setLanModalOpen(false);
-      } else if (!qa) {
+      } else {
         pauseMenu.toggle();
       }
       audio.play("ui_click");
@@ -1152,6 +1240,16 @@ async function boot(): Promise<void> {
       }
     }
     {
+      if (remoteActive && !splitScreen.isSplitScreen) {
+        const lerp = Math.min(1, delta * 10);
+        player2.position.lerp(remoteTarget, lerp);
+        let dyaw = remoteYaw - player2.yaw;
+        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+        player2.yaw += dyaw * lerp;
+        player2.pitch += (remotePitch - player2.pitch) * lerp;
+        player2.syncAvatar();
+      }
       const gb = (x: number, y: number, z: number): number => world.getBlock(x, y, z);
       const follow = (o: THREE.Object3D, x: number, y: number, z: number, grounded: boolean, damp: boolean): void => {
         const target = grounded ? smoothGroundOffset(gb, x, z, y) : 0;
@@ -1422,8 +1520,12 @@ async function boot(): Promise<void> {
             const blockName = def ? Object.keys(BLOCK_ID).find((k) => (BLOCK_ID as Record<string, number>)[k] === bId) ?? "stone" : "stone";
             inventory.addMinedBlock(blockName, 1);
             const minedPosition = new THREE.Vector3(hit.hit.x + 0.5, hit.hit.y + 0.5, hit.hit.z + 0.5);
-            itemDrops.spawn(minedPosition.x, minedPosition.y, minedPosition.z, bId, world.getTileMaterial(def?.tiles.side ?? "stone"));
+            const tileMaterial = world.getTileMaterial(def?.tiles.side ?? "stone");
+            const tint = tileMaterial && "color" in tileMaterial ? Number((tileMaterial as THREE.MeshStandardMaterial).color.getHex()) : 0xffffff;
+            itemDrops.spawn(minedPosition.x, minedPosition.y, minedPosition.z, bId, tileMaterial);
             gameplayVfx.emit(bId === BLOCK_ID.oak_log ? "wood" : bId === BLOCK_ID.oak_leaves ? "leaves" : "mine", minedPosition);
+            gameplayVfx.emit("debris", minedPosition, { tint, groundY: hit.hit.y });
+            gameplayVfx.emit("impact_ring", minedPosition, { tint, groundY: hit.hit.y });
             if (bId === BLOCK_ID.oak_log) {
               pickupProjector.copy(minedPosition).project(camera);
               if (pickupProjector.z >= -1 && pickupProjector.z <= 1 && Math.abs(pickupProjector.x) <= 1 && Math.abs(pickupProjector.y) <= 1) {
