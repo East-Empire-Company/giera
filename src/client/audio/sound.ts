@@ -106,6 +106,11 @@ export class AudioManager {
     return this.currentMusic?.id;
   }
 
+  tapMusicBus(): { bus: GainNode; ctx: AudioContext } | null {
+    if (!this.musicBus || !this.context) return null;
+    return { bus: this.musicBus, ctx: this.context };
+  }
+
   get volume(): number {
     return this.masterVolume;
   }

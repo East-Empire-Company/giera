@@ -36,10 +36,21 @@ const N8AOPostPass = UncheckedN8AOPostPass as unknown as N8AOPassConstructor;
 
 export class AdaptiveBloomEffect extends BloomEffect {
   private active = true;
+  private beatPulse = 0;
+  private readonly baseIntensity: number;
+
+  constructor(opts?: ConstructorParameters<typeof BloomEffect>[0]) {
+    super(opts);
+    this.baseIntensity = (opts as { intensity?: number })?.intensity ?? 0.14;
+  }
 
   setActive(active: boolean): void {
     this.active = active;
     this.blendMode.opacity.value = active ? 1 : 0;
+  }
+
+  setBeatPulse(v: number): void {
+    this.beatPulse = Math.max(0, Math.min(1, v));
   }
 
   override update(
@@ -47,7 +58,10 @@ export class AdaptiveBloomEffect extends BloomEffect {
     inputBuffer: THREE.WebGLRenderTarget,
     deltaTime?: number
   ): void {
-    if (this.active) super.update(renderer, inputBuffer, deltaTime);
+    if (this.active) {
+      this.intensity = this.baseIntensity + this.beatPulse * 0.3;
+      super.update(renderer, inputBuffer, deltaTime);
+    }
   }
 }
 
@@ -276,6 +290,11 @@ export class PostFX {
       const halfWidth = Math.max(1, Math.floor(width / 2));
       this.split.forEach((chain) => this.resizeChain(chain, halfWidth, height));
     }
+  }
+
+  setBeatPulse(v: number): void {
+    this.solo?.bloom.setBeatPulse(v);
+    this.split?.forEach((chain) => chain.bloom.setBeatPulse(v));
   }
 
   noteFrame(deltaSeconds: number): void {
