@@ -46,10 +46,16 @@ function findBone(root: THREE.Object3D, candidates: string[]): THREE.Bone | unde
 
 export type AvatarClothing = { torso: string; arms: string; legs: string };
 
+export type AvatarIdleSelection = { clips: readonly string[]; rng: () => number };
+
+export type AvatarLoadOptions = { targetHeight: number; idle?: AvatarIdleSelection };
+
 export class Avatar {
   readonly object: THREE.Group;
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions: Record<string, THREE.AnimationAction> = {};
+  private readonly idleActions?: THREE.AnimationAction[];
+  private readonly idleRng?: () => number;
   private active?: THREE.AnimationAction;
   private motion: AvatarMotion = "idle";
   private requested: AvatarMotion = "idle";
@@ -61,10 +67,18 @@ export class Avatar {
   private oneShot?: THREE.AnimationAction;
   private readonly bones: { spine?: THREE.Bone; chest?: THREE.Bone; head?: THREE.Bone; hips?: THREE.Bone; armL?: THREE.Bone; armR?: THREE.Bone } = {};
 
-  private constructor(object: THREE.Group, animations: THREE.AnimationClip[]) {
+  private constructor(object: THREE.Group, animations: THREE.AnimationClip[], idle?: AvatarIdleSelection) {
     this.object = object;
     this.mixer = new THREE.AnimationMixer(object);
     for (const clip of animations) this.actions[clip.name.toLowerCase()] = this.mixer.clipAction(clip);
+    if (idle) {
+      this.idleActions = [];
+      for (const name of idle.clips) {
+        const action = this.actions[name.toLowerCase()];
+        if (action) this.idleActions.push(action);
+      }
+      this.idleRng = idle.rng;
+    }
 
     const accuBones: THREE.Bone[] = [];
     object.traverse((child) => {
@@ -85,18 +99,16 @@ export class Avatar {
     this.setMotion("idle");
   }
 
-  static async load(
-    id: PlayerAvatarId,
-    accentColor: THREE.ColorRepresentation,
-    clothing?: AvatarClothing,
-    scale = 0.85
-  ): Promise<Avatar> {
-    void accentColor;
-    void clothing;
+  static async load(id: PlayerAvatarId, options: AvatarLoadOptions): Promise<Avatar> {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const model = await withRetry(() => loader.loadAsync(`/${assetManifest.models[id]}`));
-    model.scene.scale.setScalar(scale);
-    return new Avatar(model.scene, model.animations);
+    const bounds = new THREE.Box3().setFromObject(model.scene);
+    const sourceHeight = bounds.getSize(new THREE.Vector3()).y;
+    model.scene.position.y -= bounds.min.y;
+    const object = new THREE.Group();
+    object.scale.setScalar(options.targetHeight / sourceHeight);
+    object.add(model.scene);
+    return new Avatar(object, model.animations, options.idle);
   }
 
   get currentMotion(): AvatarMotion {
@@ -107,6 +119,10 @@ export class Avatar {
     return this.requested;
   }
 
+  get currentClipName(): string | undefined {
+    return this.active?.getClip().name;
+  }
+
   setMotion(motion: AvatarMotion): void {
     this.requested = motion;
     if (this.oneShot) {
@@ -115,12 +131,22 @@ export class Avatar {
     }
     if (motion === this.motion && this.active?.isRunning()) return;
     this.motion = motion;
-    const clipName = resolveClip(ANIM_MAP[motion], Object.keys(this.actions));
-    if (!clipName) return;
-    const next = this.actions[clipName];
-    if (next === this.active) return;
-    if (this.active && next && !this.frozen) this.active.crossFadeTo(next, 0.18, true);
-    next?.reset().play();
+    let next: THREE.AnimationAction | undefined;
+    if (motion === "idle" && this.idleActions !== undefined) {
+      if (this.idleActions.length === 0 || !this.idleRng) {
+        this.active?.stop();
+        this.active = undefined;
+        return;
+      }
+      next = this.idleActions[Math.floor(this.idleRng() * this.idleActions.length)];
+    } else {
+      const clipName = resolveClip(ANIM_MAP[motion], Object.keys(this.actions));
+      if (!clipName) return;
+      next = this.actions[clipName];
+    }
+    if (!next || next === this.active) return;
+    if (this.active && !this.frozen) this.active.crossFadeTo(next, 0.18, true);
+    next.reset().play();
     this.active = next;
   }
 

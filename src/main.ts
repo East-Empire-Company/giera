@@ -152,6 +152,7 @@ async function boot(): Promise<void> {
   const audio = new AudioManager();
   const beatTracker = new BeatTracker();
   void audio.preload(MUSIC_PLAYLIST).then(() => {
+    if (qa) return;
     const tap = audio.tapMusicBus();
     if (tap) beatTracker.attach(tap.bus, tap.ctx);
   }).catch(() => {});
@@ -177,7 +178,7 @@ async function boot(): Promise<void> {
   const player = new PlayerController({ id: "p1", spawn: [3, spawnY, 5], profile: savedProfile });
   const player2Profile = savedProfile === "ziemek" ? "gniewko" : "ziemek";
   const player2 = new PlayerController({ id: "p2", spawn: [4.5, spawnY, 5], profile: player2Profile });
-  const npcManager = new NPCManager();
+  const npcManager = new NPCManager(seed);
   const [assets, avatar, avatar2] = await Promise.all([
     assetsPromise,
     player.loadAvatar(),
@@ -1106,7 +1107,7 @@ async function boot(): Promise<void> {
       postfx.noteFrame(menuDelta);
       beatTracker.update();
       postfx.setBeatPulse(beatTracker.beatPulse);
-      postfx.renderSolo();
+      postfx.renderSolo(qa ? menuDelta : undefined);
       previous = now;
       return;
     }
@@ -1116,8 +1117,8 @@ async function boot(): Promise<void> {
     if (paused) {
       beatTracker.update();
       postfx.setBeatPulse(beatTracker.beatPulse);
-      if (splitScreen.isSplitScreen) postfx.renderSplit(camera, camera2);
-      else postfx.renderSolo();
+      if (splitScreen.isSplitScreen) postfx.renderSplit(camera, camera2, qa ? delta : undefined);
+      else postfx.renderSolo(qa ? delta : undefined);
       return;
     }
     if (qa && !qaState.paused) {
@@ -1607,7 +1608,7 @@ async function boot(): Promise<void> {
       resetMiningFeedback();
     }
 
-    postfx.noteFrame(realDelta);
+    postfx.noteFrame(qa ? 1 / 60 : realDelta);
     beatTracker.update();
     postfx.setBeatPulse(beatTracker.beatPulse);
     const width = window.innerWidth;
@@ -1618,9 +1619,9 @@ async function boot(): Promise<void> {
     if (splitScreen.isSplitScreen && viewports.length > 1) {
       camera2.aspect = viewports[1].aspect;
       camera2.updateProjectionMatrix();
-      postfx.renderSplit(camera, camera2);
+      postfx.renderSplit(camera, camera2, qa ? delta : undefined);
     } else {
-      postfx.renderSolo();
+      postfx.renderSolo(qa ? delta : undefined);
     }
   });
 

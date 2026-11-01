@@ -242,16 +242,16 @@ export class PostFX {
     }
   }
 
-  renderSolo(): void {
+  renderSolo(deltaSeconds?: number): void {
     if (this.direct) {
       this.renderDirect(this.soloCamera, 0, 0, this.width, this.height);
       return;
     }
     this.prepareView(this.soloCamera);
-    this.solo?.composer.render();
+    this.solo?.composer.render(deltaSeconds);
   }
 
-  renderSplit(camera: THREE.PerspectiveCamera, camera2: THREE.PerspectiveCamera): void {
+  renderSplit(camera: THREE.PerspectiveCamera, camera2: THREE.PerspectiveCamera, deltaSeconds?: number): void {
     if (this.direct) {
       const halfWidth = Math.max(1, Math.floor(this.width / 2));
       this.renderDirect(camera, 0, 0, halfWidth, this.height);
@@ -273,9 +273,9 @@ export class PostFX {
     const composite = this.composite;
     if (!composite) return;
     this.prepareView(camera);
-    left.composer.render();
+    left.composer.render(deltaSeconds);
     this.prepareView(camera2);
-    right.composer.render();
+    right.composer.render(deltaSeconds);
     composite.material.uniforms.tLeft.value = outputTexture(left);
     composite.material.uniforms.tRight.value = outputTexture(right);
     this.renderer.setRenderTarget(null);

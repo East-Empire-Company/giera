@@ -2,7 +2,28 @@ import { test, expect, type Page } from "@playwright/test";
 import { SPEC } from "../spec-constants";
 import { raycastInteract, type RayHit } from "../../src/shared/raycast";
 
-type Vec3 = { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void };
+type Vec3 = { x: number; y: number; z: number; clone: () => Vec3; set: (x: number, y: number, z: number) => Vec3 };
+type AvatarGeometry = {
+  attributes?: { position?: unknown };
+  boundingBox: { min: Vec3; max: Vec3 } | null;
+  computeBoundingBox: () => void;
+};
+type AvatarNode = {
+  geometry?: AvatarGeometry;
+  localToWorld: (point: Vec3) => Vec3;
+};
+type AvatarObject = {
+  position: Vec3;
+  updateMatrixWorld: (force?: boolean) => void;
+  traverse: (fn: (node: AvatarNode) => void) => void;
+};
+type AvatarVisual = {
+  object: AvatarObject;
+  currentMotion?: string;
+  requestedMotion?: string;
+  currentClipName?: string;
+  setMotion: (motion: "idle" | "walk") => void;
+};
 
 type FlatSpot = { x: number; y: number; z: number };
 type RegionBlock = { x: number; y: number; z: number; id: number };
@@ -22,6 +43,7 @@ type Giera = {
   ready: boolean;
   scene: { traverse: (fn: (node: any) => void) => void };
   player: {
+    characterProfile: "ziemek" | "gniewko";
     position: Vec3;
     velocity: Vec3;
     yaw: number;
@@ -29,9 +51,15 @@ type Giera = {
     onGround: boolean;
     isActing: boolean;
     syncAvatar: () => void;
-    avatar?: { currentMotion?: string; requestedMotion?: string };
+    avatar?: AvatarVisual;
   };
-  player2: { position: Vec3; velocity: Vec3; onGround: boolean };
+  player2: {
+    characterProfile: "ziemek" | "gniewko";
+    position: Vec3;
+    velocity: Vec3;
+    onGround: boolean;
+    avatar?: AvatarVisual;
+  };
   camera: {
     position: { x: number; y: number; z: number; clone: () => { x: number; y: number; z: number } };
     getWorldDirection: (target: { x: number; y: number; z: number }) => void;
@@ -46,7 +74,14 @@ type Giera = {
     addMinedBlock: (key: string, count?: number) => void;
     setHotbarSlot: (index: number, blockId: number) => void;
   };
-  npcManager: { npcs: { position: { x: number; y: number; z: number }; name: string }[] };
+  npcManager: {
+    npcs: {
+      def: { id: string };
+      position: { x: number; y: number; z: number };
+      name: string;
+      avatar?: AvatarVisual;
+    }[];
+  };
   splitScreen: { isSplitScreen: boolean };
   tycoon: {
     collectedStars: number;
@@ -291,6 +326,119 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(visuals.p2.hasGeometry).toBe(true);
     expect(visuals.p2.hasMaterial).toBe(true);
     expect(errors).toEqual([]);
+  });
+  test("hero GLBs match their legacy heights and align their feet", async ({ page }) => {
+    test.setTimeout(60_000);
+    await boot(page);
+    await page.waitForFunction(() => {
+      const g = (window as unknown as G).__GIERA__;
+      return !!g.player.avatar && !!g.player2.avatar;
+    }, null, { timeout: 30_000 });
+    const bounds = await page.evaluate(() => {
+      const g = (window as unknown as G).__GIERA__;
+      const measure = (avatar: AvatarVisual) => {
+        const root = avatar.object;
+        root.updateMatrixWorld(true);
+        let minY = Infinity;
+        let maxY = -Infinity;
+        root.traverse((node) => {
+          const geometry = node.geometry;
+          if (!geometry?.attributes?.position) return;
+          if (!geometry.boundingBox) geometry.computeBoundingBox();
+          const box = geometry.boundingBox;
+          if (!box) return;
+          for (const x of [box.min.x, box.max.x]) {
+            for (const y of [box.min.y, box.max.y]) {
+              for (const z of [box.min.z, box.max.z]) {
+                const point = node.localToWorld(box.min.clone().set(x, y, z));
+                minY = Math.min(minY, point.y);
+                maxY = Math.max(maxY, point.y);
+              }
+            }
+          }
+        });
+        return { height: maxY - minY, feetOffset: minY - root.position.y };
+      };
+      const p1 = g.player.avatar;
+      const p2 = g.player2.avatar;
+      if (!p1 || !p2) throw new Error("hero avatars did not load");
+      return {
+        p1: { profile: g.player.characterProfile, bounds: measure(p1) },
+        p2: { profile: g.player2.characterProfile, bounds: measure(p2) },
+      };
+    });
+    const targetHeights = { ziemek: 2.16, gniewko: 1.85 };
+    expect(bounds.p1.bounds.height).toBeCloseTo(targetHeights[bounds.p1.profile], 2);
+    expect(bounds.p2.bounds.height).toBeCloseTo(targetHeights[bounds.p2.profile], 2);
+    for (const avatar of [bounds.p1.bounds, bounds.p2.bounds]) {
+      expect(Math.abs(avatar.feetOffset)).toBeLessThan(0.1);
+    }
+  });
+
+  test("NPC GLBs align their feet and choose safe idle clips deterministically", async ({ page }) => {
+    test.setTimeout(120_000);
+    const capture = async () => {
+      await boot(page);
+      await page.waitForFunction(() => {
+        const g = (window as unknown as G).__GIERA__;
+        return g.npcManager.npcs.every((npc) => npc.avatar?.currentClipName);
+      }, null, { timeout: 30_000 });
+      return page.evaluate(() => {
+        const g = (window as unknown as G).__GIERA__;
+        return g.npcManager.npcs.map((npc) => {
+          const avatar = npc.avatar;
+          if (!avatar?.currentClipName) throw new Error(`NPC avatar missing: ${npc.def.id}`);
+          const root = avatar.object;
+          root.updateMatrixWorld(true);
+          let minY = Infinity;
+          let maxY = -Infinity;
+          root.traverse((node) => {
+            const geometry = node.geometry;
+            if (!geometry?.attributes?.position) return;
+            if (!geometry.boundingBox) geometry.computeBoundingBox();
+            const box = geometry.boundingBox;
+            if (!box) return;
+            for (const x of [box.min.x, box.max.x]) {
+              for (const y of [box.min.y, box.max.y]) {
+                for (const z of [box.min.z, box.max.z]) {
+                  const point = node.localToWorld(box.min.clone().set(x, y, z));
+                  minY = Math.min(minY, point.y);
+                  maxY = Math.max(maxY, point.y);
+                }
+              }
+            }
+          });
+          const clips = [avatar.currentClipName];
+          for (let i = 0; i < 8; i++) {
+            avatar.setMotion("walk");
+            avatar.setMotion("idle");
+            clips.push(avatar.currentClipName ?? "");
+          }
+          return {
+            id: npc.def.id,
+            height: maxY - minY,
+            feetOffset: minY - root.position.y,
+            clips,
+          };
+        });
+      });
+    };
+
+    const firstRun = await capture();
+    const secondRun = await capture();
+    expect(secondRun).toEqual(firstRun);
+    const expectedHeights: Record<string, number> = { tata: 2.12, mama: 1.82, ciocia: 1.6 };
+    const safeClips: Record<string, string[]> = {
+      tata: ["fidget_shift_weight", "walk_relaxed"],
+      mama: ["dance_salsa", "walk_relaxed"],
+      ciocia: ["dance_loop_quaternius", "walk_relaxed"],
+    };
+    for (const npc of firstRun) {
+      expect(npc.height).toBeCloseTo(expectedHeights[npc.id], 2);
+      expect(Math.abs(npc.feetOffset)).toBeLessThan(0.1);
+      expect(npc.clips.every((clip) => safeClips[npc.id].includes(clip.toLowerCase()))).toBe(true);
+      expect(new Set(npc.clips).size).toBeGreaterThan(1);
+    }
   });
   test("boot: qa fixed-delta loop advances sim and frame counters", async ({ page }) => {
     test.setTimeout(60_000);

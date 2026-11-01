@@ -18,7 +18,8 @@ export type NPCDef = {
   position: [number, number, number];
   accentColor: string;
   avatarId: PlayerAvatarId;
-  scale?: number;
+  targetHeight: number;
+  idleClips: readonly string[];
   quickPrompts: string[];
 };
 
@@ -30,6 +31,8 @@ export const NPCS: NPCDef[] = [
     position: [4, 50, 4],
     accentColor: "#4a6fa5",
     avatarId: "tata",
+    targetHeight: 2.12,
+    idleClips: ["fidget_shift_weight", "walk_relaxed"],
     quickPrompts: ["Co mam zrobić?", "Daj mi blok", "Gdzie mam iść?", "Jak się nazywasz?"],
   },
   {
@@ -39,6 +42,8 @@ export const NPCS: NPCDef[] = [
     position: [-4, 50, 4],
     accentColor: "#e88a9a",
     avatarId: "mama",
+    targetHeight: 1.82,
+    idleClips: ["dance_salsa", "walk_relaxed"],
     quickPrompts: ["Jak zrobić kilof?", "Daj mi deski", "Gdzie jest żelazo?", "Co potrafisz?"],
   },
   {
@@ -48,6 +53,8 @@ export const NPCS: NPCDef[] = [
     position: [0, 50, 6],
     accentColor: "#f3a683",
     avatarId: "ciocia",
+    targetHeight: 1.6,
+    idleClips: ["dance_loop_quaternius", "walk_relaxed"],
     quickPrompts: ["Cześć ciociu!", "Daj blok", "Powtórz coś!", "Lecimy?"],
   },
 ];
@@ -57,15 +64,17 @@ export class NPCInstance {
   readonly home = new THREE.Vector3();
   private animTime = 0;
   private rng: () => number;
+  private idleRng: () => number;
   private wanderState: "idle" | "walk" = "idle";
   private wanderWait = 3;
   private wanderTarget = new THREE.Vector3();
   avatar?: Avatar;
-  constructor(def: NPCDef, rng?: () => number) {
+  constructor(def: NPCDef, rng?: () => number, idleRng?: () => number) {
     this.def = def;
     this.position = new THREE.Vector3(...def.position);
     this.home.copy(this.position);
     this.rng = rng ?? makeRng(hashSeed(def.id));
+    this.idleRng = idleRng ?? makeRng(hashSeed(`${def.id}:idle`));
   }
 
   get name(): string {
@@ -73,9 +82,10 @@ export class NPCInstance {
   }
 
   async loadAvatar(): Promise<Avatar> {
-    const scale = this.def.scale ?? 0.8;
-    const avatar = await Avatar.load(this.def.avatarId, this.def.accentColor);
-    avatar.object.scale.setScalar(scale);
+    const avatar = await Avatar.load(this.def.avatarId, {
+      targetHeight: this.def.targetHeight,
+      idle: { clips: this.def.idleClips, rng: this.idleRng },
+    });
     avatar.object.position.copy(this.position);
     const toCenterX = -this.position.x;
     const toCenterZ = -this.position.z;
@@ -154,9 +164,14 @@ export class NPCInstance {
 export class NPCManager {
   readonly npcs: NPCInstance[];
 
-  constructor(rngFactory?: (seed: number) => () => number) {
-    this.npcs = NPCS.map((def) =>
-      rngFactory ? new NPCInstance(def, rngFactory(hashSeed(def.id))) : new NPCInstance(def)
+  constructor(seed = 0) {
+    this.npcs = NPCS.map(
+      (def) =>
+        new NPCInstance(
+          def,
+          makeRng(hashSeed(def.id)),
+          makeRng(hashSeed(`${seed}:${def.id}:idle`))
+        )
     );
   }
 

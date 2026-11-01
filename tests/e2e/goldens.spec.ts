@@ -18,6 +18,8 @@ const FREEZE_FRAME = 600;
 type Giera = {
   ready: boolean;
   detailedAvatars?: { ready?: boolean };
+  audio: { playingMusic?: string };
+  postfx: { setBeatPulse: (value: number) => void; noteFrame: (deltaSeconds: number) => void };
   player: {
     position: { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void };
     velocity: { set: (x: number, y: number, z: number) => void };
@@ -25,8 +27,14 @@ type Giera = {
     pitch: number;
     syncAvatar: () => void;
   };
-  world: { loadedChunkCount: number };
-  qa: { frame: number; paused: boolean; pauseAt?: number };
+  world: { loadedChunkCount: number; decor: { children: { name?: string }[] } };
+  qa: {
+    frame: number;
+    paused: boolean;
+    pauseAt?: number;
+    beatPulses?: number[];
+    postfxDeltas?: number[];
+  };
 };
 
 async function settle(page: Page): Promise<void> {
@@ -37,7 +45,12 @@ async function settle(page: Page): Promise<void> {
   await page.waitForFunction(
     () => {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
-      return g.qa.frame >= 120 && g.world.loadedChunkCount >= 289 && g.detailedAvatars?.ready === true;
+      return (
+        g.qa.frame >= 120 &&
+        g.world.loadedChunkCount >= 289 &&
+        g.detailedAvatars?.ready === true &&
+        g.world.decor.children.some((group) => group.name === "ground-decor")
+      );
     },
     null,
     { timeout: 60_000 }
@@ -140,5 +153,53 @@ test.describe("Giera graphics goldens", () => {
     await freeze(page);
     await capture(page, "tycoon-view");
     expect(errors).toEqual([]);
+  });
+  test("QA feeds fixed time to adaptive postfx", async ({ page }) => {
+    await settle(page);
+    await page.evaluate(() => {
+      const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
+      const deltas: number[] = [];
+      const noteFrame = g.postfx.noteFrame.bind(g.postfx);
+      g.qa.postfxDeltas = deltas;
+      g.postfx.noteFrame = (deltaSeconds) => {
+        deltas.push(deltaSeconds);
+        noteFrame(deltaSeconds);
+      };
+    });
+    await page.waitForFunction(
+      () => ((window as unknown as { __GIERA__?: Giera }).__GIERA__?.qa.postfxDeltas?.length ?? 0) >= 120,
+      null,
+      { timeout: 10_000 }
+    );
+    const deltas = await page.evaluate(() => (window as unknown as { __GIERA__: Giera }).__GIERA__.qa.postfxDeltas ?? []);
+    const distinct = [...new Set(deltas)].slice(0, 5);
+    expect(deltas.every((delta) => delta === 1 / 60), `postfx timestep values: ${distinct.join(", ")}`).toBe(true);
+  });
+  test("QA keeps beat-reactive bloom static while music plays", async ({ page }) => {
+    await settle(page);
+    await page.evaluate(() => {
+      const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
+      const pulses: number[] = [];
+      const setBeatPulse = g.postfx.setBeatPulse.bind(g.postfx);
+      g.qa.beatPulses = pulses;
+      g.postfx.setBeatPulse = (value) => {
+        pulses.push(value);
+        setBeatPulse(value);
+      };
+    });
+    await page.mouse.click(5, 5);
+    await page.waitForFunction(
+      () => Boolean((window as unknown as { __GIERA__?: Giera }).__GIERA__?.audio.playingMusic),
+      null,
+      { timeout: 30_000 }
+    );
+    await freeze(page);
+    await page.waitForFunction(
+      () => ((window as unknown as { __GIERA__?: Giera }).__GIERA__?.qa.beatPulses?.length ?? 0) >= 60,
+      null,
+      { timeout: 5_000 }
+    );
+    const pulses = await page.evaluate(() => (window as unknown as { __GIERA__: Giera }).__GIERA__.qa.beatPulses ?? []);
+    expect(Math.max(...pulses)).toBe(0);
   });
 });

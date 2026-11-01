@@ -22,3 +22,9 @@ reason: HUD music pill replaced by 56x56 inventory button; headless chromium rep
 ## 2026-11-01T01:06:31.134Z stage=goldens
 reason: voxel AO anisotropy + range, smooth terrain deform, mining debris
 
+## 2026-11-01T19:46:19.860Z stage=goldens
+reason: Family GLB avatars and seeded NPC idle animations are intended visual changes
+
+## 2026-11-01T20:22:48.714Z stage=goldens
+reason: QA composer time now follows deterministic simulation time
+
