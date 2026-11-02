@@ -3,11 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { raycastInteract } from "../../src/shared/raycast";
 
-const WS_URL = process.env.GIERA_TEST_WS;
+const LAN_PORT = Number(process.env.GIERA_TEST_LAN_PORT ?? 8791);
+const WS_URL = process.env.GIERA_TEST_WS ?? `ws://127.0.0.1:${LAN_PORT}/ws`;
 const ROOM = "QATEST";
-const SAVE_FILE = resolve(import.meta.dirname, "../../server/data-test", `world-${ROOM}.json`);
+const SAVE_DIR = process.env.GIERA_TEST_DATA_DIR ?? resolve(import.meta.dirname, "../../server/data-test");
+const SAVE_FILE = resolve(SAVE_DIR, `world-${ROOM}.json`);
 
-test.skip(!WS_URL, "GIERA_TEST_WS not set — run through the pipeline orchestrator (network stage)");
+test.skip(!process.env.GIERA_TEST_WS, "GIERA_TEST_WS not set — run through the pipeline orchestrator (network stage)");
 
 type G = { __GIERA__: any };
 

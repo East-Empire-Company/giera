@@ -1,5 +1,28 @@
+import { createServer } from "node:net";
 import { defineConfig, devices } from "@playwright/test";
 
+async function selectPort(): Promise<number> {
+  const configured = process.env.GIERA_TEST_VITE_PORT;
+  if (configured !== undefined) {
+    const port = Number(configured);
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new Error("GIERA_TEST_VITE_PORT must be a valid TCP port");
+    }
+    return port;
+  }
+  for (let port = 5173; port <= 65_535; port += 1) {
+    const probe = createServer();
+    const available = await new Promise<boolean>((resolve) => {
+      probe.once("error", () => resolve(false));
+      probe.listen(port, "127.0.0.1", () => probe.close(() => resolve(true)));
+    });
+    if (available) return port;
+  }
+  throw new Error("No free Vite port found");
+}
+
+const vitePort = await selectPort();
+const viteOrigin = `http://127.0.0.1:${vitePort}`;
 const jsonOut = process.env.GIERA_JSON_OUT;
 
 export default defineConfig({
@@ -11,7 +34,7 @@ export default defineConfig({
   globalTimeout: 300_000,
   reporter: jsonOut ? [["list"], ["json", { outputFile: jsonOut }]] : "list",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: viteOrigin,
     trace: "on-first-retry",
     viewport: { width: 1280, height: 720 },
     launchOptions: {
@@ -52,8 +75,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "bun run dev --port 5173",
-    url: "http://127.0.0.1:5173",
+    command: `bun run dev --port ${vitePort}`,
+    url: viteOrigin,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },

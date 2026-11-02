@@ -1,26 +1,26 @@
 #!/usr/bin/env bun
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import {
   appendFileSync,
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { connect } from "node:net";
-import { resolve } from "node:path";
+import { connect, createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "..");
 const EVIDENCE = resolve(ROOT, ".ai/evidence/pipeline");
 const GOLDEN_CAPTURE_DIR = resolve(EVIDENCE, "golden-captured");
 const GOLDENS_DIR = resolve(ROOT, "tests/goldens");
-const LAN_PORT = 8791;
-const LAN_DATA_DIR = resolve(ROOT, "server/data-test");
-const LAN_WS = `ws://127.0.0.1:${LAN_PORT}/ws`;
+const DEFAULT_LAN_PORT = 8791;
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
@@ -59,6 +59,41 @@ function waitPort(port: number, timeoutMs: number): Promise<void> {
     attempt();
   });
 }
+async function unusedPort(preferred?: number): Promise<number> {
+  const probe = createServer();
+  const listen = (port: number) => new Promise<number>((resolvePort, reject) => {
+    probe.once("error", reject);
+    probe.listen(port, "127.0.0.1", () => {
+      const address = probe.address();
+      if (!address || typeof address === "string") return reject(new Error("Could not read bound port"));
+      resolvePort(address.port);
+    });
+  });
+  try {
+    return await listen(preferred ?? 0);
+  } catch (error) {
+    if (preferred === undefined) throw error;
+    probe.removeAllListeners("error");
+    return await listen(0);
+  } finally {
+    if (probe.listening) await new Promise<void>((resolveClose) => probe.close(() => resolveClose()));
+  }
+}
+
+async function stopProcess(proc: ChildProcess): Promise<void> {
+  if (proc.exitCode !== null) return;
+  const { promise, resolve } = Promise.withResolvers<void>();
+  proc.once("exit", () => resolve());
+  proc.kill("SIGTERM");
+  const forceTimer = setTimeout(() => {
+    if (proc.exitCode === null) proc.kill("SIGKILL");
+  }, 2_000);
+  forceTimer.unref();
+  await promise;
+  clearTimeout(forceTimer);
+}
+
+
 
 async function runCmd(name: string, cmd: string[], env?: Record<string, string>): Promise<StageResult> {
   const start = Date.now();
@@ -76,20 +111,33 @@ async function runCmd(name: string, cmd: string[], env?: Record<string, string>)
 }
 
 async function runNetworkStage(): Promise<StageResult> {
-  rmSync(LAN_DATA_DIR, { recursive: true, force: true });
-  const serverProc = spawn("bun", ["server/index.ts"], {
-    cwd: ROOT,
-    stdio: ["ignore", "inherit", "inherit"],
-    env: { ...process.env, PORT: String(LAN_PORT), GIERA_DATA_DIR: LAN_DATA_DIR },
-  });
+  const dataDir = mkdtempSync(join(tmpdir(), "giera-pipeline-lan-"));
+  let serverProc: ChildProcess | undefined;
   try {
-    await waitPort(LAN_PORT, 15_000);
+    const requested = process.env.GIERA_TEST_LAN_PORT;
+    const preferred = requested === undefined ? DEFAULT_LAN_PORT : Number(requested);
+    if (!Number.isInteger(preferred) || preferred < 1 || preferred > 65_535) {
+      throw new Error("GIERA_TEST_LAN_PORT must be a valid TCP port");
+    }
+    const port = await unusedPort(preferred);
+    const wsUrl = `ws://127.0.0.1:${port}/ws`;
+    serverProc = spawn("bun", ["server/index.ts"], {
+      cwd: ROOT,
+      stdio: ["ignore", "inherit", "inherit"],
+      env: { ...process.env, PORT: String(port), GIERA_DATA_DIR: dataDir },
+    });
+    await waitPort(port, 15_000);
     return await runCmd("network", ["bunx", "playwright", "test", "--project=lan"], {
-      GIERA_TEST_WS: LAN_WS,
+      GIERA_TEST_WS: wsUrl,
+      GIERA_TEST_LAN_PORT: String(port),
+      GIERA_TEST_DATA_DIR: dataDir,
     });
   } finally {
-    serverProc.kill("SIGTERM");
-    setTimeout(() => rmSync(LAN_DATA_DIR, { recursive: true, force: true }), 500);
+    try {
+      if (serverProc) await stopProcess(serverProc);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
   }
 }
 
@@ -178,6 +226,60 @@ async function runPipeline(fast: boolean, goldensInit: boolean): Promise<number>
   }
   writeReport(results, fast);
   return results.some((r) => r.status === "fail") ? 1 : 0;
+}
+
+async function runPipelineWithBackend(fast: boolean, goldensInit: boolean): Promise<number> {
+  const dataDir = mkdtempSync(join(tmpdir(), "giera-pipeline-backend-"));
+  let backend: ChildProcess | undefined;
+  const envKeys = [
+    "GIERA_TEST_BACKEND_ORIGIN",
+    "GIERA_DATA_DIR",
+    "ELEVEN_LABS_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "NEXGATE_NEMOTRON_BOLT_API_KEY",
+    "NEXGATE_OMP_API_KEY",
+    "NEXGATE_URL",
+  ] as const;
+  const previous = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  try {
+    const port = await unusedPort();
+    backend = spawn("bun", ["server/index.ts"], {
+      cwd: ROOT,
+      stdio: ["ignore", "inherit", "inherit"],
+      env: {
+        ...process.env,
+        PORT: String(port),
+        GIERA_DATA_DIR: dataDir,
+        ELEVEN_LABS_API_KEY: "",
+        ELEVENLABS_API_KEY: "",
+        NEXGATE_NEMOTRON_BOLT_API_KEY: "",
+        NEXGATE_OMP_API_KEY: "",
+        NEXGATE_URL: "http://127.0.0.1:9",
+      },
+    });
+    process.env.GIERA_TEST_BACKEND_ORIGIN = `http://127.0.0.1:${port}`;
+    process.env.GIERA_DATA_DIR = dataDir;
+    process.env.ELEVEN_LABS_API_KEY = "";
+    process.env.ELEVENLABS_API_KEY = "";
+    process.env.NEXGATE_NEMOTRON_BOLT_API_KEY = "";
+    process.env.NEXGATE_OMP_API_KEY = "";
+    process.env.NEXGATE_URL = "http://127.0.0.1:9";
+    await waitPort(port, 15_000);
+    return await runPipeline(fast, goldensInit);
+  } finally {
+    try {
+      try {
+        if (backend) await stopProcess(backend);
+      } finally {
+        rmSync(dataDir, { recursive: true, force: true });
+      }
+    } finally {
+      for (const key of envKeys) {
+        if (previous[key] === undefined) delete process.env[key];
+        else process.env[key] = previous[key];
+      }
+    }
+  }
 }
 
 async function runAccept(): Promise<number> {
@@ -293,5 +395,5 @@ const exitCode = flag("--accept")
   ? await runAccept()
   : flag("--manual")
     ? await runManual()
-    : await runPipeline(flag("--fast"), flag("--goldens-init"));
+    : await runPipelineWithBackend(flag("--fast"), flag("--goldens-init"));
 process.exit(exitCode);
