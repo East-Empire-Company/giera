@@ -15,7 +15,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H mac-studio-jakub.tail5d39b4.ts.net >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H mac-studio-jakub.tail5d39b4.ts.net >> ~/.ssh/known_hosts 2>/dev/null || true
 
           ssh -o StrictHostKeyChecking=accept-new jakubsikora@mac-studio-jakub.tail5d39b4.ts.net \
-            'export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH && cd ~/Repos/personal/giera && git pull origin main && bun run deploy'
+            'export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH && cd ~/Repos/personal/giera && git fetch origin main && git reset --hard origin/main && bun run deploy'
