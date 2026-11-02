@@ -3,6 +3,12 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import assetManifest from "../../shared/asset-manifest.json";
 import { withRetry } from "../../shared/retry";
+import {
+  COMPANION_ANIM_CLIPS,
+  COMPANION_MODEL_PATHS,
+  MISSING_COMPANION_ASSET_MESSAGE,
+  type CompanionModel,
+} from "../../shared/companion";
 
 export type PlayerAvatarId = keyof typeof assetManifest.models;
 export type AvatarMotion = "idle" | "walk" | "sprint" | "jump" | "mine";
@@ -49,6 +55,16 @@ export type AvatarClothing = { torso: string; arms: string; legs: string };
 export type AvatarIdleSelection = { clips: readonly string[]; rng: () => number };
 
 export type AvatarLoadOptions = { targetHeight: number; idle?: AvatarIdleSelection };
+export class MissingCompanionAssetError extends Error {
+  constructor() {
+    super(MISSING_COMPANION_ASSET_MESSAGE);
+    this.name = "MissingCompanionAssetError";
+  }
+}
+
+function isCompanionModel(id: PlayerAvatarId): id is CompanionModel {
+  return id === "ranger" || id === "mage";
+}
 
 export class Avatar {
   readonly object: THREE.Group;
@@ -101,14 +117,32 @@ export class Avatar {
 
   static async load(id: PlayerAvatarId, options: AvatarLoadOptions): Promise<Avatar> {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-    const model = await withRetry(() => loader.loadAsync(`/${assetManifest.models[id]}`));
-    const bounds = new THREE.Box3().setFromObject(model.scene);
-    const sourceHeight = bounds.getSize(new THREE.Vector3()).y;
-    model.scene.position.y -= bounds.min.y;
-    const object = new THREE.Group();
-    object.scale.setScalar(options.targetHeight / sourceHeight);
-    object.add(model.scene);
-    return new Avatar(object, model.animations, options.idle);
+    const companion = isCompanionModel(id);
+    try {
+      const modelPath = companion ? COMPANION_MODEL_PATHS[id] : `/${assetManifest.models[id]}`;
+      const model = await withRetry(() => loader.loadAsync(modelPath));
+      const bounds = new THREE.Box3().setFromObject(model.scene);
+      const sourceHeight = bounds.getSize(new THREE.Vector3()).y;
+      if (companion && (!Number.isFinite(sourceHeight) || sourceHeight <= 0)) throw new MissingCompanionAssetError();
+      model.scene.position.y -= bounds.min.y;
+      const object = new THREE.Group();
+      object.scale.setScalar(options.targetHeight / sourceHeight);
+      object.add(model.scene);
+      const animations = [...model.animations];
+      if (companion) {
+        for (const descriptor of Object.values(COMPANION_ANIM_CLIPS)) {
+          const loaded = await withRetry(() => loader.loadAsync(descriptor.file));
+          const name = resolveClip([descriptor.clip], loaded.animations.map((clip) => clip.name));
+          const clip = name && loaded.animations.find((candidate) => candidate.name.toLowerCase() === name);
+          if (!clip || clip.tracks.length === 0) throw new MissingCompanionAssetError();
+          animations.push(clip);
+        }
+      }
+      return new Avatar(object, animations, options.idle);
+    } catch (error) {
+      if (!companion || error instanceof MissingCompanionAssetError) throw error;
+      throw new MissingCompanionAssetError();
+    }
   }
 
   get currentMotion(): AvatarMotion {

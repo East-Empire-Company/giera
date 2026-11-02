@@ -24,6 +24,8 @@
     "ciocia": "assets/models/characters/ciocia.glb",
     "playerOne": "assets/models/characters/ziemek.glb",
     "playerTwo": "assets/models/characters/gniewko.glb",
+    "ranger": "assets/models/kaykit/ranger.glb",
+    "mage": "assets/models/kaykit/mage.glb",
     "factoryConveyor": "assets/models/kenney-factory-kit/conveyor.glb",
     "factoryLongConveyor": "assets/models/kenney-factory-kit/conveyor-long.glb",
     "factoryMachine": "assets/models/kenney-factory-kit/machine.glb",
@@ -31,6 +33,10 @@
     "factoryScanner": "assets/models/kenney-factory-kit/scanner-low.glb",
     "factoryButton": "assets/models/kenney-factory-kit/button-floor-round.glb",
     "factoryGear": "assets/models/kenney-factory-kit/cog-a.glb"
+  },
+  "animations": {
+    "companionIdle": "assets/models/kaykit/anims/Rig_Medium_General.glb",
+    "companionWalk": "assets/models/kaykit/anims/Rig_Medium_MovementBasic.glb"
   },
   "concierge": {
     "iskra": "assets/models/characters/tata.glb"
