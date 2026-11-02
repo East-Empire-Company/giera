@@ -22,15 +22,41 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H desktop-fjvada8.tail5d39b4.ts.net >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Build Xbox MSIX on Windows desktop
+      - name: Sync repo + node_modules to Windows desktop
+        run: |
+          tar czf /tmp/giera-xbox-build.tar.gz \
+            --exclude='.git' --exclude='.ai' --exclude='tests' \
+            --exclude='public/assets/textures/pbr' --exclude='public/assets/models' \
+            --exclude='public/assets/audio' --exclude='public/videos' --exclude='public/assets/hdr' \
+            --exclude='platform/xbox-uwp-giera/AppPackages' \
+            --exclude='platform/xbox-uwp-giera/Assets/www' \
+            --exclude='platform/xbox-uwp-giera/bin' \
+            --exclude='platform/xbox-uwp-giera/obj' \
+            --exclude='node_modules/*-darwin-*' \
+            --exclude='node_modules/*-linux-*' \
+            --exclude='node_modules/@*/*-darwin-*' \
+            --exclude='node_modules/@*/*-linux-*' \
+            --exclude='coverage' --exclude='dist' \
+            package.json bun.lock tsconfig.json vite.config vitest.config \
+            node_modules/ src/ public/ platform/xbox-uwp-giera/ scripts/ server/ main.ts
+          scp /tmp/giera-xbox-build.tar.gz jakubsikora@desktop-fjvada8.tail5d39b4.ts.net:/tmp/giera-xbox-build.tar.gz
+          ssh -o StrictHostKeyChecking=accept-new jakubsikora@desktop-fjvada8.tail5d39b4.ts.net \
+            'powershell -Command "New-Item -ItemType Directory -Path C:\Users\jakubsikora\Repos\personal\giera -Force | Out-Null; tar -xzf /tmp/giera-xbox-build.tar.gz -C C:\Users\jakubsikora\Repos\personal\giera"'
+
+      - name: Build web app
         run: |
           ssh -o StrictHostKeyChecking=accept-new jakubsikora@desktop-fjvada8.tail5d39b4.ts.net \
-            'cd C:\Users\jakubsikora\Repos\personal\giera && git pull origin main && bun install --frozen-lockfile && bun run build && bun platform/xbox-uwp-giera/sync-web.ts --skip-build && powershell -ExecutionPolicy Bypass -File platform/xbox-uwp-giera/build-giera.ps1'
+            'powershell -Command "Set-Location C:\Users\jakubsikora\Repos\personal\giera; C:\Users\jakubsikora\.bun\bin\bun.exe run build; C:\Users\jakubsikora\.bun\bin\bun.exe platform/xbox-uwp-giera/sync-web.ts --skip-build"'
+
+      - name: Build Xbox MSIX
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new jakubsikora@desktop-fjvada8.tail5d39b4.ts.net \
+            'powershell -ExecutionPolicy Bypass -Command "Set-Location C:\Users\jakubsikora\Repos\personal\giera\platform\xbox-uwp-giera; .\build-giera.ps1"'
 
       - name: Fetch MSIX artifacts
         run: |
           mkdir -p artifacts
-          scp -r jakubsikora@desktop-fjvada8.tail5d39b4.ts.net:'C:/Users/jakubsikora/Repos/personal/giera/platform/xbox-uwp-giera/AppPackages/*.msix' artifacts/ 2>/dev/null || true
+          scp -r 'jakubsikora@desktop-fjvada8.tail5d39b4.ts.net:C:/Users/jakubsikora/Repos/personal/giera/platform/xbox-uwp-giera/AppPackages/*/Giera.Uwp_*.msix' artifacts/ 2>/dev/null || true
           ls -la artifacts/
 
       - uses: actions/upload-artifact@v4

@@ -1293,7 +1293,7 @@ async function boot(): Promise<void> {
       }
       const gb = (x: number, y: number, z: number): number => world.getBlock(x, y, z);
       const follow = (o: THREE.Object3D, x: number, y: number, z: number, grounded: boolean, damp: boolean): void => {
-        const target = grounded ? smoothGroundOffset(gb, x, z, y) : 0;
+        const target = grounded ? Math.max(-0.1, Math.min(0.5, smoothGroundOffset(gb, x, z, y))) : 0;
         const prev = (o.userData.groundOffset as number | undefined) ?? target;
         const next = prev + (target - prev) * Math.min(1, delta * 12);
         o.userData.groundOffset = next;
@@ -1371,7 +1371,7 @@ async function boot(): Promise<void> {
       for (const n of npcManager.npcs) {
         const o = n.avatar?.object;
         if (!o) continue;
-        const target = smoothGroundOffset(gb2, n.position.x, n.position.z, n.position.y);
+        const target = Math.max(-0.1, Math.min(0.5, smoothGroundOffset(gb2, n.position.x, n.position.z, n.position.y)));
         const prev = (o.userData.groundOffset as number | undefined) ?? target;
         const off = prev + (target - prev) * Math.min(1, delta * 12);
         o.userData.groundOffset = off;
