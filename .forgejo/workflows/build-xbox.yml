@@ -30,7 +30,7 @@ jobs:
       - name: Fetch MSIX artifacts
         run: |
           mkdir -p artifacts
-          scp -r jakubsikora@desktop-fjvada8.tail5d39b4.ts.net:'C:/Users/jakubsikora/Repos/personal/giera/platform/xbox-uwp-giera/Appackages/*.msix' artifacts/ 2>/dev/null || true
+          scp -r jakubsikora@desktop-fjvada8.tail5d39b4.ts.net:'C:/Users/jakubsikora/Repos/personal/giera/platform/xbox-uwp-giera/AppPackages/*.msix' artifacts/ 2>/dev/null || true
           ls -la artifacts/
 
       - uses: actions/upload-artifact@v4
