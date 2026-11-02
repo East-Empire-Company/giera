@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BLOCK_ID } from "../../src/shared/blocks";
-import { createHousePlan, placeHousePlan, type HouseWorld } from "../../src/client/game/house-builder";
+import { createHousePlan, type HouseWorld } from "../../src/shared/house-plan";
+import { placeHousePlan } from "../../src/client/game/house-builder";
 import { CHUNK_SIZE, chunkKey } from "../../src/shared/chunk";
 import { GameInventory, MAX_EDITS_PER_CHUNK } from "../../src/client/game/inventory";
 

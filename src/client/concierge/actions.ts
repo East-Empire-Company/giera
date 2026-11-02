@@ -1,6 +1,6 @@
 import { CONCIERGE_TOOLS, type ConciergeToolName } from "../../shared/concierge-tools";
 import { createBackup, readBackups, restoreBackup, clearProgress, summarize, type BackupSummary } from "./backups";
-import type { HouseArchetype } from "../game/house-builder";
+import type { HouseArchetype } from "../../shared/house-plan";
 
 export type ConciergeStatus = {
   started: boolean;
