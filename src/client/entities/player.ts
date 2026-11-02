@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { sweepAABB, type AABB } from "../../shared/physics";
+import type { AABB } from "../../shared/physics";
+import { stepActor } from "../../shared/actor-motion";
 import { Avatar, type AvatarClothing, type AvatarMotion } from "./avatar";
 import type { PlayerProfile } from "../../shared/lan-protocol";
 
@@ -140,80 +141,8 @@ export class PlayerController {
     world: (x: number, y: number, z: number) => boolean,
     moveInput: { forward: number; right: number; jump: boolean; sprint: boolean }
   ): void {
-    const speed = this.flying ? 4.3 : moveInput.sprint ? 5.6 : 4.3;
-    const cosPitch = Math.cos(this.pitch);
-    const forward = new THREE.Vector3(
-      -Math.sin(this.yaw) * cosPitch,
-      this.flying ? -Math.sin(this.pitch) : 0,
-      -Math.cos(this.yaw) * cosPitch
-    ).normalize();
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).normalize();
-
-    const wishDir = new THREE.Vector3();
-    wishDir.addScaledVector(forward, moveInput.forward);
-    wishDir.addScaledVector(right, moveInput.right);
-    if (this.flying) {
-      if (moveInput.jump) wishDir.y += 1;
-      if (moveInput.sprint) wishDir.y -= 1;
-    }
-    if (wishDir.lengthSq() > 0.001) wishDir.normalize();
-
-    if (this.flying) {
-      this.velocity.copy(wishDir).multiplyScalar(speed);
-    } else if (this.onGround) {
-      this.velocity.x = wishDir.x * speed;
-      this.velocity.z = wishDir.z * speed;
-      this.velocity.y = -1.0;
-      if (moveInput.jump) {
-        this.velocity.y = Math.sqrt(2 * GRAVITY * this.jumpHeight);
-        this.onGround = false;
-      }
-    } else {
-      this.velocity.x += wishDir.x * speed * 0.3 * delta;
-      this.velocity.z += wishDir.z * speed * 0.3 * delta;
-      this.velocity.y -= GRAVITY * delta;
-    }
-
-    const box = this.getBoundingBox();
-    const movement = {
-      x: this.velocity.x * delta,
-      y: this.velocity.y * delta,
-      z: this.velocity.z * delta,
-    };
-    let result = sweepAABB(world, box, movement);
-    if (this.onGround && (result.hitAxis === "x" || result.hitAxis === "z")) {
-      const stepBox = { ...box, minY: box.minY + 1, maxY: box.maxY + 1 };
-      movement.y = 0;
-      const stepped = sweepAABB(world, stepBox, movement);
-      const directX = result.position.x - box.minX;
-      const directZ = result.position.z - box.minZ;
-      const steppedX = stepped.position.x - box.minX;
-      const steppedZ = stepped.position.z - box.minZ;
-      if (steppedX * steppedX + steppedZ * steppedZ > directX * directX + directZ * directZ + 1e-4) {
-        const offsetX = stepped.position.x - stepBox.minX;
-        const offsetZ = stepped.position.z - stepBox.minZ;
-        stepBox.minX += offsetX;
-        stepBox.maxX += offsetX;
-        stepBox.minZ += offsetZ;
-        stepBox.maxZ += offsetZ;
-        movement.x = 0;
-        movement.y = -1;
-        movement.z = 0;
-        result = sweepAABB(world, stepBox, movement);
-      }
-    }
-
-    this.position.x = result.position.x + 0.3;
-    this.position.y = result.position.y;
-    this.position.z = result.position.z + 0.3;
-    const wasAirborne = !this.onGround;
-    const impactSpeed = -this.velocity.y;
-    this.onGround = this.flying ? false : result.onGround;
-    if (wasAirborne && this.onGround && impactSpeed > 6) this.avatar?.playOnce("land");
-
-    if (result.hitAxis === "y") this.velocity.y = 0;
-    if (result.hitAxis === "x") this.velocity.x = 0;
-    if (result.hitAxis === "z") this.velocity.z = 0;
+    const { landed, impactSpeed } = stepActor(world, this, moveInput, delta);
+    if (landed && impactSpeed > 6) this.avatar?.playOnce("land");
 
     if (this.position.y < -20) {
       this.position.set(this.spawn[0], this.spawn[1], this.spawn[2]);

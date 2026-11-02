@@ -405,3 +405,24 @@ describe("terrain shadow casters follow the players", () => {
     world.dispose();
   });
 });
+describe("worldRenderer loaded cells", () => {
+  it("distinguishes loaded chunk cells from generated fallback cells", () => {
+    const world = new WorldRenderer({
+      scene: new THREE.Scene(),
+      seed: 1234,
+      atlasTexture: new THREE.Texture(),
+      atlasNormal: new THREE.Texture(),
+      atlasOrm: new THREE.Texture(),
+      waterNormal: new THREE.Texture(),
+      workerCount: 1,
+    });
+
+    expect(world.isLoadedCell(0, 0, 0)).toBe(false);
+    world.getBlock(0, 0, 0);
+    expect(world.isLoadedCell(0, 0, 0)).toBe(false);
+    world.setBlock(-1, 0, -1, BLOCK_ID.stone);
+    expect(world.isLoadedCell(-1, 0, -1)).toBe(true);
+    expect(world.isLoadedCell(0, 0, 0)).toBe(false);
+    world.dispose();
+  });
+});

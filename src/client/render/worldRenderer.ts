@@ -442,6 +442,9 @@ export class WorldRenderer {
   get loadedChunkCount(): number {
     return this.chunks.size;
   }
+  isLoadedCell(x: number, y: number, z: number): boolean {
+    return this.chunks.has(chunkKey(Math.floor(x / CHUNK_SIZE), Math.floor(y / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE)));
+  }
 
   getTileMaterial(tileName: string): THREE.Material | undefined {
     const tile = atlasManifest.tiles[tileName as keyof typeof atlasManifest.tiles];
