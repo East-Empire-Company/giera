@@ -29,9 +29,10 @@ function makeController(overrides: {
   const onHost = overrides.onHost ?? vi.fn<(roomName: string, seed: number) => Promise<boolean>>().mockResolvedValue(true);
   const onJoin = overrides.onJoin ?? vi.fn<(url: string, room: string) => Promise<boolean>>().mockResolvedValue(true);
   const onScan = overrides.onScan ?? vi.fn<() => Promise<LanServerSummary[]>>().mockResolvedValue(FAKE_SERVERS);
+  const onLeave = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
   const onClose = overrides.onClose ?? vi.fn<() => void>();
-  const controller = new LanMenuController({ root, onHost, onJoin, onScan, onClose });
-  return { controller, root, fns: { onHost, onJoin, onScan, onClose } };
+  const controller = new LanMenuController({ root, onHost, onJoin, onScan, onLeave, onClose });
+  return { controller, root, fns: { onHost, onJoin, onScan, onLeave, onClose } };
 }
 
 describe("LanMenuController", () => {
@@ -98,19 +99,33 @@ describe("LanMenuController", () => {
       expect(fns.onJoin).toHaveBeenCalledWith("ws://127.0.0.1:8791/ws", "DOM1");
     });
   });
-  it("does not let a pending scan overwrite manual connection status", async () => {
+  it("shows the leave view after a manual connection and a pending scan cannot replace it", async () => {
     let finishScan!: (servers: LanServerSummary[]) => void;
     const onScan = vi.fn(() => new Promise<LanServerSummary[]>((resolve) => { finishScan = resolve; }));
-    const { controller, root } = makeController({ onScan });
+    const { controller, root, fns } = makeController({ onScan });
     controller.openMenu();
     root.querySelectorAll("button")[1].click();
     const urlInput = root.querySelector("#lan-manual-url") as HTMLInputElement;
     urlInput.value = "ws://127.0.0.1:8791/ws";
     (Array.from(root.querySelectorAll("button")).find((button) => button.textContent === "✅ Połącz") as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(root.querySelector("#lan-status")?.textContent).toBe("Połączono"));
+    await vi.waitFor(() => expect(Array.from(root.querySelectorAll("button")).some((b) => b.textContent === "🚪 Opuść pokój")));
+    expect(fns.onJoin).toHaveBeenCalledWith("ws://127.0.0.1:8791/ws", expect.any(String));
     finishScan([]);
     await Promise.resolve();
-    expect(root.querySelector("#lan-status")?.textContent).toBe("Połączono");
+    expect(Array.from(root.querySelectorAll("button")).some((b) => b.textContent === "🚪 Opuść pokój")).toBe(true);
+  });
+
+  it("leave view returns to the choice view after a confirmed leave", async () => {
+    const { controller, root, fns } = makeController();
+    controller.openMenu();
+    root.querySelectorAll("button")[1].click();
+    const urlInput = root.querySelector("#lan-manual-url") as HTMLInputElement;
+    urlInput.value = "ws://127.0.0.1:8791/ws";
+    (Array.from(root.querySelectorAll("button")).find((button) => button.textContent === "✅ Połącz") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(Array.from(root.querySelectorAll("button")).some((b) => b.textContent === "🚪 Opuść pokój")));
+    (Array.from(root.querySelectorAll("button")).find((button) => button.textContent === "🚪 Opuść pokój") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(fns.onLeave).toHaveBeenCalled());
+    expect(Array.from(root.querySelectorAll("button")).some((b) => b.textContent === "🏠 Załóż nową grę")).toBe(true);
   });
 
   it("close hides the panel and calls onClose", () => {

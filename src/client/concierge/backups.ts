@@ -1,3 +1,4 @@
+import { OFFLINE_SAVE_KEY, getActiveSaveKey } from "../game/save-session";
 import { loadGameState, saveGameState, clearGameState, type SavedGameState } from "../persist/db";
 
 export type BackupEntry = { id: string; label: string; createdAt: string; state: SavedGameState };
@@ -28,20 +29,27 @@ const isEntry = (value: unknown): value is BackupEntry => {
   );
 };
 
-export function readBackups(storage: BackupStorage | null = defaultStorage()): BackupEntry[] {
+export function readBackups(
+  storage: BackupStorage | null = defaultStorage(),
+  saveKey: string = getActiveSaveKey(),
+): BackupEntry[] {
   if (!storage) return [];
   try {
-    const parsed: unknown = JSON.parse(storage.getItem(STORAGE_KEY) ?? "[]");
+    const parsed: unknown = JSON.parse(storage.getItem(backupStorageKey(saveKey)) ?? "[]");
     return Array.isArray(parsed) ? parsed.filter(isEntry) : [];
   } catch {
     return [];
   }
 }
 
-function writeBackups(entries: BackupEntry[], storage: BackupStorage | null): void {
+export function backupStorageKey(saveKey: string = getActiveSaveKey()): string {
+  return saveKey === OFFLINE_SAVE_KEY ? STORAGE_KEY : `${STORAGE_KEY}:${saveKey}`;
+}
+
+function writeBackups(entries: BackupEntry[], storage: BackupStorage | null, saveKey: string): void {
   if (!storage) return;
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_BACKUPS)));
+    storage.setItem(backupStorageKey(saveKey), JSON.stringify(entries.slice(0, MAX_BACKUPS)));
   } catch {
     // Storage full or blocked: the backup is optional, the game keeps running.
   }
@@ -55,8 +63,9 @@ export async function createBackup(
   label: string,
   now: Date = new Date(),
   storage: BackupStorage | null = defaultStorage(),
+  saveKey: string = getActiveSaveKey(),
 ): Promise<BackupSummary | null> {
-  const state = await loadGameState();
+  const state = await loadGameState(saveKey);
   if (!state) return null;
   const createdAt = now.toISOString();
   const entry: BackupEntry = {
@@ -65,17 +74,20 @@ export async function createBackup(
     createdAt,
     state,
   };
-  writeBackups([entry, ...readBackups(storage)], storage);
+  writeBackups([entry, ...readBackups(storage, saveKey)], storage, saveKey);
   return summarize(entry);
 }
 
-export async function restoreBackup(id: string, storage: BackupStorage | null = defaultStorage()): Promise<boolean> {
-  const entry = readBackups(storage).find((candidate) => candidate.id === id);
+export async function restoreBackup(
+  id: string,
+  storage: BackupStorage | null = defaultStorage(),
+  saveKey: string = getActiveSaveKey(),
+): Promise<boolean> {
+  const entry = readBackups(storage, saveKey).find((candidate) => candidate.id === id);
   if (!entry) return false;
-  await saveGameState(entry.state);
-  return true;
+  return saveGameState(entry.state, saveKey);
 }
 
-export async function clearProgress(): Promise<void> {
-  await clearGameState();
+export async function clearProgress(saveKey: string = getActiveSaveKey()): Promise<void> {
+  await clearGameState(saveKey);
 }

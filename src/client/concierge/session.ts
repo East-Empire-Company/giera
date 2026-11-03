@@ -2,6 +2,7 @@ import { Conversation, type Conversation as ConversationHandle } from "@elevenla
 import { createConciergeTools, type ConciergeHost, type ConciergeToolHandler } from "./actions";
 import { ConciergeAvatar, type ConciergeAvatarState } from "./avatar";
 import { MIC_ERROR_MESSAGES, classifyMicError, type MicErrorCode } from "../../shared/mic-errors";
+import type { SpeechService } from "../audio/speech";
 
 export type ConciergeMenu = "launch" | "pause";
 export type ConciergePhase = "closed" | "connecting" | "live" | "failed";
@@ -11,9 +12,9 @@ export const CONNECT_TIMEOUT_MS = 12_000;
 
 const STATUS_TEXT: Record<ConciergePhase, string> = {
   closed: "",
-  connecting: "Iskra się budzi…",
-  live: "Mów do Iskry.",
-  failed: "Iskra nie może się teraz połączyć.",
+  connecting: "Tata się budzi…",
+  live: "Mów do Taty.",
+  failed: "Tata nie może się teraz połączyć.",
 };
 
 export type MicProbeResult = { ok: boolean; code: MicErrorCode | null };
@@ -25,6 +26,7 @@ export type ConciergeSessionOptions = {
   statusEl: HTMLElement;
   slots: Record<ConciergeMenu, HTMLElement>;
   retryEl?: HTMLElement | null;
+  speech?: SpeechService;
   fetchSignedUrl?: () => Promise<string>;
   connectTimeoutMs?: number;
   probeMicrophone?: () => Promise<MicProbeResult>;
@@ -40,6 +42,7 @@ export class ConciergeSession {
   private generation = 0;
   private connectTimer: number | null = null;
   private speechVolume = 1;
+  private streamEntry: { id: number; ready: boolean; generation: number } | null = null;
   private readonly avatar: ConciergeAvatar;
   private readonly tools: Record<string, ConciergeToolHandler>;
 
@@ -81,6 +84,7 @@ export class ConciergeSession {
     this.menu = null;
     this.generation += 1;
     this.clearConnectTimeout();
+    this.endStreamEntry(reason === "error" || reason === "disconnect");
     this.avatar.setAudioSource(null);
     const keepFailedPanel = reason === "error" || reason === "disconnect";
     if (keepFailedPanel) {
@@ -155,7 +159,11 @@ export class ConciergeSession {
       const firstMessage =
         this.menu === "pause"
           ? "No co tam, ziomy"
-          : "Siema, kapuchy. Jestem Iskra, dawaj do gry";
+          : "Siema, kapuchy. Jestem Tata, dawaj do gry";
+      if (this.options.speech && !this.streamEntry) {
+        const { id } = this.options.speech.request({ kind: "stream", speakerId: "tata" });
+        this.streamEntry = { id, ready: false, generation };
+      }
       const conversation = await Conversation.startSession({
         signedUrl,
         connectionType: "websocket",
@@ -164,6 +172,13 @@ export class ConciergeSession {
           agent: {
             firstMessage,
           },
+        },
+        onAudio: () => {
+          if (this.isStale(generation)) return;
+          const entry = this.streamEntry;
+          if (!entry || entry.generation !== generation || entry.ready) return;
+          entry.ready = true;
+          this.options.speech?.streamReady(entry.id);
         },
         onConnect: () => {
           if (this.isStale(generation)) return;
@@ -263,6 +278,13 @@ export class ConciergeSession {
 
   private isStale(generation: number): boolean {
     return generation !== this.generation || this.menu === null;
+  }
+
+  private endStreamEntry(failed: boolean): void {
+    const entry = this.streamEntry;
+    this.streamEntry = null;
+    if (!entry) return;
+    this.options.speech?.endStream(entry.id, failed);
   }
 
   private armConnectTimeout(generation: number): void {

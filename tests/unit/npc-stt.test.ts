@@ -77,7 +77,7 @@ describe("handleNpcStt", () => {
 
   it("forwards the recording to the ElevenLabs speech-to-text endpoint", async () => {
     const { calls, fetchFn } = jsonFetch({ text: "ok" });
-    const res = await handleNpcStt(sttRequest(voiceForm()), { apiKey: "k", fetchFn });
+    const res = await handleNpcStt(sttRequest(voiceForm()), { apiKey: "k", fetchFn, clientIp: "peer-a" });
     expect(res.status).toBe(200);
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe("https://api.elevenlabs.io/v1/speech-to-text");
@@ -128,5 +128,70 @@ describe("handleNpcStt", () => {
     const res = await handleNpcStt(sttRequest(voiceForm()), { apiKey: "k", fetchFn });
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "stt_upstream_unreachable" });
+  });
+  it("uses the injected peer address instead of forwarded headers", async () => {
+    const { fetchFn } = jsonFetch({ text: "ok" });
+    let limited = 0;
+    for (let i = 0; i < 21; i++) {
+      const response = await handleNpcStt(sttRequest(voiceForm(), `spoof-${i}`), {
+        apiKey: "k",
+        fetchFn,
+        clientIp: "real-peer",
+      });
+      if (response.status === 429) limited++;
+    }
+    expect(limited).toBe(1);
+
+    const otherPeer = await handleNpcStt(sttRequest(voiceForm(), "spoof-20"), {
+      apiKey: "k",
+      fetchFn,
+      clientIp: "other-real-peer",
+    });
+    expect(otherPeer.status).toBe(200);
+  });
+
+  it("limits all peers to 60 requests per minute", async () => {
+    const { calls, fetchFn } = jsonFetch({ text: "ok" });
+    for (let i = 0; i < 60; i++) {
+      const response = await handleNpcStt(sttRequest(voiceForm()), {
+        apiKey: "k",
+        fetchFn,
+        clientIp: `peer-${i}`,
+      });
+      expect(response.status).toBe(200);
+    }
+    const limited = await handleNpcStt(sttRequest(voiceForm()), {
+      apiKey: "k",
+      fetchFn,
+      clientIp: "peer-60",
+    });
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toEqual({ error: "stt_rate_limited" });
+    expect(calls).toHaveLength(60);
+  });
+
+  it("rejects oversized chunked multipart requests before parsing them", async () => {
+    const { calls, fetchFn } = jsonFetch({ text: "ok" });
+    const chunk = new Uint8Array(10 * 1024 * 1024 + 64 * 1024 + 1);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    const req = new Request("http://x/npc/stt", {
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=x" },
+      body,
+      duplex: "half",
+    } as RequestInit);
+    const response = await handleNpcStt(req, {
+      apiKey: "k",
+      fetchFn,
+      clientIp: "chunked-peer",
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "stt_file_too_large" });
+    expect(calls).toHaveLength(0);
   });
 });

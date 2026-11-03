@@ -1,3 +1,7 @@
+import type { CompanionAnim, CompanionProfileId } from "./companion";
+
+export type { CompanionAnim, CompanionProfileId };
+
 export const MAX_PLAYER_SPEED = 12; // horizontal blocks per second limit
 export const MAX_PLAYER_VERTICAL_SPEED = 48; // vertical blocks per second limit (covers free-fall from ~60 blocks)
 
@@ -24,18 +28,80 @@ export type PlayerState = {
 export const DEFAULT_LAN_PORT = 8080;
 export const MAX_ROOM_NAME_LENGTH = 32;
 
+export type CompanionState = {
+  id: string;
+  profile: CompanionProfileId;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  anim: CompanionAnim;
+};
+
+export type BuildBlock = { x: number; y: number; z: number; id: number };
+export type BuildTask = "follow" | "scout" | "build" | "stop";
+export type CompanionTaskLine = { line: string; text: string; evidence?: { block: string; x: number; y: number; z: number } };
+
+export const COMPANION_TASKS: readonly BuildTask[] = ["follow", "scout", "build", "stop"];
+export const COMPANION_ANIMS: readonly CompanionAnim[] = ["idle", "walk", "jump", "mine"];
+
+export type BuildPreviewInfo = {
+  planId: string;
+  requestedBy: string;
+  blocks: BuildBlock[];
+  reserved: boolean;
+  placed: number[];
+};
+
 export type ClientMessage =
   | { t: "hello"; name: string; room: string; roomName?: string; host?: boolean; profile?: PlayerProfile; seed?: number }
   | { t: "need"; cx: number; cy: number; cz: number }
   | { t: "block"; x: number; y: number; z: number; id: number }
-  | { t: "input"; seq: number; x: number; y: number; z: number; yaw: number; pitch: number; anim: string };
+  | { t: "input"; seq: number; x: number; y: number; z: number; yaw: number; pitch: number; anim: string }
+  | { t: "companion_spawn"; profile: CompanionProfileId }
+  | { t: "companion_state"; companion: CompanionState }
+  | { t: "companion_remove"; id: string }
+  | { t: "companion_command"; task: Exclude<BuildTask, "stop">; expectedGeneration: number }
+  | { t: "companion_stop" }
+  | { t: "companion_place"; id: string; planId: string; blockIndex: number }
+  | { t: "companion_say"; id: string; line: string; evidence?: { block: string; x: number; y: number; z: number } }
+  | { t: "build_preview"; requestId: string; expectedGeneration: number }
+  | { t: "build_confirm"; planId: string }
+  | { t: "room_sync_start" }
+  | { t: "room_sync_ack"; syncId: string; index: number }
+  | { t: "room_sync_abort"; syncId: string };
 
 export type ServerMessage =
-  | { t: "welcome"; id: string; seed: number; spawn: [number, number, number]; slot: number; players: PlayerState[]; roomName: string; profile: PlayerProfile }
+  | {
+      t: "welcome";
+      id: string;
+      seed: number;
+      spawn: [number, number, number];
+      slot: number;
+      players: PlayerState[];
+      roomName: string;
+      profile: PlayerProfile;
+      ownerId: string | null;
+      companion: CompanionState | null;
+      generation: number;
+      buildPreview: BuildPreviewInfo | null;
+    }
   | { t: "block"; x: number; y: number; z: number; id: number; by: string }
   | { t: "player"; id: string; name: string; profile: PlayerProfile; x: number; y: number; z: number; yaw: number; pitch: number; anim: string }
   | { t: "join"; id: string; name: string; profile: PlayerProfile; slot: number }
-  | { t: "leave"; id: string };
+  | { t: "leave"; id: string }
+  | { t: "companion_state"; companion: CompanionState; generation: number }
+  | { t: "companion_remove"; id: string }
+  | { t: "companion_command"; task: BuildTask; by: string; generation: number }
+  | { t: "owner_changed"; ownerId: string | null }
+  | { t: "companion_error"; message: string; generation: number }
+  | { t: "companion_say"; id: string; line: string; evidence?: { block: string; x: number; y: number; z: number } }
+  | { t: "build_preview"; requestId: string; planId: string; blocks: BuildBlock[] }
+  | { t: "build_reserved"; planId: string; blocks: BuildBlock[] }
+  | { t: "build_cancelled"; planId: string; reason: string }
+  | { t: "room_sync_begin"; syncId: string }
+  | { t: "room_sync_page"; syncId: string; index: number; edits: BuildBlock[] }
+  | { t: "room_sync_end"; syncId: string };
 
 export type LanRoomSummary = {
   code: string;

@@ -69,7 +69,7 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (url === "/npc/tts") {
+      if (url === "/speech/tts") {
         ttsCalls++;
         return ttsOk ? new Response(new Uint8Array([1])) : new Response("x", { status: 502 });
       }
@@ -86,45 +86,73 @@ async function readyManager(): Promise<AudioManager> {
   return manager;
 }
 
-describe("AudioManager.speak", () => {
+describe("AudioManager speech", () => {
   it("plays the synthesized line at the distance-scaled volume and ducks the music under it", async () => {
     const manager = await readyManager();
-    await manager.speak("tata", "Cześć!", 0.6);
+    const pending = manager.speech.request({ kind: "text", speakerId: "tata", text: "Cześć!", volume: 0.6 });
+    await vi.waitFor(() => expect(sources.length).toBe(2));
     const voice = sources[1];
     expect(voice.starts).toEqual([10]);
     const voiceGain = gains[gains.length - 1];
     expect(voiceGain.gain.value).toBeCloseTo(0.6);
     const musicGain = gains.find((g) => g.gain.ramps.some(([v]) => v === 0.075));
     expect(musicGain).toBeDefined();
+    voice.onended?.();
+    const result = await pending.done;
+    expect(result).toMatchObject({ backend: "elevenlabs" });
   });
 
   it("queues overlapping lines instead of talking over each other", async () => {
     const manager = await readyManager();
-    await manager.speak("tata", "Pierwsza linia", 1);
-    await manager.speak("mama", "Druga linia", 1);
-    const [first, second] = sources.slice(1);
+    const firstLine = manager.speech.request({ kind: "text", speakerId: "tata", text: "Pierwsza linia", volume: 1 });
+    const secondLine = manager.speech.request({ kind: "text", speakerId: "mama", text: "Druga linia", volume: 1 });
+    await vi.waitFor(() => expect(sources.length).toBe(2));
+    const first = sources[1];
+    first.onended?.();
+    await vi.waitFor(() => expect(sources.length).toBe(3));
+    const second = sources[2];
     expect(second.starts[0]).toBeGreaterThanOrEqual(first.starts[0] + 2);
+    second.onended?.();
+    expect((await firstLine.done)).toMatchObject({ backend: "elevenlabs" });
+    expect((await secondLine.done)).toMatchObject({ backend: "elevenlabs" });
   });
 
   it("does not request audio for NPCs that are too far away", async () => {
     const manager = await readyManager();
-    await manager.speak("tata", "Za daleko", 0.02);
+    const pending = manager.speech.request({ kind: "text", speakerId: "tata", text: "Za daleko", volume: 0.02 });
+    expect((await pending.done)).toMatchObject({ reason: "suppressed" });
     expect(ttsCalls).toBe(0);
   });
 
   it("falls back to the browser voice in Polish when synthesis fails", async () => {
     ttsOk = false;
-    const spoken: { text: string; lang: string }[] = [];
-    vi.stubGlobal("SpeechSynthesisUtterance", class { lang = ""; volume = 1; voice: unknown = null; constructor(public text: string) {} });
-    vi.stubGlobal("speechSynthesis", { getVoices: () => [], speak: (u: { text: string; lang: string }) => spoken.push({ text: u.text, lang: u.lang }) });
+    const spoken: { text: string; lang: string; onend: (() => void) | null }[] = [];
+    vi.stubGlobal("SpeechSynthesisUtterance", class {
+      lang = "";
+      volume = 1;
+      voice: unknown = null;
+      onend: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public text: string) {}
+    });
+    vi.stubGlobal("speechSynthesis", {
+      getVoices: () => [],
+      speak: (u: { text: string; lang: string; onend: (() => void) | null }) => {
+        spoken.push({ text: u.text, lang: u.lang, onend: u.onend });
+      },
+    });
     const manager = await readyManager();
-    await manager.speak("ciocia", "Zabawa!", 1);
-    expect(spoken).toEqual([{ text: "Zabawa!", lang: "pl-PL" }]);
+    const pending = manager.speech.request({ kind: "text", speakerId: "ciocia", text: "Zabawa!", volume: 1 });
+    await vi.waitFor(() => expect(spoken.length).toBe(1));
+    expect(spoken[0]).toMatchObject({ text: "Zabawa!", lang: "pl-PL" });
+    spoken[0].onend?.();
+    expect((await pending.done)).toMatchObject({ backend: "browser", text: "Zabawa!" });
   });
 
   it("stays silent until the audio context has been allowed to run", async () => {
     const manager = new AudioManager();
-    await manager.speak("tata", "Hej", 1);
+    const pending = manager.speech.request({ kind: "text", speakerId: "tata", text: "Hej", volume: 1 });
+    expect((await pending.done)).toMatchObject({ reason: "suppressed" });
     expect(ttsCalls).toBe(0);
   });
 });
@@ -142,7 +170,10 @@ describe("AudioManager.playPlaylist", () => {
     expect(manager.setMusicVolume(0.35)).toBeCloseTo(0.35);
     expect(manager.setSpeechVolume(0.6)).toBeCloseTo(0.6);
     await manager.playPlaylist();
-    await manager.speak("tata", "Cześć!", 1);
+    const pending = manager.speech.request({ kind: "text", speakerId: "tata", text: "Cześć!", volume: 1 });
+    await vi.waitFor(() => expect(sources.length).toBe(2));
+    sources[1].onended?.();
+    await pending.done;
 
     expect(gains[0].gain.value).toBeCloseTo(0.8);
     expect(gains[1].gain.value).toBeCloseTo(0.35);

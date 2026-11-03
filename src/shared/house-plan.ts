@@ -43,13 +43,15 @@ export function createHousePlan(
   const wallId = style === "wood" ? BLOCK_ID.planks : BLOCK_ID.stone;
   const cornerId = style === "wood" ? BLOCK_ID.oak_log : BLOCK_ID.cobblestone;
   const roofId = style === "wood" ? BLOCK_ID.oak_log : BLOCK_ID.cobblestone;
-  const offsets = [0, -4, 4, -8, 8];
+  const offsets = [0, -4, 4, -8, 8, -12, 12];
   const start = Math.floor(rng() * offsets.length);
   const halfWidth = Math.floor(width / 2);
   const halfDepth = Math.floor(depth / 2);
-  const radius = Math.hypot(width, depth) * 0.5;
 
-  for (let distance = 7; distance <= 11; distance += 2) {
+  const radius = Math.max(halfWidth, halfDepth);
+  const playerFootY = world.surfaceColumnTop(Math.round(player.x), Math.round(player.z)) + 1;
+
+  for (let distance = 7; distance <= 17; distance += 2) {
     for (let candidate = 0; candidate < offsets.length; candidate++) {
       const side = offsets[(candidate + start) % offsets.length];
       const centerX = Math.round(player.x + forwardX * distance + sideX * side);
@@ -75,6 +77,7 @@ export function createHousePlan(
         if (!flat) break;
       }
       if (!flat || floorY - lowestY > 1 || floorY + wallHeight + roofLayers >= WORLD_HEIGHT) continue;
+      if (!Number.isFinite(playerFootY) || Math.abs(floorY - playerFootY) > 4) continue;
 
       const blocks: HousePlan["blocks"] = [];
       const add = (column: number, y: number, row: number, id: BlockId): void => {

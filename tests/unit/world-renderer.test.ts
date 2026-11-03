@@ -5,7 +5,7 @@ import { createChunkMeshObject, createMergedTileMaterial, createTileMaterials, s
 import atlasManifest from "../../src/shared/atlas-manifest.json";
 import { BLOCK_ID } from "../../src/shared/blocks";
 import { TERRAIN_MATERIAL } from "../../src/shared/terrain-materials";
-import { MAX_GENERATED_BLOCK_Y, surfaceHeight } from "../../src/shared/worldgen";
+import { generateBlock, MAX_GENERATED_BLOCK_Y, surfaceHeight } from "../../src/shared/worldgen";
 
 describe("merged atlas shader", () => {
   it("binds every atlas rectangle before shader compilation", () => {
@@ -140,6 +140,17 @@ describe("worldRenderer edit ledger", () => {
     world.applySavedEdits({ seed: 1234, edits: { "4,5,6": 10 } });
     expect(world.getBlock(4, 5, 6)).toBe(10);
     expect(world.exportEdits()).toEqual({ "0,0,0": 9, "4,5,6": 10 });
+    world.dispose();
+  });
+
+  it("clears room edits and restores generated terrain", () => {
+    const world = buildWorld();
+    world.setBlock(1, 2, 3, 9);
+    world.setBlock(-2, 4, 5, BLOCK_ID.air);
+    world.clearEdits();
+    expect(world.exportEdits()).toEqual({});
+    expect(world.getBlock(1, 2, 3)).toBe(generateBlock(1, 2, 3, 1234));
+    expect(world.getBlock(-2, 4, 5)).toBe(generateBlock(-2, 4, 5, 1234));
     world.dispose();
   });
 

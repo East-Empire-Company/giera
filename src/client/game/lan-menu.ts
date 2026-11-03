@@ -4,6 +4,7 @@ export type LanMenuCallbacks = {
   onHost: (roomName: string, seed: number) => Promise<boolean>;
   onJoin: (url: string, room: string) => Promise<boolean>;
   onScan: () => Promise<LanServerSummary[]>;
+  onLeave: () => Promise<boolean>;
   onClose: () => void;
 };
 
@@ -19,6 +20,7 @@ export class LanMenuController {
       onHost: options.onHost,
       onJoin: options.onJoin,
       onScan: options.onScan,
+      onLeave: options.onLeave,
       onClose: options.onClose,
     };
   }
@@ -106,7 +108,7 @@ export class LanMenuController {
       const seed = this.readLocalSeed();
       const ok = await this.callbacks.onHost(roomName, seed);
       if (ok) {
-        this.setStatus("Połączono! Pokój utworzony.");
+        this.showLeave(roomName);
       } else {
         this.setStatus("Nie udało się utworzyć pokoju.");
       }
@@ -128,9 +130,51 @@ export class LanMenuController {
     this.root.appendChild(card);
   }
 
-  showJoin(): void {
+  showLeave(roomLabel: string): void {
     this.root.innerHTML = "";
 
+    const card = document.createElement("div");
+    card.className = "lan-panel-card";
+
+    const title = document.createElement("div");
+    title.className = "lan-panel-title";
+    title.textContent = `Połączono z pokojem ${roomLabel}`;
+    card.appendChild(title);
+
+    const status = document.createElement("div");
+    status.className = "lan-status";
+    status.id = "lan-status";
+    card.appendChild(status);
+
+    const leaveBtn = document.createElement("button");
+    leaveBtn.type = "button";
+    leaveBtn.className = "launch-mode";
+    leaveBtn.textContent = "🚪 Opuść pokój";
+    leaveBtn.addEventListener("click", async () => {
+      this.setStatus("Zapisywanie i wychodzenie...");
+      leaveBtn.setAttribute("disabled", "true");
+      const ok = await this.callbacks.onLeave();
+      if (ok) {
+        this.showChoice();
+      } else {
+        leaveBtn.removeAttribute("disabled");
+        this.setStatus("Nie udało się zapisać — zostań w pokoju i spróbuj ponownie.");
+      }
+    });
+    card.appendChild(leaveBtn);
+
+    const backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.className = "launch-mode";
+    backBtn.textContent = "← Wróć";
+    backBtn.addEventListener("click", () => this.showChoice());
+    card.appendChild(backBtn);
+
+    this.root.appendChild(card);
+  }
+
+  showJoin(): void {
+    this.root.innerHTML = "";
     const card = document.createElement("div");
     card.className = "lan-panel-card";
 
@@ -190,7 +234,7 @@ export class LanMenuController {
       this.setStatus("Łączenie...");
       const ok = await this.callbacks.onJoin(url, room);
       if (ok) {
-        this.setStatus("Połączono");
+        this.showLeave(room);
       } else {
         this.setStatus("Nie udało się połączyć.");
       }
@@ -242,7 +286,7 @@ export class LanMenuController {
           this.setStatus("Łączenie...");
           const ok = await this.callbacks.onJoin(url, room.code);
           if (ok) {
-            this.setStatus("Połączono");
+            this.showLeave(room.code);
           } else {
             this.setStatus("Nie udało się połączyć.");
           }

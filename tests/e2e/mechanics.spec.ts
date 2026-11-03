@@ -3,14 +3,44 @@ import { SPEC } from "../spec-constants";
 import { raycastInteract, type RayHit } from "../../src/shared/raycast";
 
 type Vec3 = { x: number; y: number; z: number; clone: () => Vec3; set: (x: number, y: number, z: number) => Vec3 };
+type Bounds3 = { min: Vec3; max: Vec3 };
+type GeometryAttribute = { count: number; getX: (index: number) => number; getY: (index: number) => number; getZ: (index: number) => number };
+type TerrainGeometry = {
+  index: GeometryAttribute | null;
+  boundingBox: Bounds3 | null;
+  getAttribute: (name: string) => GeometryAttribute | undefined;
+  computeBoundingBox: () => void;
+};
+type TerrainMesh = {
+  isMesh: true;
+  geometry: TerrainGeometry;
+  position: Vec3;
+  localToWorld: (point: Vec3) => Vec3;
+};
+type TerrainPoint = { x: number; y: number; z: number };
+type TerrainTriangle = {
+  a: TerrainPoint;
+  b: TerrainPoint;
+  c: TerrainPoint;
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+};
 type AvatarGeometry = {
-  attributes?: { position?: unknown };
-  boundingBox: { min: Vec3; max: Vec3 } | null;
+  attributes?: { position?: GeometryAttribute };
+  boundingBox: Bounds3 | null;
   computeBoundingBox: () => void;
 };
 type AvatarNode = {
   geometry?: AvatarGeometry;
   localToWorld: (point: Vec3) => Vec3;
+  getVertexPosition?: (index: number, target: Vec3) => Vec3;
+  isSkinnedMesh?: boolean;
+  position?: Vec3;
+  skeleton?: { update: () => void };
+  computeBoundingBox?: () => void;
+  boundingBox?: Bounds3 | null;
 };
 type AvatarObject = {
   position: Vec3;
@@ -23,9 +53,28 @@ type AvatarVisual = {
   requestedMotion?: string;
   currentClipName?: string;
   setMotion: (motion: "idle" | "walk") => void;
+  update: (deltaSeconds: number) => void;
 };
 
 type FlatSpot = { x: number; y: number; z: number };
+type GroundingPath = FlatSpot & { dx: number; dz: number; yaw: number; endY: number };
+type GroundingResult = {
+  startX: number;
+  startZ: number;
+  dx: number;
+  dz: number;
+  endX: number;
+  endZ: number;
+  groundedWalkingFrames: number;
+  nearGroundFrames: number;
+  minimumRootClearance: number;
+  maximumRootClearance: number;
+  maximumVisualOffset: number;
+  groundOffsetAtMinimum: number;
+  missingSurfaceSamples: number;
+  framesWithoutSurface: number;
+  minimumClearance: number;
+};
 type RegionBlock = { x: number; y: number; z: number; id: number };
 type CameraRay = {
   origin: { x: number; y: number; z: number };
@@ -41,7 +90,8 @@ type ArmedTarget = {
 
 type Giera = {
   ready: boolean;
-  scene: { traverse: (fn: (node: any) => void) => void };
+  scene: { traverse: (fn: (node: any) => void) => void; updateMatrixWorld: (force?: boolean) => void };
+  stats: { chunkCount: number };
   player: {
     characterProfile: "ziemek" | "gniewko";
     position: Vec3;
@@ -57,7 +107,9 @@ type Giera = {
     characterProfile: "ziemek" | "gniewko";
     position: Vec3;
     velocity: Vec3;
+    yaw: number;
     onGround: boolean;
+    syncAvatar: () => void;
     avatar?: AvatarVisual;
   };
   camera: {
@@ -169,6 +221,70 @@ async function findFlatSpots(page: Page): Promise<FlatSpot[]> {
     return spots;
   });
 }
+async function findUnevenWalkPaths(page: Page): Promise<GroundingPath[]> {
+  return page.evaluate(() => {
+    const g = (window as unknown as G).__GIERA__;
+    const terrainHeights = new Map<string, number>();
+    const surface = (x: number, z: number): number => {
+      const key = `${x}:${z}`;
+      const cached = terrainHeights.get(key);
+      if (cached !== undefined) return cached;
+      let height = -1;
+      for (let y = 63; y > 0; y--) {
+        if (g.world.getBlock(x, y, z) !== 0) {
+          height = y;
+          break;
+        }
+      }
+      terrainHeights.set(key, height);
+      return height;
+    };
+    const directions = [
+      { dx: 1, dz: 0, yaw: -Math.PI / 2 },
+      { dx: -1, dz: 0, yaw: Math.PI / 2 },
+      { dx: 0, dz: 1, yaw: Math.PI },
+      { dx: 0, dz: -1, yaw: 0 },
+    ];
+    const paths: GroundingPath[] = [];
+    for (let x = -40; x <= 40; x++) {
+      for (let z = -40; z <= 40; z++) {
+        for (const direction of directions) {
+          const heights = [0, 1, 2, 3, 4].map((step) =>
+            surface(x + direction.dx * step, z + direction.dz * step)
+          );
+          if (heights.some((height) => height < 0) || heights[0]! <= heights[4]!) continue;
+          if (heights.slice(1).some((height, index) => height > heights[index]! || heights[index]! - height > 1)) continue;
+          let clear = true;
+          for (let step = 0; step < 5 && clear; step++) {
+            const cellX = x + direction.dx * step;
+            const cellZ = z + direction.dz * step;
+            for (const side of [0, 1]) {
+              const openX = cellX + (direction.dx === 0 ? side : 0);
+              const openZ = cellZ + (direction.dz === 0 ? side : 0);
+              for (let y = heights[step]! + 1; y <= heights[step]! + 9; y++) {
+                if (g.world.getBlock(openX, y, openZ) !== 0) clear = false;
+              }
+            }
+          }
+          if (clear) {
+            paths.push({
+              x: x + 0.5,
+              y: heights[0]! + 1,
+              z: z + 0.5,
+              dx: direction.dx,
+              dz: direction.dz,
+              yaw: direction.yaw,
+              endY: heights[4]! + 1,
+            });
+          }
+        }
+      }
+    }
+    if (paths.length < 2) throw new Error("no separated downhill paths found");
+    return paths;
+  });
+}
+
 
 async function standAt(page: Page, spot: FlatSpot, yaw: number, pitch: number): Promise<void> {
   await page.evaluate(
@@ -372,6 +488,243 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(bounds.p2.bounds.height).toBeCloseTo(targetHeights[bounds.p2.profile], 2);
     for (const avatar of [bounds.p1.bounds, bounds.p2.bounds]) {
       expect(Math.abs(avatar.feetOffset)).toBeLessThan(0.1);
+    }
+  });
+  test("grounded walking heroes stay above rendered terrain on a seeded run", async ({ page }) => {
+    test.setTimeout(60_000);
+    await page.goto(`/?qa=1&qaLivePlayerPose=1&seed=${SPEC.seed}`);
+    await page.waitForFunction(() => {
+      const g = (window as unknown as G).__GIERA__;
+      return g?.ready && g.stats.chunkCount > 0 && g.player.avatar && g.player2.avatar;
+    }, null, { timeout: 30_000 });
+    await page.waitForFunction(() => ((window as unknown as G).__GIERA__?.qa?.frame ?? 0) > 60, null, { timeout: 20_000 });
+    await page.locator(".hud-mode-btn").click();
+    await expect(page.locator(".hud-mode-btn")).toHaveText(SPEC.splitLabelTwoPlayers);
+    const paths = await findUnevenWalkPaths(page);
+    let firstPath: GroundingPath | undefined;
+    let secondPath: GroundingPath | undefined;
+    let pairDistance = Number.POSITIVE_INFINITY;
+    for (const first of paths) {
+      for (const second of paths) {
+        const distance = Math.hypot(first.x - second.x, first.z - second.z);
+        if (distance > 5 && distance < pairDistance) {
+          firstPath = first;
+          secondPath = second;
+          pairDistance = distance;
+        }
+      }
+    }
+    if (!firstPath || !secondPath) throw new Error("no separated downhill paths found");
+    expect(firstPath.endY).toBeLessThan(firstPath.y);
+    expect(secondPath.endY).toBeLessThan(secondPath.y);
+    await page.evaluate(([first, second]) => {
+      const g = (window as unknown as G).__GIERA__;
+      const place = (
+        player: { position: Vec3; velocity: Vec3; yaw: number; onGround: boolean; syncAvatar: () => void },
+        spot: GroundingPath
+      ): void => {
+        player.position.set(spot.x, spot.y + 0.2, spot.z);
+        player.velocity.set(0, 0, 0);
+        player.yaw = spot.yaw;
+        player.onGround = false;
+        player.syncAvatar();
+      };
+      place(g.player, first);
+      place(g.player2, second);
+    }, [firstPath, secondPath] as [GroundingPath, GroundingPath]);
+    await page.waitForFunction(() => {
+      const g = (window as unknown as G).__GIERA__;
+      return g.player.onGround && g.player2.onGround;
+    }, null, { timeout: 10_000 });
+    const clearancesPromise = page.evaluate(([firstPath, secondPath]) => new Promise<GroundingResult[]>((resolve) => {
+      const paths = [firstPath, secondPath];
+      const g = (window as unknown as G).__GIERA__;
+      const players = [g.player, g.player2];
+      const startX = players.map((player) => player.position.x);
+      const startZ = players.map((player) => player.position.z);
+      const minX = Math.min(...paths.map((path) => Math.min(path.x, path.x + path.dx * 4))) - 2;
+      const maxX = Math.max(...paths.map((path) => Math.max(path.x, path.x + path.dx * 4))) + 2;
+      const minZ = Math.min(...paths.map((path) => Math.min(path.z, path.z + path.dz * 4))) - 2;
+      const maxZ = Math.max(...paths.map((path) => Math.max(path.z, path.z + path.dz * 4))) + 2;
+      const terrainMeshes: TerrainMesh[] = [];
+      g.scene.updateMatrixWorld(true);
+      g.scene.traverse((node: unknown) => {
+        if (!node || typeof node !== "object") return;
+        const candidate = node as Partial<TerrainMesh>;
+        if (candidate.isMesh === true && candidate.geometry?.index && candidate.geometry.getAttribute("aTileId") &&
+            candidate.position && candidate.localToWorld) terrainMeshes.push(candidate as TerrainMesh);
+      });
+      const triangles: TerrainTriangle[] = [];
+      for (const node of terrainMeshes) {
+        const geometry = node.geometry;
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        if (!box || node.position.x + box.max.x < minX || node.position.x + box.min.x > maxX ||
+            node.position.z + box.max.z < minZ || node.position.z + box.min.z > maxZ) continue;
+        const positions = geometry.getAttribute("position");
+        const normals = geometry.getAttribute("normal");
+        const indices = geometry.index;
+        if (!positions || !normals || !indices) continue;
+        for (let i = 0; i < indices.count; i += 3) {
+          const ia = indices.getX(i);
+          const ib = indices.getX(i + 1);
+          const ic = indices.getX(i + 2);
+          if ((normals.getY(ia) + normals.getY(ib) + normals.getY(ic)) / 3 < 0.6) continue;
+          const a = node.localToWorld(node.position.clone().set(positions.getX(ia), positions.getY(ia), positions.getZ(ia)));
+          const b = node.localToWorld(node.position.clone().set(positions.getX(ib), positions.getY(ib), positions.getZ(ib)));
+          const c = node.localToWorld(node.position.clone().set(positions.getX(ic), positions.getY(ic), positions.getZ(ic)));
+          const triangleMinX = Math.min(a.x, b.x, c.x);
+          const triangleMaxX = Math.max(a.x, b.x, c.x);
+          const triangleMinZ = Math.min(a.z, b.z, c.z);
+          const triangleMaxZ = Math.max(a.z, b.z, c.z);
+          if (triangleMaxX < minX || triangleMinX > maxX || triangleMaxZ < minZ || triangleMinZ > maxZ) continue;
+          triangles.push({
+            a: { x: a.x, y: a.y, z: a.z },
+            b: { x: b.x, y: b.y, z: b.z },
+            c: { x: c.x, y: c.y, z: c.z },
+            minX: triangleMinX,
+            maxX: triangleMaxX,
+            minZ: triangleMinZ,
+            maxZ: triangleMaxZ,
+          });
+        }
+      }
+      const trianglesByCell = new Map<string, TerrainTriangle[]>();
+      for (const triangle of triangles) {
+        for (let cellX = Math.floor(triangle.minX); cellX <= Math.floor(triangle.maxX); cellX++) {
+          for (let cellZ = Math.floor(triangle.minZ); cellZ <= Math.floor(triangle.maxZ); cellZ++) {
+            const key = `${cellX}:${cellZ}`;
+            const bucket = trianglesByCell.get(key);
+            if (bucket) bucket.push(triangle);
+            else trianglesByCell.set(key, [triangle]);
+          }
+        }
+      }
+      const surfaceAt = (x: number, z: number, reference: number): number => {
+        let nearest = Number.NaN;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+        for (const triangle of trianglesByCell.get(`${Math.floor(x)}:${Math.floor(z)}`) ?? []) {
+          const { a, b, c } = triangle;
+          const denominator = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+          if (Math.abs(denominator) < 1e-10) continue;
+          const wa = ((b.z - c.z) * (x - c.x) + (c.x - b.x) * (z - c.z)) / denominator;
+          const wb = ((c.z - a.z) * (x - c.x) + (a.x - c.x) * (z - c.z)) / denominator;
+          const wc = 1 - wa - wb;
+          if (wa < -1e-5 || wb < -1e-5 || wc < -1e-5) continue;
+          const height = wa * a.y + wb * b.y + wc * c.y;
+          const distance = Math.abs(height - reference);
+          if (distance < nearestDistance) {
+            nearest = height;
+            nearestDistance = distance;
+          }
+        }
+        return nearest;
+      };
+      const results = players.map((player, i) => ({
+        profile: player.characterProfile,
+        clip: player.avatar!.currentClipName,
+        startX: startX[i]!,
+        startZ: startZ[i]!,
+        dx: paths[i]!.dx,
+        dz: paths[i]!.dz,
+        minimumRootClearance: Number.POSITIVE_INFINITY,
+        maximumRootClearance: Number.NEGATIVE_INFINITY,
+        maximumVisualOffset: Number.NEGATIVE_INFINITY,
+        groundOffsetAtMinimum: Number.NaN,
+        minimumClearance: Number.POSITIVE_INFINITY,
+        minimumPoint: { x: 0, y: Number.POSITIVE_INFINITY, z: 0, groundY: Number.NaN },
+        missingSurfaceSamples: 0,
+        framesWithoutSurface: 0,
+        groundedWalkingFrames: 0,
+        nearGroundFrames: 0,
+      }));
+      let frames = 0;
+      let lastFrame = g.qa.frame;
+      const sample = (): void => {
+        if (g.qa.frame > lastFrame) {
+          lastFrame = g.qa.frame;
+          frames++;
+          for (let i = 0; i < players.length; i++) {
+            const player = players[i];
+            const avatar = player.avatar!;
+            avatar.object.updateMatrixWorld(true);
+            const rootY = avatar.object.position.y;
+            if (player.onGround && avatar.currentMotion === "walk") {
+              results[i]!.groundedWalkingFrames++;
+              const userData = (avatar.object as unknown as {
+                userData?: { groundOffset?: number; locomotionLift?: number };
+              }).userData;
+              const visualOffset = Number(userData?.groundOffset) + Number(userData?.locomotionLift);
+              if (Number.isFinite(visualOffset)) {
+                results[i]!.maximumVisualOffset = Math.max(results[i]!.maximumVisualOffset, visualOffset);
+              }
+              let frameSurfaceSamples = 0;
+              let frameMinimumClearance = Number.POSITIVE_INFINITY;
+              const rootGround = surfaceAt(player.position.x, player.position.z, player.position.y);
+              if (Number.isFinite(rootGround)) {
+                const rootClearance = rootY - rootGround;
+                results[i]!.minimumRootClearance = Math.min(results[i]!.minimumRootClearance, rootClearance);
+                results[i]!.maximumRootClearance = Math.max(results[i]!.maximumRootClearance, rootClearance);
+              } else {
+                results[i]!.missingSurfaceSamples++;
+              }
+              avatar.object.traverse((node) => {
+                if (!node.isSkinnedMesh || !node.skeleton || !node.geometry?.attributes?.position ||
+                    !node.position || !node.getVertexPosition) return;
+                node.skeleton.update();
+                const positions = node.geometry.attributes.position;
+                const target = node.position.clone();
+                for (let vertex = 0; vertex < positions.count; vertex++) {
+                  const point = node.localToWorld(node.getVertexPosition(vertex, target));
+                  if (point.y >= rootY + 0.3) continue;
+                  const groundY = surfaceAt(point.x, point.z, point.y);
+                  if (!Number.isFinite(groundY)) {
+                    results[i]!.missingSurfaceSamples++;
+                    continue;
+                  }
+                  frameSurfaceSamples++;
+                  const clearance = point.y - groundY;
+                  frameMinimumClearance = Math.min(frameMinimumClearance, clearance);
+                  if (clearance < results[i]!.minimumClearance) {
+                    results[i]!.minimumClearance = clearance;
+                    results[i]!.minimumPoint = { x: point.x, y: point.y, z: point.z, groundY };
+                    results[i]!.groundOffsetAtMinimum = visualOffset;
+                  }
+                }
+              });
+              if (frameSurfaceSamples > 0 && frameMinimumClearance <= 0.25) {
+                results[i]!.nearGroundFrames++;
+              }
+              if (frameSurfaceSamples === 0) results[i]!.framesWithoutSurface++;
+            }
+          }
+        }
+        if (frames < 60) requestAnimationFrame(sample);
+        else resolve(results.map((result, i) => ({
+          ...result,
+          endX: players[i]!.position.x,
+          endZ: players[i]!.position.z,
+        })));
+      };
+      requestAnimationFrame(sample);
+    }), [firstPath, secondPath] as [GroundingPath, GroundingPath]);
+    await page.keyboard.down("KeyW");
+    await page.keyboard.down("ArrowUp");
+    const clearances = await clearancesPromise;
+    await page.keyboard.up("KeyW");
+    await page.keyboard.up("ArrowUp");
+    for (const avatar of clearances) {
+      const progress = (avatar.endX - avatar.startX) * avatar.dx + (avatar.endZ - avatar.startZ) * avatar.dz;
+      expect.soft(progress, JSON.stringify(avatar)).toBeGreaterThan(1.2);
+      expect.soft(avatar.groundedWalkingFrames, JSON.stringify(avatar)).toBeGreaterThanOrEqual(30);
+      expect.soft(avatar.minimumRootClearance, JSON.stringify(avatar)).toBeGreaterThanOrEqual(-0.005);
+      expect.soft(avatar.maximumRootClearance, JSON.stringify(avatar)).toBeLessThanOrEqual(0.9);
+      expect.soft(avatar.maximumVisualOffset, JSON.stringify(avatar)).toBeLessThanOrEqual(0.5);
+      expect.soft(avatar.nearGroundFrames, JSON.stringify(avatar)).toBeGreaterThanOrEqual(5);
+      expect.soft(avatar.missingSurfaceSamples, JSON.stringify(avatar)).toBe(0);
+      expect.soft(avatar.framesWithoutSurface, JSON.stringify(avatar)).toBe(0);
+      expect.soft(Number.isFinite(avatar.groundOffsetAtMinimum), JSON.stringify(avatar)).toBe(true);
+      expect.soft(avatar.minimumClearance, JSON.stringify(avatar)).toBeGreaterThanOrEqual(-0.005);
     }
   });
 

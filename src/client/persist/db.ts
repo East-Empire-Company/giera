@@ -36,6 +36,11 @@ const DB_NAME = "giera_save_db";
 const STORE_NAME = "saves";
 const SAVE_KEY = "last_save";
 
+export function roomSaveKey(origin: string, room: string): string {
+  const normalizedRoom = room.trim().replace(/\s+/g, "").toLowerCase();
+  return `room:${origin}:${normalizedRoom}`;
+}
+
 export function formatSaveData(state: SavedGameState): string {
   return JSON.stringify(state);
 }
@@ -98,53 +103,57 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveGameState(state: SavedGameState): Promise<void> {
+export async function saveGameState(state: SavedGameState, key: string = SAVE_KEY): Promise<boolean> {
+  let saved = false;
   try {
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    saved = await new Promise<boolean>((resolve) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.put(state, SAVE_KEY);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch (e) {
-    // Fallback to localStorage
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(SAVE_KEY, formatSaveData(state));
-    }
-  }
-}
-
-export async function loadGameState(): Promise<SavedGameState | null> {
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.get(SAVE_KEY);
-      req.onsuccess = () => resolve(normalizeSavedGameState(req.result));
-      req.onerror = () => reject(req.error);
+      const req = tx.objectStore(STORE_NAME).put(state, key);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => resolve(false);
     });
   } catch {
-    // Fallback to localStorage
-    if (typeof localStorage !== "undefined") {
-      const item = localStorage.getItem(SAVE_KEY);
-      if (item) return parseSaveData(item);
-    }
-    return null;
+    saved = false;
+  }
+  if (saved) return true;
+  if (typeof localStorage === "undefined") return false;
+  try {
+    localStorage.setItem(key, formatSaveData(state));
+    return true;
+  } catch {
+    return false;
   }
 }
 
-export async function clearGameState(): Promise<void> {
-  if (typeof localStorage !== "undefined") localStorage.removeItem(SAVE_KEY);
+export async function loadGameState(key: string = SAVE_KEY): Promise<SavedGameState | null> {
+  let fromDb: SavedGameState | null | "error" = "error";
   try {
     const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
+    fromDb = await new Promise<SavedGameState | null | "error">((resolve) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const req = tx.objectStore(STORE_NAME).get(key);
+      req.onsuccess = () => resolve(normalizeSavedGameState(req.result));
+      req.onerror = () => resolve("error");
+    });
+  } catch {
+    fromDb = "error";
+  }
+  if (fromDb !== "error") return fromDb;
+  if (typeof localStorage === "undefined") return null;
+  const item = localStorage.getItem(key);
+  return item ? parseSaveData(item) : null;
+}
+
+export async function clearGameState(key: string = SAVE_KEY): Promise<void> {
+  if (typeof localStorage !== "undefined") localStorage.removeItem(key);
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
-      const req = tx.objectStore(STORE_NAME).delete(SAVE_KEY);
+      const req = tx.objectStore(STORE_NAME).delete(key);
       req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      req.onerror = () => resolve();
     });
   } catch {
     // IndexedDB unavailable: the localStorage key is already gone.

@@ -664,6 +664,23 @@ export class WorldRenderer {
     }
   }
 
+  clearEdits(): void {
+    this.edits.clear();
+    for (const chunk of this.chunks.values()) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz += 1) {
+        for (let ly = 0; ly < CHUNK_SIZE; ly += 1) {
+          for (let lx = 0; lx < CHUNK_SIZE; lx += 1) {
+            const x = chunk.cx * CHUNK_SIZE + lx;
+            const y = chunk.cy * CHUNK_SIZE + ly;
+            const z = chunk.cz * CHUNK_SIZE + lz;
+            chunk.data[getBlockIndex(lx, ly, lz)] = generateBlock(x, y, z, this.seed);
+          }
+        }
+      }
+    }
+    for (const chunk of this.chunks.values()) this.remeshChunk(chunk.cx, chunk.cy, chunk.cz);
+  }
+
   private recordEdit(x: number, y: number, z: number, blockId: number, persist: boolean): void {
     const key = chunkKey(Math.floor(x / CHUNK_SIZE), Math.floor(y / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE));
     const bucket = this.edits.get(key) ?? new Map<number, ChunkEdit>();

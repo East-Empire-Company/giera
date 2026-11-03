@@ -1,3 +1,5 @@
+import { SpeechService, type SpeechResult } from "./speech";
+
 export function parseAudioManifest(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || !("entries" in value)) throw new TypeError("Invalid generated audio manifest");
   const entries = value.entries;
@@ -39,6 +41,10 @@ export const MUSIC_PLAYLIST = [
 ] as const satisfies readonly (keyof typeof MUSIC_TRACKS)[];
 const BACKGROUND_MUSIC_GAIN = 0.25;
 
+const clipSpeaker = (id: string): string =>
+  id.startsWith("cinematic_ziemek") ? "ziemek" : id.startsWith("cinematic_gniewko") ? "gniewko" : "game";
+
+const BUDDY_SPEECH_FILTER = { type: "bandpass" as const, frequencyLow: 300, frequencyHigh: 3400 };
 export class AudioManager {
   private context?: AudioContext;
   private master?: GainNode;
@@ -56,7 +62,26 @@ export class AudioManager {
   private masterVolume = 0.8;
   private musicLevel = 1;
   private speechLevel = 1;
+  private readonly speechFilters = new WeakMap<AudioBuffer, typeof BUDDY_SPEECH_FILTER>();
+  private readonly buddySources = new Set<AudioBufferSourceNode>();
+  private nextBrowserSpeaker: string | null = null;
+  private currentBrowserSpeaker: string | null = null;
+  readonly speech = new SpeechService({
+    getSpeechVolume: () => this.speechLevel,
+    getContext: () => this.context ?? null,
+    hasBrowserVoice: () => typeof speechSynthesis !== "undefined" && typeof SpeechSynthesisUtterance !== "undefined",
+    decode: (bytes) => this.ensureContext().decodeAudioData(bytes),
+    loadBuffer: (clipId) => this.loadBuffer(clipId),
+    playBuffer: (buffer, options) => this.playSpeechBuffer(buffer, options),
+    speakWithBrowserVoice: (text, volume) => this.speakWithBrowserVoice(text, volume),
+  });
   constructor() {
+    this.speech.addEventListener("speech:ready", (event) => {
+      const result = (event as CustomEvent<{ result: SpeechResult }>).detail.result;
+      if (result.request.speakerId !== "buddy") return;
+      if ("buffer" in result) this.speechFilters.set(result.buffer, BUDDY_SPEECH_FILTER);
+      else if ("backend" in result && result.backend === "browser") this.nextBrowserSpeaker = "buddy";
+    });
     Object.assign(this.paths, VOICE_PATHS);
     Object.assign(this.paths, MUSIC_TRACKS);
     if (typeof document !== "undefined") {
@@ -68,6 +93,7 @@ export class AudioManager {
         this.musicToken += 1;
         if (this.currentMusic) this.currentMusic.source.onended = null;
         this.currentMusic = undefined;
+        this.speech.cancelPending();
         for (const source of this.sources) source.stop();
         this.sources.clear();
         void this.context?.suspend();
@@ -142,8 +168,25 @@ export class AudioManager {
   setSpeechVolume(level: number): number {
     const value = Math.min(1, Math.max(0, Number.isFinite(level) ? level : this.speechLevel));
     this.speechLevel = value;
+    if (value <= 0.05) this.speech.cancelPending();
     if (this.speechBus && this.context) this.speechBus.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
     return value;
+  }
+
+  stopBuddySpeech(): void {
+    for (const source of this.buddySources) {
+      try {
+        source.stop();
+      } catch {
+        this.buddySources.delete(source);
+      }
+    }
+    this.buddySources.clear();
+    if (this.nextBrowserSpeaker === "buddy") this.nextBrowserSpeaker = null;
+    if (this.currentBrowserSpeaker === "buddy" && typeof speechSynthesis !== "undefined") {
+      this.currentBrowserSpeaker = null;
+      speechSynthesis.cancel();
+    }
   }
 
   async preload(ids: readonly string[]): Promise<void> {
@@ -174,6 +217,16 @@ export class AudioManager {
   }
 
   async play(id: string, options: { volume?: number; rate?: number } = {}): Promise<void> {
+    if (Object.hasOwn(VOICE_PATHS, id)) {
+      void this.speech.request({
+        kind: "clip",
+        speakerId: clipSpeaker(id),
+        clipId: id,
+        volume: options.volume ?? 1,
+        rate: options.rate ?? 1,
+      });
+      return;
+    }
     if (document.hidden) return;
     const context = await this.unlock();
     if (this.playlistActive && !this.currentMusic && !document.hidden) {
@@ -250,47 +303,67 @@ export class AudioManager {
     music.gain.gain.linearRampToValueAtTime(BACKGROUND_MUSIC_GAIN, now + seconds + 0.8);
   }
 
-  async speak(npcId: string, text: string, volume = 1): Promise<void> {
-    if (document.hidden || volume <= 0.05 || this.speechVolume <= 0.05) return;
-    if (!this.context || this.context.state !== "running" || !this.speechBus) return;
-    const context = this.context;
-    let buffer: AudioBuffer | null = null;
-    try {
-      const response = await fetch("/npc/tts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ npcId, text }),
-        signal: AbortSignal.timeout(12_000),
-      });
-      if (response.ok) buffer = await context.decodeAudioData(await response.arrayBuffer());
-    } catch {
-      buffer = null;
-    }
-    if (!buffer) {
-      this.speakWithBrowserVoice(text, volume);
-      return;
-    }
-    const now = context.currentTime;
-    const startAt = Math.max(now, this.voiceBusyUntil);
-    this.voiceBusyUntil = startAt + buffer.duration + 0.3;
+  private playSpeechBuffer(
+    buffer: AudioBuffer,
+    options: { volume: number; rate: number; filter?: typeof BUDDY_SPEECH_FILTER }
+  ): Promise<void> {
+    const context = this.ensureContext();
+    const bus = this.speechBus;
+    if (!bus) return Promise.resolve();
+    const { promise, resolve } = Promise.withResolvers<void>();
     const source = context.createBufferSource();
     const gain = context.createGain();
     source.buffer = buffer;
-    gain.gain.value = Math.min(1, volume);
-    source.connect(gain).connect(this.speechBus);
+    source.playbackRate.value = Math.max(0.5, Math.min(2, options.rate));
+    gain.gain.value = Math.max(0, Math.min(1, options.volume));
+    const filterOptions = options.filter ?? this.speechFilters.get(buffer);
+    if (filterOptions) {
+      const highPass = context.createBiquadFilter();
+      highPass.type = "highpass";
+      highPass.frequency.setValueAtTime(filterOptions.frequencyLow, context.currentTime);
+      const lowPass = context.createBiquadFilter();
+      lowPass.type = "lowpass";
+      lowPass.frequency.setValueAtTime(filterOptions.frequencyHigh, context.currentTime);
+      gain.connect(highPass).connect(lowPass).connect(bus);
+      this.buddySources.add(source);
+    } else {
+      gain.connect(bus);
+    }
+    source.connect(gain);
     this.sources.add(source);
-    source.onended = () => this.sources.delete(source);
+    const now = context.currentTime;
+    const startAt = Math.max(now, this.voiceBusyUntil);
+    this.voiceBusyUntil = startAt + buffer.duration + 0.3;
+    source.onended = () => {
+      this.sources.delete(source);
+      this.buddySources.delete(source);
+      resolve();
+    };
     source.start(startAt);
     this.duckMusic(startAt - now + buffer.duration);
+    return promise;
   }
 
-  private speakWithBrowserVoice(text: string, volume: number): void {
-    if (typeof speechSynthesis === "undefined") return;
+  private speakWithBrowserVoice(text: string, volume: number): Promise<void> {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    if (typeof speechSynthesis === "undefined" || typeof SpeechSynthesisUtterance === "undefined") {
+      resolve();
+      return promise;
+    }
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "pl-PL";
     utterance.volume = Math.min(1, volume * this.speechVolume * this.masterVolume);
     const voice = speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith("pl"));
     if (voice) utterance.voice = voice;
+    this.currentBrowserSpeaker = this.nextBrowserSpeaker;
+    this.nextBrowserSpeaker = null;
+    const finish = () => {
+      this.currentBrowserSpeaker = null;
+      resolve();
+    };
+    utterance.onend = finish;
+    utterance.onerror = finish;
     speechSynthesis.speak(utterance);
+    return promise;
   }
 }

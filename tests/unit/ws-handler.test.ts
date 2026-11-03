@@ -171,7 +171,7 @@ describe("ws hello", () => {
     expect(h.room("R1").getPlayerCount()).toBe(2);
   });
 
-  it("subscribes the joining socket only after publishing its join so it never receives its own join", () => {
+  it("subscribes before the welcome snapshot and the join broadcast so the joiner sees a coherent stream", () => {
     const order: string[] = [];
     const rooms = createRoomRegistry(4, (code) => new RoomState(code, 1));
     const deps: WsDeps = { rooms, publish: (_t, p) => order.push(`publish:${JSON.parse(p).t}`), now: () => 0 };
@@ -181,7 +181,7 @@ describe("ws hello", () => {
       subscribe: () => order.push("subscribe"),
     };
     send(ws, deps, hello());
-    expect(order).toEqual(["send:welcome", "publish:join", "subscribe"]);
+    expect(order).toEqual(["subscribe", "send:welcome", "publish:join", "send:room_sync_begin", "send:room_sync_end"]);
   });
 
   it("keeps an idle room in memory and refuses the newcomer when saving it before eviction fails", () => {
@@ -241,9 +241,10 @@ describe("ws malformed traffic", () => {
     (raw) => {
       const h = harness();
       const ws = join(h);
+      const sentBefore = ws.sent.length;
       expect(() => handleWsMessage(ws, raw, h.deps)).not.toThrow();
       expect(h.published).toEqual([]);
-      expect(ws.sent).toHaveLength(1);
+      expect(ws.sent).toHaveLength(sentBefore);
       expect(h.room("DOM1").getEditCount()).toBe(0);
     },
   );
@@ -477,12 +478,16 @@ describe("ws need", () => {
 });
 
 describe("ws close", () => {
-  it("removes the player and publishes leave", () => {
+  it("removes the player and publishes leave, clearing ownership when the owner leaves", () => {
     const h = harness();
     const ws = join(h);
     handleWsClose(ws, h.deps);
     expect(h.room("DOM1").getPlayerCount()).toBe(0);
-    expect(h.published).toEqual([{ topic: "room:DOM1", msg: { t: "leave", id: "p1" } }]);
+    expect(h.published).toEqual([
+      { topic: "room:DOM1", msg: { t: "leave", id: "p1" } },
+      { topic: "room:DOM1", msg: { t: "owner_changed", ownerId: null } },
+    ]);
+    expect(h.room("DOM1").getOwnerId()).toBeNull();
   });
 
   it("does nothing for a socket that never joined", () => {

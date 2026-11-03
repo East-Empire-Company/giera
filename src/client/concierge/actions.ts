@@ -1,6 +1,7 @@
 import { CONCIERGE_TOOLS, type ConciergeToolName } from "../../shared/concierge-tools";
 import { createBackup, readBackups, restoreBackup, clearProgress, summarize, type BackupSummary } from "./backups";
 import type { HouseArchetype } from "../../shared/house-plan";
+import { getActiveSaveKey } from "../game/save-session";
 
 export type ConciergeStatus = {
   started: boolean;
@@ -111,19 +112,21 @@ export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolN
     },
 
     async make_backup(params) {
+      const saveKey = getActiveSaveKey();
       const label = typeof params.label === "string" ? params.label : "kopia";
-      const backup = await createBackup(label);
+      const backup = await createBackup(label, new Date(), undefined, saveKey);
       return backup ? `Zapisana kopia: ${describeBackup(backup)}` : "Nie ma jeszcze postępów do zapisania.";
     },
 
     async list_backups() {
-      const backups = readBackups().map(summarize);
+      const backups = readBackups(undefined, getActiveSaveKey()).map(summarize);
       return backups.length ? backups.map(describeBackup).join("; ") : "Nie ma żadnych kopii zapasowych.";
     },
 
     async restore_backup(params) {
+      const saveKey = getActiveSaveKey();
       const id = typeof params.backup_id === "string" ? params.backup_id : "";
-      const restored = await restoreBackup(id);
+      const restored = await restoreBackup(id, undefined, saveKey);
       if (!restored) return "Nie znalazłem takiej kopii.";
       host.reload();
       return "Przywracam postępy. Gra wczyta się od nowa.";
@@ -133,8 +136,9 @@ export function createConciergeTools(host: ConciergeHost): Record<ConciergeToolN
       if (params.confirmed !== true) {
         return "Najpierw zapytaj dziecko, czy na pewno chce zacząć od nowa. Potem wywołaj to narzędzie z confirmed=true.";
       }
-      await createBackup("przed resetem");
-      await clearProgress();
+      const saveKey = getActiveSaveKey();
+      await createBackup("przed resetem", new Date(), undefined, saveKey);
+      await clearProgress(saveKey);
       host.reload();
       return "Postępy skasowane. Zrobiłem kopię zapasową na wszelki wypadek.";
     },

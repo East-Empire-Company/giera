@@ -60,7 +60,7 @@ await page.route("**/npc/reason", (route) => route.fulfill({
   contentType: "application/json",
   body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ say: "Zbierz trochę drewna, to dobry początek." }) } }] }),
 }));
-await page.route("**/npc/tts", (route) => route.fulfill({ status: 204 }));
+await page.route("**/speech/tts", (route) => route.fulfill({ status: 204 }));
 
 await page.goto(GAME_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
 await page.waitForFunction(() => window.__GIERA__?.ready === true, undefined, { timeout: 60000 });

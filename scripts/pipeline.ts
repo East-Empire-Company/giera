@@ -127,7 +127,7 @@ async function runNetworkStage(): Promise<StageResult> {
       env: { ...process.env, PORT: String(port), GIERA_DATA_DIR: dataDir },
     });
     await waitPort(port, 15_000);
-    return await runCmd("network", ["bunx", "playwright", "test", "--project=lan"], {
+    return await runCmd("network", ["bunx", "playwright", "test", "--project=lan", "--project=companion"], {
       GIERA_TEST_WS: wsUrl,
       GIERA_TEST_LAN_PORT: String(port),
       GIERA_TEST_DATA_DIR: dataDir,

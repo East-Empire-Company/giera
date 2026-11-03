@@ -65,7 +65,7 @@ describe("save store", () => {
   it("does not throw when no storage backend exists", async () => {
     vi.stubGlobal("localStorage", undefined);
 
-    await expect(saveGameState(state)).resolves.toBeUndefined();
+    await expect(saveGameState(state)).resolves.toBe(false);
     expect(await loadGameState()).toBeNull();
   });
 

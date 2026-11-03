@@ -3,10 +3,12 @@ import "./style.css";
 import { AudioManager, MUSIC_PLAYLIST } from "./client/audio/sound";
 import { BeatTracker } from "./client/audio/beat-tracker";
 import { MicController } from "./client/audio/mic";
+import { createMicController } from "./client/input/mic";
 import { LanClient } from "./client/net/client";
 import { scanLanServers } from "./client/net/discovery";
-import { DEFAULT_LAN_PORT, type PlayerProfile } from "./shared/lan-protocol";
+import { DEFAULT_LAN_PORT, type BuildBlock, type BuildTask, type CompanionState, type PlayerProfile } from "./shared/lan-protocol";
 import { PlayerController } from "./client/entities/player";
+import { Avatar } from "./client/entities/avatar";
 import { NPCManager } from "./client/entities/npc";
 import { ambientNpcChatterEnabled, chatterDelayMs, fallbackSay, reasonNpc, type NpcHistoryEntry } from "./client/entities/npc-brain";
 import { fallbackLine } from "./shared/npc-fallbacks";
@@ -15,17 +17,33 @@ import { ItemDropManager } from "./client/entities/drops";
 import { TrainingDummy } from "./client/entities/dummy";
 import { GameHUD } from "./client/game/hud";
 import { GameInventory } from "./client/game/inventory";
-import { createHousePlan, placeHousePlan } from "./client/game/house-builder";
+import { createCompanionController, type VisibleCompanionBlock } from "./client/game/companion-controller";
+import { createRoomSyncBuffer } from "./client/game/room-sync-buffer";
+import { createCompanionPanel } from "./client/ui/companion-panel";
+import { createHousePlan } from "./shared/house-plan";
+import { smoothGroundOffset } from "./shared/mesher";
+import { placeHousePlan } from "./client/game/house-builder";
 import { applyMinePlan, createMinePlan } from "./client/game/terrain-cheats";
 import { OBJECTIVE_STEPS, ObjectiveManager } from "./client/game/objectives";
 import { TycoonManager } from "./client/game/tycoon";
 import { tycoonSlotOrigin, tycoonTheme } from "./shared/tycoon-slots";
+import { COMPANION_PROFILES, MISSING_COMPANION_ASSET_MESSAGE, type CompanionProfileId } from "./shared/companion";
+import { COMPANION_LINES, interpretCompanionUtterance, type CompanionLineId } from "./shared/companion-speech";
 import { TouchController } from "./client/input/touch";
-import { loadGameState, saveGameState } from "./client/persist/db";
+import { loadGameState, saveGameState, type SavedGameState } from "./client/persist/db";
 import { attachSplashVideo, type SplashVideoHandle } from "./client/startup/splash-video";
 import { MenuStage } from "./client/startup/menu-stage";
-import { pushOutOfCylinders } from "./shared/entity-collision";
-import { smoothGroundOffset } from "./shared/mesher";
+import {
+  ACTIVE_LAN_ROOM_KEY,
+  OFFLINE_SAVE_KEY,
+  activeSaveKey as saveKeyForSession,
+  getActiveSaveKey,
+  parseLanRoomSession,
+  serializeLanRoomSession,
+  switchSaveKey,
+  type LanRoomSession,
+} from "./client/game/save-session";
+import { pushOutOfCylinders, blockedByCylinders, type Cylinder } from "./shared/entity-collision";
 import { collideCamera } from "./shared/camera-collision";
 import { pickViewRadius } from "./shared/view-radius";
 import { lookGain } from "./shared/look-sensitivity";
@@ -49,6 +67,17 @@ import { CHUNK_SIZE, chunkKey } from "./shared/chunk";
 import { raycastInteract } from "./shared/raycast";
 import { makeRng } from "./shared/rng";
 import { generateBlock, surfaceHeight } from "./shared/worldgen";
+
+const PLAYER_GROUNDED_LOCOMOTION_LIFT: Record<PlayerProfile, number> = {
+  ziemek: 0.06,
+  gniewko: 0.05,
+};
+const GROUNDING_PROBES = [
+  [-0.45, -0.45],
+  [-0.45, 0.45],
+  [0.45, -0.45],
+  [0.45, 0.45],
+] as const;
 
 type GameStats = { fps: number; drawCalls: number; chunkCount: number };
 type GameBridge = {
@@ -84,6 +113,7 @@ declare global {
   interface Window {
     __GIERA__?: GameBridge;
   }
+  const __GIERA_TEST_WS_URL__: string;
 }
 
 const canvasElement = document.querySelector<HTMLCanvasElement>("#game");
@@ -97,7 +127,9 @@ const canvas: HTMLCanvasElement = canvasElement;
 const status: HTMLElement = statusElement;
 const message: HTMLElement = messageElement;
 const progress: HTMLElement = progressElement;
-const qa = new URLSearchParams(window.location.search).get("qa") === "1";
+const query = new URLSearchParams(window.location.search);
+const qa = query.get("qa") === "1";
+const qaLivePlayerPose = qa && query.get("qaLivePlayerPose") === "1";
 const splashVideo: SplashVideoHandle = qa
   ? { settle: async () => {}, stop: () => {} }
   : attachSplashVideo(status);
@@ -119,9 +151,10 @@ function chooseSeed(): number {
   return resolveWorldSeed(window.location.search, value[0] & 0x7fffffff);
 }
 
-function updateSeedUrl(seed: number): void {
+function updateSeedUrl(seed: number, replace = false): void {
   const url = new URL(window.location.href);
-  if (url.searchParams.has("seed")) return;
+  if (url.searchParams.has("seed") && !replace) return;
+  if (url.searchParams.get("seed") === String(seed)) return;
   url.searchParams.set("seed", String(seed));
   history.replaceState(null, "", url);
 }
@@ -169,10 +202,19 @@ async function boot(): Promise<void> {
     progress.style.width = `${Math.min(100, 6 + (done / total) * 38)}%`;
     message.textContent = `Wczytujemy zasoby: ${done} / ${total}`;
   });
-  const saved = await loadGameState();
+  let activeRoomSession: LanRoomSession | null = null;
+  try {
+    activeRoomSession = parseLanRoomSession(sessionStorage.getItem(ACTIVE_LAN_ROOM_KEY));
+  } catch {
+    activeRoomSession = null;
+  }
+  let currentSaveKey = getActiveSaveKey();
+  const saved = await loadGameState(currentSaveKey);
   const urlHasSeed = new URLSearchParams(window.location.search).has("seed");
-  const seed = urlHasSeed ? chooseSeed() : saved?.seed ?? chooseSeed();
-  updateSeedUrl(seed);
+  const seed = activeRoomSession
+    ? activeRoomSession.seed ?? saved?.seed ?? chooseSeed()
+    : urlHasSeed ? chooseSeed() : saved?.seed ?? chooseSeed();
+  updateSeedUrl(seed, Boolean(activeRoomSession));
   const spawnY = surfaceHeight(3, 5, seed) + 1;
   const savedProfile = (localStorage.getItem("giera.profile") as PlayerProfile | null) || "ziemek";
   const player = new PlayerController({ id: "p1", spawn: [3, spawnY, 5], profile: savedProfile });
@@ -190,6 +232,8 @@ async function boot(): Promise<void> {
   scene.add(avatar2.object);
   let lanClient: LanClient | null = null;
   let ownId: string | null = null;
+  const remotePlayers = new Map<string, { x: number; y: number; z: number }>();
+  let roomReady = false;
   const remoteTarget = new THREE.Vector3();
   let remoteYaw = 0;
   let remotePitch = 0;
@@ -427,6 +471,89 @@ async function boot(): Promise<void> {
     },
   });
 
+  let saveQueue: Promise<boolean> = Promise.resolve(true);
+  const savedStateFor = (key: string): SavedGameState => ({
+    seed,
+    tycoon: tycoon.toJSON(),
+    inventory: inventory.toJSON(),
+    objectives: { stepIndex: 0, currentProgress: 0 },
+    edits: key === OFFLINE_SAVE_KEY ? world.exportEdits() : {},
+    savedAt: new Date().toISOString(),
+  });
+  const persistCurrentState = (key: string): Promise<boolean> => {
+    const state = savedStateFor(key);
+    const pending = saveQueue.then(
+      () => saveGameState(state, key),
+      () => saveGameState(state, key),
+    ).catch(() => false);
+    saveQueue = pending;
+    return pending;
+  };
+  const activateRoomSession = async (url: string, room: string, roomSeed: number): Promise<boolean> => {
+    const nextSession = { url, room, seed: roomSeed };
+    const nextKey = saveKeyForSession(nextSession);
+    if (!await persistCurrentState(currentSaveKey)) {
+      showCompanionNotice("Nie udało się zapisać bieżącego świata.");
+      return false;
+    }
+    const selectedKey = await switchSaveKey(currentSaveKey, nextKey, async () => true);
+    if (selectedKey !== nextKey) return false;
+    try {
+      sessionStorage.setItem(ACTIVE_LAN_ROOM_KEY, serializeLanRoomSession(nextSession));
+    } catch {
+      showCompanionNotice("Nie udało się zapamiętać pokoju.");
+      return false;
+    }
+    const changed = currentSaveKey !== nextKey ||
+      activeRoomSession?.url !== nextSession.url ||
+      activeRoomSession?.room !== nextSession.room ||
+      activeRoomSession?.seed !== nextSession.seed ||
+      seed !== roomSeed;
+    currentSaveKey = nextKey;
+    activeRoomSession = nextSession;
+    if (changed) {
+      const target = new URL(window.location.href);
+      target.searchParams.set("seed", String(roomSeed));
+      window.location.replace(target.href);
+      return true;
+    }
+    roomReady = true;
+    return true;
+  };
+  const leaveRoom = async (): Promise<boolean> => {
+    if (!activeRoomSession || !roomReady) return false;
+    if (!window.confirm("Zapisać stan gry i opuścić pokój?")) return false;
+    if (!await persistCurrentState(currentSaveKey)) {
+      showCompanionNotice("Nie udało się zapisać pokoju. Nadal grasz w nim.");
+      return false;
+    }
+    try {
+      sessionStorage.removeItem(ACTIVE_LAN_ROOM_KEY);
+    } catch {
+      showCompanionNotice("Nie udało się zamknąć zapisanego pokoju.");
+      return false;
+    }
+    roomReady = false;
+    lanClient?.disconnect();
+    lanClient = null;
+    activeRoomSession = null;
+    currentSaveKey = OFFLINE_SAVE_KEY;
+    roomSyncBuffer.abort();
+    activeSyncId = null;
+    companionController.stop();
+    companionController.applyServerRemove();
+    removeCompanionAvatar();
+    clearBuildPreview();
+    activeBuildPlan = null;
+    pendingBuildPreview = null;
+    const offline = await loadGameState(OFFLINE_SAVE_KEY);
+    const target = new URL(window.location.href);
+    if (offline?.seed !== undefined) target.searchParams.set("seed", String(offline.seed));
+    else target.searchParams.delete("seed");
+    window.location.replace(target.href);
+    return true;
+  };
+
   function connectLan(url: string, room: string, opts: { host?: boolean; roomName?: string; seed?: number; onConnected?: (welcomeSeed: number) => void } = {}): Promise<boolean> {
     lanClient?.disconnect();
     return new Promise<boolean>((resolve) => {
@@ -439,13 +566,32 @@ async function boot(): Promise<void> {
         roomName: opts.roomName,
         seed: opts.seed,
         callbacks: {
-          onWelcome: (welcome) => {
+          onWelcome: async (welcome) => {
             ownId = welcome.id;
             splitScreen.setSplitScreen(false);
             hud.modeBtn.textContent = "Tryb: 1 Gracz";
             setOwnTycoonSlot(welcome.slot ?? 0);
             clearRemoteTycoons();
             for (const p of welcome.players) spawnRemoteTycoon(p.id, p.name, p.slot ?? 0);
+            roomOwnerId = welcome.ownerId;
+            observedGeneration = welcome.generation;
+            companionController.setOwner(roomOwnerId === ownId);
+            companionController.setGeneration(welcome.generation);
+            if (welcome.companion) {
+              companionController.applyServerState(welcome.companion);
+              void displayCompanionState(welcome.companion);
+            } else {
+              companionController.applyServerRemove();
+              removeCompanionAvatar();
+            }
+            roomSyncBuffer.start();
+            activeSyncId = null;
+            const activated = await activateRoomSession(url, room, welcome.seed);
+            if (!activated && !roomReady) {
+              showCompanionNotice("Nie udało się przełączyć zapisu pokoju.");
+              resolve(false);
+              return;
+            }
             opts.onConnected?.(welcome.seed);
             resolve(true);
           },
@@ -463,7 +609,17 @@ async function boot(): Promise<void> {
             if (status === "disconnected") remoteActive = false;
           },
           onBlock: (b) => {
-            world.setBlock(b.x, b.y, b.z, b.id, false);
+            const routed = roomSyncBuffer.buffer(b);
+            if (routed === "apply") {
+              world.setBlock(b.x, b.y, b.z, b.id, false);
+              companionController.blockPlaced(b);
+            } else if (routed === "overflow") {
+              if (activeSyncId) lanClient?.roomSyncAbort(activeSyncId);
+              roomSyncBuffer.abort();
+              activeSyncId = null;
+              showCompanionNotice("Synchronizacja przerwana. Spróbuj ponownie.");
+              lanClient?.roomSyncStart();
+            }
           },
           onPlayer: (p) => {
             if (ownId && p.id === ownId) return;
@@ -480,6 +636,66 @@ async function boot(): Promise<void> {
             remoteYaw = p.yaw;
             remotePitch = p.pitch;
             remoteActive = true;
+          },
+          onCompanionState: (m) => {
+            observedGeneration = m.generation;
+            companionController.applyServerState(m);
+            void displayCompanionState(m.companion);
+          },
+          onCompanionRemove: (m) => {
+            companionController.applyServerRemove(m.id);
+            removeCompanionAvatar();
+          },
+          onCompanionCommand: (m) => {
+            observedGeneration = m.generation;
+            companionController.setGeneration(m.generation);
+            companionController.command(m.task, m.generation);
+          },
+          onOwnerChanged: (m) => {
+            roomOwnerId = m.ownerId;
+            companionController.setOwner(roomOwnerId === ownId);
+          },
+          onCompanionError: (m) => {
+            observedGeneration = m.generation;
+            companionController.setGeneration(m.generation);
+            showCompanionNotice(m.message);
+          },
+          onCompanionSay: (m) => {
+            if (companionController.getState()?.id === m.id) displayCompanionLine(m.line as CompanionLineId);
+          },
+          onBuildPreview: (m) => {
+            if (m.requestId !== lastBuildPreviewRequest) return;
+            pendingBuildPreview = { planId: m.planId, blocks: m.blocks, requestedBy: ownId ?? "" };
+            showBuildPreview(m.blocks);
+            showCompanionNotice(`Domek: ${m.blocks.length} bloków. Potwierdź budowę.`);
+          },
+          onBuildReserved: (m) => {
+            if (pendingBuildPreview?.planId !== m.planId) return;
+            activeBuildPlan = { planId: m.planId, blocks: m.blocks, requestedBy: ownId ?? "", placed: 0, reserved: true };
+            companionController.reserveBuild(m.planId, m.blocks);
+            clearBuildPreview();
+            pendingBuildPreview = null;
+          },
+          onBuildCancelled: (m) => {
+            if (pendingBuildPreview?.planId !== m.planId && activeBuildPlan?.planId !== m.planId) return;
+            clearBuildPreview();
+            pendingBuildPreview = null;
+            activeBuildPlan = null;
+            companionController.stop();
+            showCompanionNotice("Budowa zatrzymana.");
+          },
+          onRoomSyncBegin: (m) => {
+            activeSyncId = m.syncId;
+            roomSyncBuffer.begin(m.syncId);
+          },
+          onRoomSyncPage: (m) => {
+            if (roomSyncBuffer.applyPage(m.syncId, m.index, m.edits, (b) => world.setBlock(b.x, b.y, b.z, b.id, false))) {
+              lanClient?.roomSyncAck(m.syncId, m.index);
+            }
+          },
+          onRoomSyncEnd: (m) => {
+            roomSyncBuffer.end(m.syncId, (b) => world.setBlock(b.x, b.y, b.z, b.id, false));
+            activeSyncId = null;
           },
         },
       });
@@ -541,7 +757,13 @@ async function boot(): Promise<void> {
         try {
           const { url, room } = JSON.parse(pending) as { url: string; room: string };
           void connectLan(url, room, { host: false });
-        } catch { /* ignore malformed pending join */ }
+          return;
+        } catch {
+          // fall through to the active-room session
+        }
+      }
+      if (activeRoomSession && !roomReady) {
+        void connectLan(activeRoomSession.url, activeRoomSession.room, { host: false });
       }
     },
   });
@@ -572,6 +794,8 @@ async function boot(): Promise<void> {
     for (const npc of npcManager.npcs) {
       if (overlaps(npc.position.x, npc.position.z, 0.6)) return true;
     }
+    if (overlaps(trainingDummy.position.x, trainingDummy.position.z, 0.6)) return true;
+    for (const remote of remotePlayers.values()) if (overlaps(remote.x, remote.z, 0.35)) return true;
     const tycoonOccupied = (plot: TycoonManager): boolean => {
       if (
         overlaps(plot.collectorPadPos.x, plot.collectorPadPos.z, 1.2) ||
@@ -589,6 +813,505 @@ async function boot(): Promise<void> {
     if (tycoonOccupied(tycoon)) return true;
     for (const plot of remoteTycoons.values()) if (tycoonOccupied(plot)) return true;
     return false;
+  };
+
+  const companionNotice = document.createElement("div");
+  companionNotice.className = "companion-notice";
+  companionNotice.setAttribute("role", "status");
+  companionNotice.setAttribute("aria-live", "polite");
+  companionNotice.hidden = true;
+  document.body.append(companionNotice);
+  let companionNoticeTimer = 0;
+  const showCompanionNotice = (text: string): void => {
+    companionNotice.textContent = text;
+    companionNotice.hidden = false;
+    window.clearTimeout(companionNoticeTimer);
+    companionNoticeTimer = window.setTimeout(() => { companionNotice.hidden = true; }, 4500);
+  };
+  const roomSyncBuffer = createRoomSyncBuffer<BuildBlock>();
+  let activeSyncId: string | null = null;
+  let roomOwnerId: string | null = null;
+  let observedGeneration = 0;
+  let activeBuildPlan: { planId: string; blocks: BuildBlock[]; requestedBy: string; placed: number; reserved: boolean } | null = null;
+  let pendingBuildPreview: { planId: string; blocks: BuildBlock[]; requestedBy: string } | null = null;
+  let buddyMuted = false;
+  let buddyVolume = 0.7;
+  const buddySpeechIds = new Set<number>();
+  const companionBlockers: Cylinder[] = [];
+  let companionController: ReturnType<typeof createCompanionController>;
+  let companionTarget: CompanionState | null = null;
+  let companionAvatar: Avatar | null = null;
+  let companionAvatarProfile: CompanionProfileId | null = null;
+  let preloadedCompanion: { profile: CompanionProfileId; avatar: Avatar } | null = null;
+  let companionAvatarRevision = 0;
+  let companionPanel: ReturnType<typeof createCompanionPanel>;
+  const scoutBlockIds = new Set<number>([BLOCK_ID.oak_log, BLOCK_ID.coal_ore, BLOCK_ID.iron_ore, BLOCK_ID.gold_ore, BLOCK_ID.stone]);
+  const refreshCompanionBlockers = (): void => {
+    companionBlockers.length = 0;
+    companionBlockers.push(
+      { x: player.position.x, y: player.position.y, z: player.position.z, radius: 0.32, height: 1.8 },
+      ...(splitScreen.isSplitScreen ? [{ x: player2.position.x, y: player2.position.y, z: player2.position.z, radius: 0.32, height: 1.8 }] : []),
+      { x: trainingDummy.position.x, y: trainingDummy.position.y, z: trainingDummy.position.z, radius: 0.55, height: 1.8 },
+      ...npcManager.npcs.map((npc) => ({ x: npc.position.x, y: npc.position.y, z: npc.position.z, radius: 0.35, height: 1.8 })),
+      ...tycoon.getCollisionBodies(),
+      ...[...remoteTycoons.values()].flatMap((plot) => [...plot.getCollisionBodies()]),
+      ...[...remotePlayers.entries()].filter(([id]) => id !== ownId).map(([, pose]) => ({ ...pose, radius: 0.32, height: 1.8 })),
+    );
+  };
+  const visibleCompanionBlocks = (): VisibleCompanionBlock[] => {
+    const state = companionController?.getState();
+    if (!state) return [];
+    const centerX = Math.floor(state.x);
+    const centerY = Math.floor(state.y);
+    const centerZ = Math.floor(state.z);
+    const candidates: VisibleCompanionBlock[] = [];
+    for (let y = Math.max(1, centerY - 8); y <= Math.min(127, centerY + 8); y += 1) {
+      for (let z = centerZ - 12; z <= centerZ + 12; z += 1) {
+        for (let x = centerX - 12; x <= centerX + 12; x += 1) {
+          if (!world.isLoadedCell(x, y, z)) continue;
+          const id = world.getBlock(x, y, z);
+          if (scoutBlockIds.has(id)) candidates.push({ x, y, z, id });
+        }
+      }
+    }
+    return candidates;
+  };
+  const displayCompanionLine = (line: CompanionLineId): void => {
+    const state = companionController.getState();
+    if (!state) return;
+    const text = COMPANION_LINES[line];
+    const name = state.profile === "staszek" ? "Staszek" : "Mina";
+    hud.showNpcSpeech("companion", name, text);
+    if (buddyMuted || buddyVolume <= 0.05) return;
+    const request = audio.speech.request({ kind: "text", speakerId: "buddy", text, volume: buddyVolume });
+    buddySpeechIds.add(request.id);
+  };
+  const removeCompanionAvatar = (): void => {
+    companionAvatarRevision += 1;
+    companionTarget = null;
+    companionAvatar?.dispose();
+    companionAvatar = null;
+    companionAvatarProfile = null;
+    preloadedCompanion?.avatar.dispose();
+    preloadedCompanion = null;
+  };
+  const installCompanionAvatar = (profile: CompanionProfileId, avatar: Avatar, state: CompanionState): void => {
+    companionAvatar?.dispose();
+    companionAvatar = avatar;
+    companionAvatarProfile = profile;
+    companionTarget = { ...state };
+    avatar.object.position.set(state.x, state.y, state.z);
+    avatar.object.rotation.y = state.yaw;
+    avatar.setMotion(state.anim === "walk" ? "walk" : state.anim === "jump" ? "jump" : state.anim === "mine" ? "mine" : "idle");
+    scene.add(avatar.object);
+    cascadedShadows?.registerObject(avatar.object);
+  };
+  const prepareCompanionModel = async (profile: CompanionProfileId): Promise<boolean> => {
+    if (companionAvatarProfile === profile && companionAvatar) return true;
+    if (preloadedCompanion?.profile === profile) return true;
+    const revision = ++companionAvatarRevision;
+    try {
+      const avatar = await Avatar.load(COMPANION_PROFILES[profile].model, { targetHeight: COMPANION_PROFILES[profile].targetHeight });
+      if (revision !== companionAvatarRevision) {
+        avatar.dispose();
+        return false;
+      }
+      const current = companionController?.getState();
+      if (current?.profile === profile) {
+        installCompanionAvatar(profile, avatar, current);
+      } else {
+        preloadedCompanion?.avatar.dispose();
+        preloadedCompanion = { profile, avatar };
+      }
+      return true;
+    } catch {
+      showCompanionNotice(MISSING_COMPANION_ASSET_MESSAGE);
+      return false;
+    }
+  };
+  const displayCompanionState = async (state: CompanionState): Promise<void> => {
+    companionTarget = { ...state };
+    if (companionAvatarProfile === state.profile && companionAvatar) return;
+    const revision = ++companionAvatarRevision;
+    let avatar: Avatar;
+    if (preloadedCompanion?.profile === state.profile) {
+      avatar = preloadedCompanion.avatar;
+      preloadedCompanion = null;
+    } else {
+      try {
+        avatar = await Avatar.load(COMPANION_PROFILES[state.profile].model, { targetHeight: COMPANION_PROFILES[state.profile].targetHeight });
+      } catch {
+        showCompanionNotice(MISSING_COMPANION_ASSET_MESSAGE);
+        return;
+      }
+    }
+    const current = companionController.getState();
+    if (revision !== companionAvatarRevision || current?.id !== state.id || current.profile !== state.profile) {
+      avatar.dispose();
+      return;
+    }
+    installCompanionAvatar(state.profile, avatar, state);
+  };
+  const localBuildBlocked = (block: BuildBlock): boolean => {
+    const plan = activeBuildPlan;
+    if (!plan || plan.planId.length === 0 || world.getBlock(block.x, block.y, block.z) !== BLOCK_ID.air) return true;
+    const xs = plan.blocks.map((item) => item.x);
+    const zs = plan.blocks.map((item) => item.z);
+    const centerX = (Math.min(...xs) + Math.max(...xs) + 1) / 2;
+    const centerZ = (Math.min(...zs) + Math.max(...zs) + 1) / 2;
+    const radius = Math.hypot(Math.max(...xs) - Math.min(...xs) + 1, Math.max(...zs) - Math.min(...zs) + 1) / 2;
+    return houseSiteOccupied(centerX, centerZ, radius) ||
+      blockedByCylinders(block.x + 0.5, block.z + 0.5, block.y, 0.3, 1, companionBlockers);
+  };
+  const placeLocalBuildBlock = (planId: string, blockIndex: number): void => {
+    const plan = activeBuildPlan;
+    const block = plan?.blocks[blockIndex];
+    if (!plan || !plan.reserved || plan.planId !== planId || !block || localBuildBlocked(block)) {
+      showCompanionNotice("Budowa zatrzymana. Miejsce jest zajęte.");
+      companionController.stop();
+      return;
+    }
+    world.setBlock(block.x, block.y, block.z, block.id);
+    companionController.blockPlaced(block);
+    plan.placed += 1;
+    if (plan.placed >= plan.blocks.length) activeBuildPlan = null;
+  };
+  companionController = createCompanionController({
+    send: {
+      state: (state) => {
+        if (roomReady && roomOwnerId === ownId) lanClient?.sendCompanionState(state);
+      },
+      say: (id, line, evidence) => {
+        if (roomReady) lanClient?.sendCompanionSay(id, line, evidence);
+        else displayCompanionLine(line);
+      },
+      place: (id, planId, blockIndex) => {
+        if (roomReady) lanClient?.sendCompanionPlace(id, planId, blockIndex);
+        else placeLocalBuildBlock(planId, blockIndex);
+      },
+      stop: () => {
+        if (roomReady) lanClient?.sendCompanionStop();
+      },
+    },
+    world: (x, y, z) => world.getBlock(x, y, z),
+    isLoaded: (x, y, z) => world.isLoadedCell(x, y, z),
+    blocked: (x, y, z) => blockedByCylinders(x + 0.5, z + 0.5, y, 0.3, 1.8, companionBlockers),
+    pathBlocked: (x, y, z) => blockedByCylinders(x + 0.5, z + 0.5, y, 0.3, 1.8, [
+      { x: player.position.x, y: player.position.y, z: player.position.z, radius: 0.92, height: 1.8 },
+      ...(splitScreen.isSplitScreen ? [{ x: player2.position.x, y: player2.position.y, z: player2.position.z, radius: 0.92, height: 1.8 }] : []),
+    ]),
+    ownerPosition: () => ({ x: player.position.x, y: player.position.y, z: player.position.z }),
+    visibleBlocks: visibleCompanionBlocks,
+    selfId: ownId,
+    isOwner: true,
+    isSyncing: () => roomSyncBuffer.syncing,
+  });
+  let previewMesh: THREE.InstancedMesh | null = null;
+  const clearBuildPreview = (): void => {
+    if (!previewMesh) return;
+    scene.remove(previewMesh);
+    previewMesh.geometry.dispose();
+    if (Array.isArray(previewMesh.material)) previewMesh.material.forEach((material) => material.dispose());
+    else previewMesh.material.dispose();
+    previewMesh = null;
+  };
+  const showBuildPreview = (blocks: readonly BuildBlock[]): void => {
+    clearBuildPreview();
+    if (blocks.length === 0) return;
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    const material = new THREE.MeshBasicMaterial({ color: 0x64d8ff, wireframe: true, transparent: true, opacity: 0.62, depthWrite: false });
+    const mesh = new THREE.InstancedMesh(geometry, material, blocks.length);
+    const matrix = new THREE.Matrix4();
+    for (let index = 0; index < blocks.length; index += 1) {
+      const block = blocks[index];
+      matrix.makeTranslation(block.x + 0.5, block.y + 0.5, block.z + 0.5);
+      mesh.setMatrixAt(index, matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = false;
+    previewMesh = mesh;
+    scene.add(mesh);
+  };
+  const findLocalCompanionSpawn = (): { x: number; y: number; z: number } | null => {
+    refreshCompanionBlockers();
+    const originX = Math.floor(player.position.x);
+    const originZ = Math.floor(player.position.z);
+    for (let radius = 1; radius <= 4; radius += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        for (const dz of [-radius, radius]) {
+          const x = originX + dx;
+          const z = originZ + dz;
+          const y = world.surfaceColumnTop(x, z) + 1;
+          if (!world.isLoadedCell(x, y - 1, z) || !world.isLoadedCell(x, y, z) || !world.isLoadedCell(x, y + 1, z)) continue;
+          if (world.getBlock(x, y, z) !== BLOCK_ID.air || world.getBlock(x, y + 1, z) !== BLOCK_ID.air) continue;
+          if (blockedByCylinders(x + 0.5, z + 0.5, y, 0.3, 1.8, companionBlockers)) continue;
+          return { x: x + 0.5, y, z: z + 0.5 };
+        }
+      }
+      for (let dz = -radius + 1; dz < radius; dz += 1) {
+        for (const dx of [-radius, radius]) {
+          const x = originX + dx;
+          const z = originZ + dz;
+          const y = world.surfaceColumnTop(x, z) + 1;
+          if (!world.isLoadedCell(x, y - 1, z) || !world.isLoadedCell(x, y, z) || !world.isLoadedCell(x, y + 1, z)) continue;
+          if (world.getBlock(x, y, z) !== BLOCK_ID.air || world.getBlock(x, y + 1, z) !== BLOCK_ID.air) continue;
+          if (blockedByCylinders(x + 0.5, z + 0.5, y, 0.3, 1.8, companionBlockers)) continue;
+          return { x: x + 0.5, y, z: z + 0.5 };
+        }
+      }
+    }
+    return null;
+  };
+  let submitCompanionTask: (task: BuildTask) => void = () => {};
+  const requestCabinPreview = (): void => {
+    if (!companionController.getState()) {
+      showCompanionNotice("Najpierw dodaj towarzysza.");
+      return;
+    }
+    if (roomReady && lanClient) {
+      const requestId = crypto.randomUUID();
+      pendingBuildPreview = { planId: "", blocks: [], requestedBy: ownId ?? "" };
+      lastBuildPreviewRequest = requestId;
+      lanClient.send({ t: "build_preview", requestId, expectedGeneration: observedGeneration });
+      return;
+    }
+    refreshCompanionBlockers();
+    const plan = createHousePlan(
+      world,
+      { x: player.position.x, z: player.position.z, yaw: player.yaw },
+      seed,
+      (x, z, radius) => houseSiteOccupied(x, z, radius),
+      "cabin",
+    );
+    if (!plan) {
+      showCompanionNotice("Nie ma bezpiecznego miejsca na domek.");
+      return;
+    }
+    const preview = { planId: `local-house-${crypto.randomUUID()}`, blocks: plan.blocks, requestedBy: "offline" };
+    pendingBuildPreview = preview;
+    showBuildPreview(preview.blocks);
+    showCompanionNotice(`Domek: ${preview.blocks.length} bloków. Potwierdź budowę.`);
+  };
+  const confirmCabinPreview = (): void => {
+    const preview = pendingBuildPreview;
+    if (!preview || preview.blocks.length === 0) {
+      showCompanionNotice("Najpierw wybierz domek.");
+      return;
+    }
+    if (roomReady && lanClient) {
+      if (preview.requestedBy !== ownId) {
+        showCompanionNotice("Tylko autor może potwierdzić ten domek.");
+        return;
+      }
+      lanClient.sendBuildConfirm(preview.planId);
+      return;
+    }
+    activeBuildPlan = { ...preview, placed: 0, reserved: true };
+    observedGeneration += 1;
+    companionController.command("build", observedGeneration);
+    if (!companionController.reserveBuild(preview.planId, preview.blocks)) {
+      activeBuildPlan = null;
+      showCompanionNotice("Towarzysz nie może rozpocząć budowy.");
+      return;
+    }
+    pendingBuildPreview = null;
+    clearBuildPreview();
+  };
+  const submitTask = (task: BuildTask): void => {
+    if (task === "build") {
+      requestCabinPreview();
+      return;
+    }
+    if (task === "stop") {
+      if (roomReady && lanClient) {
+        lanClient.sendCompanionStop();
+      } else {
+        observedGeneration += 1;
+        companionController.command("stop", observedGeneration);
+      }
+      clearBuildPreview();
+      pendingBuildPreview = null;
+      activeBuildPlan = null;
+      return;
+    }
+    if (!companionController.getState()) {
+      showCompanionNotice("Najpierw dodaj towarzysza.");
+      return;
+    }
+    if (roomReady && lanClient) {
+      lanClient.sendCompanionCommand(task, observedGeneration);
+    } else {
+      observedGeneration += 1;
+      companionController.command(task, observedGeneration);
+    }
+  };
+  submitCompanionTask = submitTask;
+  const addCompanion = async (profile: CompanionProfileId): Promise<void> => {
+    if (roomReady && roomOwnerId !== ownId) {
+      showCompanionNotice("Tylko właściciel pokoju może dodać towarzysza.");
+      return;
+    }
+    companionPanel.setBusy(true);
+    if (!await prepareCompanionModel(profile)) {
+      companionPanel.setBusy(false);
+      return;
+    }
+    if (roomReady && lanClient) {
+      const position = findLocalCompanionSpawn();
+      if (!position) {
+        showCompanionNotice("Nie znaleziono bezpiecznego miejsca obok ciebie.");
+        companionPanel.setBusy(false);
+        return;
+      }
+      const local = companionController.spawnLocal(profile, position, player.yaw);
+      await displayCompanionState(local);
+      lanClient.sendCompanionSpawn(profile);
+      companionPanel.setBusy(false);
+      return;
+    }
+    const position = findLocalCompanionSpawn();
+    if (!position) {
+      showCompanionNotice("Nie znaleziono bezpiecznego miejsca obok ciebie.");
+      companionPanel.setBusy(false);
+      return;
+    }
+    const state = companionController.spawnLocal(profile, position, player.yaw);
+    await displayCompanionState(state);
+    companionPanel.setBusy(false);
+  };
+  const removeCompanion = (): void => {
+    const state = companionController.getState();
+    if (!state) return;
+    if (roomReady) {
+      if (roomOwnerId !== ownId) {
+        showCompanionNotice("Tylko właściciel pokoju może usunąć towarzysza.");
+        return;
+      }
+      lanClient?.sendCompanionRemove(state.id);
+      return;
+    }
+    companionController.applyServerRemove(state.id);
+    removeCompanionAvatar();
+  };
+  let buddyMic: ReturnType<typeof createMicController> | null = null;
+  let buddyGestureEpoch = 0;
+  let buddyGestureHeld = false;
+  let buddyLiveGesture: { id: number; epoch: number; mic: ReturnType<typeof createMicController> } | null = null;
+  let buddyGestureExpiry = 0;
+  let lastBuildPreviewRequest = "";
+  const invalidateBuddyMic = (): void => {
+    buddyGestureEpoch += 1;
+    buddyGestureHeld = false;
+    buddyLiveGesture = null;
+    window.clearTimeout(buddyGestureExpiry);
+    buddyMic?.cancel();
+    buddyMic?.dispose();
+    buddyMic = null;
+  };
+  const applyBuddyTranscript = (text: string): void => {
+    const interpreted = interpretCompanionUtterance(text);
+    if (!interpreted) {
+      showCompanionNotice("Powiedz prościej.");
+      return;
+    }
+    submitCompanionTask(interpreted.task);
+  };
+  const startBuddyMic = (): void => {
+    if (!companionPanel.isOpen || paused || !gameStarted) return;
+    invalidateBuddyMic();
+    const epoch = buddyGestureEpoch;
+    buddyGestureHeld = true;
+    const micController = createMicController({
+      maxSegmentMs: 10_000,
+      silenceThresholdMs: 1_200,
+      onTranscript: (text, gestureId) => {
+        if (buddyLiveGesture?.id !== gestureId || buddyLiveGesture.epoch !== epoch ||
+          !companionPanel.isOpen || paused || !gameStarted) return;
+        buddyLiveGesture = null;
+        window.clearTimeout(buddyGestureExpiry);
+        micController.dispose();
+        buddyMic = null;
+        applyBuddyTranscript(text);
+      },
+      onError: (_code, gestureId) => {
+        if (buddyLiveGesture?.id !== gestureId || buddyLiveGesture.epoch !== epoch) return;
+        buddyLiveGesture = null;
+        window.clearTimeout(buddyGestureExpiry);
+        showCompanionNotice("Nie udało się rozpoznać mowy.");
+        micController.dispose();
+        buddyMic = null;
+      },
+    });
+    buddyMic = micController;
+    void micController.begin().then((gestureId) => {
+      if (gestureId === null) {
+        if (buddyMic === micController) buddyMic = null;
+        micController.dispose();
+        return;
+      }
+      if (epoch !== buddyGestureEpoch || !companionPanel.isOpen || paused) {
+        micController.cancel();
+        micController.dispose();
+        return;
+      }
+      buddyLiveGesture = { id: gestureId, epoch, mic: micController };
+      if (!buddyGestureHeld) {
+        buddyGestureExpiry = window.setTimeout(() => invalidateBuddyMic(), 12_000);
+      }
+    }).catch(() => {
+      if (epoch === buddyGestureEpoch) showCompanionNotice("Mikrofon jest niedostępny.");
+      micController.dispose();
+      if (buddyMic === micController) buddyMic = null;
+    });
+  };
+  const endBuddyMic = (): void => {
+    if (!buddyGestureHeld) return;
+    buddyGestureHeld = false;
+    buddyMic?.end();
+    if (buddyLiveGesture) buddyGestureExpiry = window.setTimeout(() => invalidateBuddyMic(), 12_000);
+  };
+  companionPanel = createCompanionPanel({
+    onAdd: (profile) => { void addCompanion(profile); },
+    onRemove: removeCompanion,
+    onFollow: () => submitTask("follow"),
+    onScout: () => submitTask("scout"),
+    onPreviewCabin: requestCabinPreview,
+    onConfirmCabin: confirmCabinPreview,
+    onStop: () => submitTask("stop"),
+    onMute: (muted) => {
+      buddyMuted = muted;
+      if (muted) {
+        invalidateBuddyMic();
+        for (const id of buddySpeechIds) audio.speech.cancel(id);
+        buddySpeechIds.clear();
+      }
+    },
+    onVolume: (level) => {
+      buddyVolume = level;
+      if (level <= 0.05) {
+        for (const id of buddySpeechIds) audio.speech.cancel(id);
+        buddySpeechIds.clear();
+      }
+    },
+    onTalkStart: startBuddyMic,
+    onTalkEnd: endBuddyMic,
+  });
+  document.body.append(companionPanel.root);
+  companionPanel.setModelChoice("staszek");
+  const closeCompanionPanel = (): void => {
+    companionPanel.close();
+    invalidateBuddyMic();
+    keys.clear();
+    isMining = false;
+    resetMiningFeedback();
+  };
+  const openCompanionPanel = (): void => {
+    if (paused || !gameStarted) return;
+    if (document.pointerLockElement) document.exitPointerLock();
+    keys.clear();
+    isMining = false;
+    resetMiningFeedback();
+    companionPanel.open();
   };
 
   const conciergeHost: ConciergeHost = {
@@ -692,9 +1415,10 @@ async function boot(): Promise<void> {
   const pauseLanBtn = document.querySelector<HTMLButtonElement>("#pause-lan");
   const lanMenu = new LanMenuController({
     root: pauseLanPanel!,
+    onLeave: async () => leaveRoom(),
     onHost: async (roomName, hostSeed) => {
       const code = Math.random().toString(36).slice(2, 6).toUpperCase();
-      const url = `ws://${window.location.hostname}:${DEFAULT_LAN_PORT}/ws`;
+      const url = __GIERA_TEST_WS_URL__ || `ws://${window.location.hostname}:${DEFAULT_LAN_PORT}/ws`;
       return connectLan(url, code, {
         host: true,
         roomName,
@@ -736,6 +1460,7 @@ async function boot(): Promise<void> {
     statusEl: conciergeStatus,
     slots: { launch: launchConciergeSlot, pause: pauseConciergeSlot },
     retryEl: conciergeRetry,
+    speech: audio.speech,
     onClosed: (reason) => {
       if (reason === "hidden") pauseMenu.close();
     },
@@ -806,7 +1531,7 @@ async function boot(): Promise<void> {
     if (qa) return;
     const speaker = npcManager.npcs.find((m) => m.def.id === npcId);
     const distance = speaker ? Math.hypot(speaker.position.x - player.position.x, speaker.position.z - player.position.z) : 0;
-    void audio.speak(npcId, text, Math.max(0, 1 - distance / 40)).catch(() => {});
+    audio.speech.request({ kind: "text", speakerId: npcId, text, volume: Math.max(0, 1 - distance / 40) });
   };
 
   const rememberNpcExchange = (npcId: string, userText: string, assistantText: string): void => {
@@ -887,6 +1612,9 @@ async function boot(): Promise<void> {
     window.addEventListener("touchstart", enablePlaylist, { once: true });
   }
   window.__GIERA__.ready = true;
+  if (qa && activeRoomSession && !roomReady && gameStarted) {
+    void connectLan(activeRoomSession.url, activeRoomSession.room, { host: false });
+  }
   let streamCx = 0;
   let streamCz = 0;
   let streamBusy = true;
@@ -973,10 +1701,19 @@ async function boot(): Promise<void> {
         hud.setInventoryOpen(false);
       } else if (hud.isControlsModalOpen()) {
         hud.setControlsModalOpen(false);
+      } else if (companionPanel.isOpen) {
+        closeCompanionPanel();
       } else {
         pauseMenu.toggle();
       }
       audio.play("ui_click");
+    } else if (e.code === "KeyB") {
+      if (companionPanel.isOpen) {
+        closeCompanionPanel();
+      } else {
+        openCompanionPanel();
+      }
+      audio.play("ui_click", { volume: 0.4 });
     } else if (e.code.startsWith("Digit")) {
       const num = Number(e.code.replace("Digit", ""));
       if (num >= 1 && num <= 9) {
@@ -1033,7 +1770,7 @@ async function boot(): Promise<void> {
       },
       edits: world.exportEdits(),
       savedAt: new Date().toISOString(),
-    });
+    }, currentSaveKey);
   };
   setInterval(triggerSave, 30_000);
   window.addEventListener("visibilitychange", () => {
@@ -1114,6 +1851,7 @@ async function boot(): Promise<void> {
     if (qa && qaState.pauseAt !== undefined && qaState.frame >= qaState.pauseAt) qaState.paused = true;
     const delta = qa ? (qaState.paused ? 0 : 1 / 60) : Math.min(0.05, Math.max(0, (now - previous) / 1000));
     previous = now;
+    if (paused && companionPanel.isOpen) closeCompanionPanel();
     if (paused) {
       beatTracker.update();
       postfx.setBeatPulse(beatTracker.beatPulse);
@@ -1126,6 +1864,20 @@ async function boot(): Promise<void> {
       qaState.frame++;
     }
     elapsed = (elapsed + delta) % 600;
+
+    refreshCompanionBlockers();
+    const companionState = companionController.tick(delta);
+    if (companionState) companionTarget = { ...companionState };
+    if (companionTarget && companionAvatar) {
+      const object = companionAvatar.object;
+      const blend = Math.min(1, delta * 12);
+      object.position.x += (companionTarget.x - object.position.x) * blend;
+      object.position.y += (companionTarget.y - object.position.y) * blend;
+      object.position.z += (companionTarget.z - object.position.z) * blend;
+      object.rotation.y = companionTarget.yaw;
+      const anim = companionTarget.anim;
+      companionAvatar.setMotion(anim === "walk" ? "walk" : anim === "jump" ? "jump" : anim === "mine" ? "mine" : "idle");
+    }
 
     // P1 Movement and gamepad step (Keyboard + Touch + Xbox Pad 0)
     const tInput = touch.getInput();
@@ -1292,28 +2044,50 @@ async function boot(): Promise<void> {
         player2.syncAvatar();
       }
       const gb = (x: number, y: number, z: number): number => world.getBlock(x, y, z);
-      const follow = (o: THREE.Object3D, x: number, y: number, z: number, grounded: boolean, damp: boolean): void => {
-        const target = grounded ? Math.max(-0.1, Math.min(0.5, smoothGroundOffset(gb, x, z, y))) : 0;
+      const follow = (o: THREE.Object3D, x: number, y: number, z: number, grounded: boolean, damp: boolean, lift: number): void => {
+        const activeLift = grounded ? lift : 0;
+        let target = 0;
+        if (grounded) {
+          const centreOffset = smoothGroundOffset(gb, x, z, y);
+          let footprintOffset = centreOffset;
+          for (const [dx, dz] of GROUNDING_PROBES) {
+            footprintOffset = Math.max(footprintOffset, smoothGroundOffset(gb, x + dx, z + dz, y));
+          }
+          const groundOffset = centreOffset + (footprintOffset - centreOffset) * 0.5;
+          target = Math.max(-0.1, Math.min(0.5 - activeLift, groundOffset));
+        }
         const prev = (o.userData.groundOffset as number | undefined) ?? target;
-        const next = prev + (target - prev) * Math.min(1, delta * 12);
+        const candidate = prev + (target - prev) * Math.min(1, delta * 12);
+        const prevLift = (o.userData.locomotionLift as number | undefined) ?? activeLift;
+        const nextLift = activeLift > prevLift
+          ? activeLift
+          : prevLift + (activeLift - prevLift) * Math.min(1, delta * 12);
+        const next = Math.max(-0.1, Math.min(0.5 - nextLift, candidate));
         o.userData.groundOffset = next;
+        o.userData.locomotionLift = nextLift;
         let baseY = y;
         if (damp) {
           const prevY = (o.userData.baseY as number | undefined) ?? y;
           baseY = Math.abs(y - prevY) > 2 ? y : prevY + (y - prevY) * Math.min(1, delta * 9);
           o.userData.baseY = baseY;
         }
-        o.position.y = baseY + next;
+        o.position.y = baseY + next + nextLift;
       };
-      for (const p of [player, player2]) if (p.avatar) follow(p.avatar.object, p.position.x, p.position.y, p.position.z, p.onGround, false);
+      for (const p of [player, player2]) if (p.avatar) {
+        const motion = p.avatar.currentMotion;
+        const lift = motion === "walk" || motion === "sprint" ? PLAYER_GROUNDED_LOCOMOTION_LIFT[p.characterProfile] : 0;
+        follow(p.avatar.object, p.position.x, p.position.y, p.position.z, p.onGround, false, lift);
+      }
     }
     player.avatar?.update(delta);
     if (!splitScreen.isSplitScreen) player2.avatar?.update(delta);
     gameplayVfx.updateFootsteps("p1", player.position, player.onGround);
     gameplayVfx.updateFootsteps("p2", player2.position, splitScreen.isSplitScreen && player2.onGround);
     if (qa) {
-      player.avatar?.freezePose(0.5);
-      player2.avatar?.freezePose(0.5);
+      if (!qaLivePlayerPose) {
+        player.avatar?.freezePose(0.5);
+        player2.avatar?.freezePose(0.5);
+      }
       for (const n of npcManager.npcs) n.avatar?.freezePose(0.5);
     }
     if (!qa) {

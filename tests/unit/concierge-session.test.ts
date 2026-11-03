@@ -12,6 +12,7 @@ vi.mock("@elevenlabs/client", () => ({
 import { ConciergeSession } from "../../src/client/concierge/session";
 import type { ConciergeHost } from "../../src/client/concierge/actions";
 import type { ConciergeSessionOptions } from "../../src/client/concierge/session";
+import type { SpeechService } from "../../src/client/audio/speech";
 import { BLOCK_ID } from "../../src/shared/blocks";
 import { createMinePlan, applyMinePlan } from "../../src/client/game/terrain-cheats";
 import { GameInventory } from "../../src/client/game/inventory";
@@ -197,6 +198,95 @@ describe("ConciergeSession", () => {
     expect(startSession).toHaveBeenCalledTimes(2);
     expect(startSession.mock.calls[1][0].overrides?.agent?.firstMessage).toContain("No co tam, ziomy");
     h.session.dispose();
+  });
+
+  it("shows Tata status text while connecting and when live", async () => {
+    const connecting = build(new Promise<string>(() => {}));
+    try {
+      void connecting.session.open("launch");
+      const status = document.querySelector<HTMLElement>("#status")!;
+      await vi.waitFor(() => expect(status.textContent).toBe("Tata się budzi…"));
+    } finally {
+      connecting.session.dispose();
+    }
+
+    startSession.mockImplementationOnce(async (options: { onConnect?: () => void }) => {
+      options.onConnect?.();
+      return { endSession, type: "voice", setVolume: setConversationVolume };
+    });
+    const live = build();
+    try {
+      await live.session.open("launch");
+      const liveStatus = document.querySelector<HTMLElement>("#status")!;
+      expect(liveStatus.textContent).toBe("Mów do Taty.");
+    } finally {
+      live.session.dispose();
+    }
+  });
+
+  it("greets launch as Tata and keeps the pause greeting", async () => {
+    const h = build();
+    await h.session.open("launch");
+    expect(startSession.mock.calls[0][0].overrides?.agent?.firstMessage).toBe(
+      "Siema, kapuchy. Jestem Tata, dawaj do gry",
+    );
+    await h.session.close("menu");
+    await h.session.open("pause");
+    expect(startSession.mock.calls[1][0].overrides?.agent?.firstMessage).toBe("No co tam, ziomy");
+    h.session.dispose();
+  });
+
+  it("requests the Tata stream before the SDK session, marks it ready once, and ends it on close", async () => {
+    const speech = {
+      request: vi.fn(() => ({ id: 7, done: Promise.resolve() })),
+      streamReady: vi.fn(),
+      endStream: vi.fn(),
+    };
+    let audioCb: (() => void) | undefined;
+    startSession.mockImplementationOnce(async (options: { onAudio?: () => void; onConnect?: () => void }) => {
+      audioCb = options.onAudio;
+      options.onConnect?.();
+      return { endSession, type: "voice", setVolume: setConversationVolume };
+    });
+    const h = build(Promise.resolve("wss://signed"), { speech: speech as unknown as SpeechService });
+    try {
+      await h.session.open("launch");
+      expect(speech.request).toHaveBeenCalledWith({ kind: "stream", speakerId: "tata" });
+      expect(speech.request.mock.invocationCallOrder[0]).toBeLessThan(startSession.mock.invocationCallOrder[0]);
+      audioCb?.();
+      audioCb?.();
+      expect(speech.streamReady).toHaveBeenCalledTimes(1);
+      expect(speech.streamReady).toHaveBeenCalledWith(7);
+      await h.session.close("menu");
+      expect(speech.endStream).toHaveBeenCalledWith(7, false);
+      audioCb?.();
+      expect(speech.streamReady).toHaveBeenCalledTimes(1);
+    } finally {
+      h.session.dispose();
+    }
+  });
+
+  it("ends the Tata stream as failed on disconnect", async () => {
+    const speech = {
+      request: vi.fn(() => ({ id: 9, done: Promise.resolve() })),
+      streamReady: vi.fn(),
+      endStream: vi.fn(),
+    };
+    let disconnectCb: (() => void) | undefined;
+    startSession.mockImplementationOnce(async (options: { onDisconnect?: () => void; onConnect?: () => void }) => {
+      disconnectCb = options.onDisconnect;
+      options.onConnect?.();
+      return { endSession, type: "voice", setVolume: setConversationVolume };
+    });
+    const h = build(Promise.resolve("wss://signed"), { speech: speech as unknown as SpeechService });
+    try {
+      await h.session.open("launch");
+      disconnectCb?.();
+      await vi.waitFor(() => expect(h.onClosed).toHaveBeenCalledWith("disconnect"));
+      expect(speech.endStream).toHaveBeenCalledWith(9, true);
+    } finally {
+      h.session.dispose();
+    }
   });
 
   it("hides the panel and ends the session when the menu closes", async () => {

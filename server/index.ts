@@ -14,7 +14,8 @@ import {
 } from "./ws-handler";
 import { NPC_ALLOWED_TOOLS as NPC_TOOLS } from "./npc-bridge";
 import { handleNpcReason } from "./npc-reason";
-import { handleNpcTts } from "./npc-tts";
+import { handleCompanionPlan } from "./companion-plan";
+import { handleSpeechTts } from "./speech-tts";
 import { handleNpcStt } from "./npc-stt";
 import { handleConciergeSession } from "./concierge";
 import { serveStatic } from "./static";
@@ -98,12 +99,16 @@ const server = Bun.serve<WsConnection>({
       return handleNpcReason(req);
     }
 
-    if (url.pathname === "/npc/tts") {
-      return handleNpcTts(req);
+    if (url.pathname === "/npc/companion") {
+      return handleCompanionPlan(req, { clientIp: server.requestIP(req)?.address ?? "local" });
+    }
+
+    if (url.pathname === "/speech/tts") {
+      return handleSpeechTts(req, { clientIp: server.requestIP(req)?.address ?? "local" });
     }
 
     if (url.pathname === "/npc/stt") {
-      return handleNpcStt(req);
+      return handleNpcStt(req, { clientIp: server.requestIP(req)?.address ?? "local" });
     }
 
     if (url.pathname === "/concierge/session") {

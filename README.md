@@ -1,9 +1,9 @@
 # giera
 
-## Iskra world tools
+## Tata world tools
 
-Iskra can build cabins or lookout towers with randomized size and materials.
-She can dig an 8×2×2 mine through untouched stone, dirt, grass, sand, and ore.
+Tata can build cabins or lookout towers with randomized size and materials.
+He can dig an 8×2×2 mine through untouched stone, dirt, grass, sand, and ore.
 Mining stops at player edits, wood, water, bedrock, or occupied space.
 World edits persist in the save and sync to connected LAN players.
 

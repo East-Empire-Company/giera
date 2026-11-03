@@ -1,7 +1,8 @@
-import { MAX_ROOM_NAME_LENGTH, type PlayerProfile, type PlayerState } from "../src/shared/lan-protocol";
+import { MAX_ROOM_NAME_LENGTH, type BuildPreviewInfo, type CompanionState, type PlayerProfile, type PlayerState } from "../src/shared/lan-protocol";
 import { nextFreeTycoonSlot } from "../src/shared/tycoon-slots";
-import { generateChunk } from "../src/shared/worldgen";
-import { CHUNK_SIZE, encodeRLE, getBlockIndex } from "../src/shared/chunk";
+import { generateBlock, generateChunk } from "../src/shared/worldgen";
+import { CHUNK_SIZE, encodeRLE, getBlockIndex, WORLD_HEIGHT } from "../src/shared/chunk";
+import { BLOCK_ID } from "../src/shared/blocks";
 
 export type WorldSnapshot = {
   seed: number;
@@ -18,6 +19,13 @@ export class RoomState {
   private readonly chunks = new Map<string, Uint8Array>();
   private loadedFromSave = false;
   private name: string;
+  private ownerId: string | null = null;
+  private ownerHasPose = false;
+  private companion: CompanionState | null = null;
+  private companionMoveAt = 0;
+  private generation = 0;
+  private buildPreview: BuildPreviewInfo | null = null;
+  private planSequence = 0;
 
   constructor(code: string, seed: number) {
     this.code = code;
@@ -91,6 +99,80 @@ export class RoomState {
 
   getBlock(x: number, y: number, z: number): number | undefined {
     return this.edits.get(`${x},${y},${z}`);
+  }
+
+  getWorldBlock(x: number, y: number, z: number): number {
+    return this.edits.get(`${x},${y},${z}`) ?? generateBlock(x, y, z, this._seed);
+  }
+
+  surfaceColumnTop(x: number, z: number): number {
+    for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+      if (this.getWorldBlock(x, y, z) !== BLOCK_ID.air) return y;
+    }
+    return 0;
+  }
+
+  getOwnerId(): string | null {
+    return this.ownerId;
+  }
+
+  setOwnerId(id: string | null): void {
+    this.ownerId = id;
+  }
+
+  markOwnerPose(): void {
+    this.ownerHasPose = true;
+  }
+
+  hasOwnerPose(): boolean {
+    return this.ownerHasPose;
+  }
+
+  getCompanion(): CompanionState | null {
+    return this.companion;
+  }
+
+  setCompanion(companion: CompanionState | null): void {
+    this.companion = companion;
+  }
+
+  getCompanionMoveAt(): number {
+    return this.companionMoveAt;
+  }
+
+  setCompanionMoveAt(value: number): void {
+    this.companionMoveAt = value;
+  }
+
+  getGeneration(): number {
+    return this.generation;
+  }
+
+  bumpGeneration(): number {
+    this.generation += 1;
+    return this.generation;
+  }
+
+  getBuildPreview(): BuildPreviewInfo | null {
+    return this.buildPreview;
+  }
+
+  setBuildPreview(preview: BuildPreviewInfo | null): void {
+    this.buildPreview = preview;
+  }
+
+  nextPlanId(): string {
+    this.planSequence += 1;
+    return `bp_${this.planSequence}`;
+  }
+
+  editEntries(): { x: number; y: number; z: number; id: number }[] {
+    const entries: { x: number; y: number; z: number; id: number }[] = [];
+    for (const [key, id] of this.edits) {
+      const [x, y, z] = key.split(",").map(Number);
+      entries.push({ x: x!, y: y!, z: z!, id });
+    }
+    return entries;
   }
 
   getEditCount(): number {

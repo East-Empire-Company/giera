@@ -28,3 +28,6 @@ reason: Family GLB avatars and seeded NPC idle animations are intended visual ch
 ## 2026-11-01T20:22:48.714Z stage=goldens
 reason: QA composer time now follows deterministic simulation time
 
+## 2026-11-03T00:40:42.520Z stage=goldens
+reason: Avatar ground-follow rework: footprint-sampled smoothGroundOffset with per-profile lift shifts character grounding slightly in tycoon view (companion/NPC terrain fix)
+
