@@ -181,10 +181,11 @@ describe("companion authority", () => {
     const h = harness();
     const owner = join(h, "p1");
     const other = join(h, "p2");
-    pose(owner, h, -10, 50, -10);
+    pose(owner, h, -10, 50, -5);
     send(owner, h.deps, { t: "companion_spawn", profile: "staszek" });
-    pose(other, h, -10, 50, -10);
+    pose(other, h, -10, 50, -5);
     send(other, h.deps, { t: "build_preview", requestId: "r1", expectedGeneration: 1 });
+    expect(publishedOf(h, "build_preview")).toHaveLength(1);
     const preview = publishedOf(h, "build_preview")[0];
     send(other, h.deps, { t: "build_confirm", planId: preview.planId });
     expect(h.room("DOM1").getBuildPreview()?.reserved).toBe(true);
@@ -202,10 +203,11 @@ describe("companion authority", () => {
     const owner = join(h, "p1");
     const other = join(h, "p2");
     const newest = join(h, "p3");
-    pose(owner, h, -10, 50, -10);
+    pose(owner, h, -10, 50, -5);
     send(owner, h.deps, { t: "companion_spawn", profile: "staszek" });
-    pose(other, h, -10, 50, -10);
+    pose(other, h, -10, 50, -5);
     send(other, h.deps, { t: "build_preview", requestId: "r1", expectedGeneration: 1 });
+    expect(publishedOf(h, "build_preview")).toHaveLength(1);
     clear(h);
 
     handleWsClose(owner, h.deps);

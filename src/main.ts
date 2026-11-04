@@ -62,11 +62,12 @@ import { PauseMenuController } from "./client/game/pause-menu";
 import { LanMenuController } from "./client/game/lan-menu";
 import { ConciergeSession } from "./client/concierge/session";
 import type { ConciergeHost, ConciergePlayer } from "./client/concierge/actions";
-import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "./shared/blocks";
+import { BLOCK_BY_ID, BLOCK_ID, isStoneFamily, type BlockId } from "./shared/blocks";
 import { CHUNK_SIZE, chunkKey } from "./shared/chunk";
 import { raycastInteract } from "./shared/raycast";
 import { makeRng } from "./shared/rng";
 import { generateBlock, surfaceHeight } from "./shared/worldgen";
+import { TntFuseQueue, TNT_CHAIN_FUSE_SECONDS, TNT_FUSE_SECONDS, TNT_RADIUS, TNT_KNOCKBACK_RANGE, TNT_KNOCKBACK_STRENGTH } from "./client/game/tnt";
 
 const PLAYER_GROUNDED_LOCOMOTION_LIFT: Record<PlayerProfile, number> = {
   ziemek: 0.06,
@@ -734,39 +735,6 @@ async function boot(): Promise<void> {
     });
   };
 
-  const launchMenu = new LaunchMenuController({
-    root: launchRoot,
-    startButton: launchStart,
-    modeButton: launchMode,
-    onStart: (settings, source) => {
-      gameStarted = true;
-      canvas.inert = false;
-      if (hudRoot) {
-        hudRoot.removeAttribute("inert");
-        hudRoot.style.visibility = "";
-      }
-      attachTouchControls();
-      suppressGamepadJumpUntilRelease = source === "gamepad";
-      applyLaunchProfile(player, settings.profile);
-      applyLaunchProfile(player2, settings.profile === "ziemek" ? "gniewko" : "ziemek");
-      splitScreen.setSplitScreen(settings.splitScreen);
-      hud.modeBtn.textContent = settings.splitScreen ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
-      const pending = sessionStorage.getItem("giera.pendingLanJoin");
-      if (pending) {
-        sessionStorage.removeItem("giera.pendingLanJoin");
-        try {
-          const { url, room } = JSON.parse(pending) as { url: string; room: string };
-          void connectLan(url, room, { host: false });
-          return;
-        } catch {
-          // fall through to the active-room session
-        }
-      }
-      if (activeRoomSession && !roomReady) {
-        void connectLan(activeRoomSession.url, activeRoomSession.room, { host: false });
-      }
-    },
-  });
 
   const pauseRoot = document.querySelector<HTMLElement>("#pause-menu");
   const pauseResume = document.querySelector<HTMLButtonElement>("#pause-resume");
@@ -1465,6 +1433,40 @@ async function boot(): Promise<void> {
       if (reason === "hidden") pauseMenu.close();
     },
   });
+  const launchMenu = new LaunchMenuController({
+    root: launchRoot,
+    startButton: launchStart,
+    modeButton: launchMode,
+    conciergeSession,
+    onStart: (settings, source) => {
+      gameStarted = true;
+      canvas.inert = false;
+      if (hudRoot) {
+        hudRoot.removeAttribute("inert");
+        hudRoot.style.visibility = "";
+      }
+      attachTouchControls();
+      suppressGamepadJumpUntilRelease = source === "gamepad";
+      applyLaunchProfile(player, settings.profile);
+      applyLaunchProfile(player2, settings.profile === "ziemek" ? "gniewko" : "ziemek");
+      splitScreen.setSplitScreen(settings.splitScreen);
+      hud.modeBtn.textContent = settings.splitScreen ? "Tryb: 2 Graczy (Ziemek & Gniewko)" : "Tryb: 1 Gracz";
+      const pending = sessionStorage.getItem("giera.pendingLanJoin");
+      if (pending) {
+        sessionStorage.removeItem("giera.pendingLanJoin");
+        try {
+          const { url, room } = JSON.parse(pending) as { url: string; room: string };
+          void connectLan(url, room, { host: false });
+          return;
+        } catch {
+          // fall through to the active-room session
+        }
+      }
+      if (activeRoomSession && !roomReady) {
+        void connectLan(activeRoomSession.url, activeRoomSession.room, { host: false });
+      }
+    },
+  });
   const musicVolumeInputs = Array.from(document.querySelectorAll<HTMLInputElement>('[data-audio-volume="music"]'));
   const speechVolumeInputs = Array.from(document.querySelectorAll<HTMLInputElement>('[data-audio-volume="speech"]'));
   for (const input of musicVolumeInputs) {
@@ -1629,6 +1631,41 @@ async function boot(): Promise<void> {
   let isMining = false;
   let miningBlock: { x: number; y: number; z: number; id: number } | null = null;
   let miningProgress = 0;
+  const tntFuses = new TntFuseQueue();
+  const SHAKE_DURATION = 0.5;
+  let shakeTime = 0;
+  let shakeAmp = 0;
+  const explodeTnt = (cx: number, cy: number, cz: number): void => {
+    for (let x = Math.floor(cx - TNT_RADIUS); x <= Math.ceil(cx + TNT_RADIUS); x++) {
+      for (let y = Math.floor(cy - TNT_RADIUS); y <= Math.ceil(cy + TNT_RADIUS); y++) {
+        for (let z = Math.floor(cz - TNT_RADIUS); z <= Math.ceil(cz + TNT_RADIUS); z++) {
+          if (Math.hypot(x + 0.5 - (cx + 0.5), y + 0.5 - (cy + 0.5), z + 0.5 - (cz + 0.5)) > TNT_RADIUS) continue;
+          const b = world.getBlock(x, y, z);
+          if (b === BLOCK_ID.air || b === BLOCK_ID.bedrock) continue;
+          world.setBlock(x, y, z, BLOCK_ID.air);
+          lanClient?.sendBlockEdit(x, y, z, BLOCK_ID.air);
+          if (b === BLOCK_ID.tnt) tntFuses.ignite(x, y, z, TNT_CHAIN_FUSE_SECONDS);
+        }
+      }
+    }
+    const center = new THREE.Vector3(cx + 0.5, cy + 0.5, cz + 0.5);
+    gameplayVfx.emit("explosion", center);
+    audio.play("explosion");
+    shakeTime = SHAKE_DURATION;
+    shakeAmp = 0.4;
+    for (const p of [player, player2]) {
+      const dx = p.position.x - center.x;
+      const dy = p.position.y + 0.9 - center.y;
+      const dz = p.position.z - center.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > 0.01 && d < TNT_KNOCKBACK_RANGE) {
+        const k = (1 - d / TNT_KNOCKBACK_RANGE) * TNT_KNOCKBACK_STRENGTH;
+        p.velocity.x += (dx / d) * k;
+        p.velocity.y += Math.abs(dy / d) * k * 0.6 + 3;
+        p.velocity.z += (dz / d) * k;
+      }
+    }
+  };
   const resetMiningFeedback = (): void => {
     const hasFeedback =
       miningBlock !== null ||
@@ -2057,7 +2094,7 @@ async function boot(): Promise<void> {
           target = Math.max(-0.1, Math.min(0.5 - activeLift, groundOffset));
         }
         const prev = (o.userData.groundOffset as number | undefined) ?? target;
-        const candidate = prev + (target - prev) * Math.min(1, delta * 12);
+        const candidate = target > prev ? target : prev + (target - prev) * Math.min(1, delta * 12);
         const prevLift = (o.userData.locomotionLift as number | undefined) ?? activeLift;
         const nextLift = activeLift > prevLift
           ? activeLift
@@ -2128,6 +2165,13 @@ async function boot(): Promise<void> {
       camera.position.set(c.x, c.y, c.z);
     }
     camera.lookAt(player.getCameraTarget());
+    if (shakeTime > 0) {
+      shakeTime -= delta;
+      const k = shakeAmp * Math.max(0, shakeTime / SHAKE_DURATION);
+      camera.position.x += Math.sin(elapsed * 91.3) * k;
+      camera.position.y += Math.sin(elapsed * 77.7 + 1.3) * k * 0.6;
+      camera.position.z += Math.cos(elapsed * 83.1 + 0.6) * k;
+    }
     if (splitScreen.isSplitScreen) {
       camera2.position.copy(player2.getCameraPosition(5.5));
       const t2 = player2.getCameraTarget();
@@ -2135,6 +2179,12 @@ async function boot(): Promise<void> {
       camera2.position.set(c2.x, c2.y, c2.z);
       camera2.lookAt(player2.getCameraTarget());
     }
+
+    tntFuses.update(
+      delta,
+      (x, y, z) => explodeTnt(x, y, z),
+      (x, y, z) => gameplayVfx.emit("fuse", new THREE.Vector3(x + 0.5, y + 1.1, z + 0.5))
+    );
 
     const nearestNpc = npcManager.getNearestNPC(player.position.x, player.position.y, player.position.z, 3.0);
     const shouldShowPrompt = nearestNpc && !hud.isNpcDialogOpen() && !hud.isInventoryOpen() && !hud.isControlsModalOpen();
@@ -2294,7 +2344,12 @@ async function boot(): Promise<void> {
       const hit = raycastInteract(camera.position, dir, INTERACT_REACH, (x, y, z) => world.getBlock(x, y, z), player.getCameraTarget());
       if (hit && hit.distance > 0) {
         const bId = world.getBlock(hit.hit.x, hit.hit.y, hit.hit.z);
-        if (bId !== BLOCK_ID.air && bId !== BLOCK_ID.bedrock) {
+        if (bId === BLOCK_ID.tnt) {
+          if (tntFuses.ignite(hit.hit.x, hit.hit.y, hit.hit.z, TNT_FUSE_SECONDS)) {
+            audio.play("ui_click", { volume: 0.5 });
+            resetMiningFeedback();
+          }
+        } else if (bId !== BLOCK_ID.air && bId !== BLOCK_ID.bedrock) {
           if (!miningBlock || miningBlock.x !== hit.hit.x || miningBlock.y !== hit.hit.y || miningBlock.z !== hit.hit.z) {
             miningBlock = { ...hit.hit, id: bId };
             miningProgress = 0;
@@ -2357,7 +2412,7 @@ async function boot(): Promise<void> {
                 audio.play("objective_done");
                 audio.play("celebrate_collect");
               }
-            } else if (bId === BLOCK_ID.stone || bId === BLOCK_ID.cobblestone || bId >= BLOCK_ID.coal_ore) {
+            } else if (isStoneFamily(bId)) {
               audio.play("dig_stone");
               if (objectives.recordAction("find_stone", 1)) {
                 audio.play("objective_done");

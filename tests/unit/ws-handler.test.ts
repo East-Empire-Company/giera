@@ -404,6 +404,14 @@ describe("ws block", () => {
     expect(h.published).toHaveLength(2);
   });
 
+  it("accepts TNT placements and broadcasts them to the room", () => {
+    const h = harness();
+    const ws = join(h);
+    send(ws, h.deps, { t: "block", x: 5, y: 61, z: -104, id: BLOCK_ID.tnt });
+    expect(h.room("DOM1").getBlock(5, 61, -104)).toBe(BLOCK_ID.tnt);
+    expect(h.published).toEqual([{ topic: "room:DOM1", msg: { t: "block", x: 5, y: 61, z: -104, id: BLOCK_ID.tnt, by: "p1" } }]);
+  });
+
   it.each([
     ["fractional x", { x: 1.5 }],
     ["NaN y", { y: NaN }],

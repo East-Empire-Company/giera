@@ -121,6 +121,15 @@
       "character_cost": "364",
       "text": "soft continuous forest ambience, light wind in leaves, distant birds, steady texture, no events, no music"
     },
+    "explosion": {
+      "id": "explosion",
+      "kind": "sfx",
+      "cache_key": "57f27fd3096e4ba105dc4beb8bf6ca8aaea7dd41c40291f0b5a4d08b369672e6",
+      "path": "assets/audio/generated/explosion-57f27fd3096e4ba105dc4beb8bf6ca8aaea7dd41c40291f0b5a4d08b369672e6.mp3",
+      "model_id": "eleven_text_to_sound_v2",
+      "character_cost": "28",
+      "text": "huge cinematic voxel explosion, deep bass boom, sharp crack, crackling debris and dust rumble tail, no music"
+    },
     "music_day_loop": {
       "id": "music_day_loop",
       "kind": "music",

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BLOCK_ID, isStoneFamily } from "../../src/shared/blocks";
 import { GameInventory } from "../../src/client/game/inventory";
 
 describe("GameInventory", () => {
@@ -81,6 +82,25 @@ describe("GameInventory", () => {
     inv.equipTool("iron_pickaxe");
     expect(inv.getMiningSpeedMultiplier(2)).toBe(3.5);
   });
+  it("treats city construction blocks as non-stone mining targets", () => {
+    const inv = new GameInventory({ items: { wooden_pickaxe: 1 } });
+
+    for (const blockId of [15, 16, 17, 18, 19]) {
+      expect(inv.getMiningSpeedMultiplier(blockId)).toBe(1);
+    }
+    for (const blockId of [BLOCK_ID.stone, BLOCK_ID.cobblestone, BLOCK_ID.coal_ore, BLOCK_ID.iron_ore, BLOCK_ID.gold_ore]) {
+      expect(inv.getMiningSpeedMultiplier(blockId)).toBe(1.8);
+    }
+  });
+
+  it("classifies only stone, cobblestone, and current ores as stone family", () => {
+    for (const blockId of [BLOCK_ID.stone, BLOCK_ID.cobblestone, BLOCK_ID.coal_ore, BLOCK_ID.iron_ore, BLOCK_ID.gold_ore]) {
+      expect(isStoneFamily(blockId)).toBe(true);
+    }
+    for (const blockId of [BLOCK_ID.asphalt, BLOCK_ID.paving, BLOCK_ID.brick, BLOCK_ID.plaster, BLOCK_ID.roof_tile]) {
+      expect(isStoneFamily(blockId)).toBe(false);
+    }
+  });
 
   it("cycles hotbar slots via scroll or direct selection", () => {
     const inv = new GameInventory();
@@ -113,6 +133,20 @@ describe("GameInventory", () => {
     const placed = inv.consumeBlockForPlacement("stone");
     expect(placed).toBe(true);
     expect(inv.getBlockCount("stone")).toBe(1);
+  });
+
+  it("syncs crafted TNT onto the hotbar and consumes it in survival", () => {
+    const inv = new GameInventory({ creative: false });
+    inv.addMinedBlock("tnt", 3);
+    inv.syncHotbarWithBlocks();
+    expect(inv.hotbar.some((slot) => slot === BLOCK_ID.tnt)).toBe(true);
+    expect(inv.consumeBlockForPlacement("tnt")).toBe(true);
+    expect(inv.getBlockCount("tnt")).toBe(2);
+    inv.consumeBlockForPlacement("tnt");
+    inv.consumeBlockForPlacement("tnt");
+    expect(inv.getBlockCount("tnt")).toBe(0);
+    inv.syncHotbarWithBlocks();
+    expect(inv.hotbar.some((slot) => slot === BLOCK_ID.tnt)).toBe(false);
   });
 
   it("tracks and limits chunk block edits to 20,000", () => {

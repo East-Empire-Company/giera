@@ -159,7 +159,7 @@ export function validateAudioManifest(value: unknown): asserts value is SourceMa
       }
     }
   }
-  if (sfx.length !== 13 || music.length !== 2 || voice.length !== 6) throw new RangeError("Audio manifest does not match the approved asset set");
+  if (sfx.length !== 14 || music.length !== 2 || voice.length !== 6) throw new RangeError("Audio manifest does not match the approved asset set");
 }
 
 function parseEnvValue(content: string, name: string): string | undefined {

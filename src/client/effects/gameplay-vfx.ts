@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { makeRng } from "../../shared/rng";
 
-export type GameplayVfxKind = "mine" | "wood" | "leaves" | "footstep" | "pollen" | "craft" | "place" | "collect" | "bounce" | "impact_ring" | "debris";
+export type GameplayVfxKind = "mine" | "wood" | "leaves" | "footstep" | "pollen" | "craft" | "place" | "collect" | "bounce" | "impact_ring" | "debris" | "explosion" | "fuse";
 
 export type GameplayVfxTextures = {
   dirt01: THREE.Texture;
@@ -150,6 +150,14 @@ export class GameplayVfx {
       case "bounce":
         this.burst("smoke", 6, 0.6, position, false);
         this.burst("star", 6, 0.6, position, false);
+        break;
+      case "explosion":
+        this.burst("spark", 16, 1.1, position, true);
+        this.burst("smoke", 12, 1.6, position, false);
+        this.burst("debris", 14, 1.0, position, true, "gameplay", { groundY: position.y - 1.5, tint: 0x6b6b6b });
+        break;
+      case "fuse":
+        this.burst("spark", 3, 0.3, position, true);
         break;
     }
   }

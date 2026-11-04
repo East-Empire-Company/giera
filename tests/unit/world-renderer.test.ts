@@ -143,6 +143,17 @@ describe("worldRenderer edit ledger", () => {
     world.dispose();
   });
 
+  it("exports and restores TNT crater edits as block id 20", () => {
+    const world = buildWorld();
+    world.setBlock(2, 3, 4, BLOCK_ID.tnt);
+    expect(world.exportEdits()).toEqual({ "2,3,4": BLOCK_ID.tnt });
+    const other = buildWorld();
+    other.applySavedEdits({ seed: 1234, edits: { "2,3,4": BLOCK_ID.tnt } });
+    expect(other.getBlock(2, 3, 4)).toBe(BLOCK_ID.tnt);
+    other.dispose();
+    world.dispose();
+  });
+
   it("clears room edits and restores generated terrain", () => {
     const world = buildWorld();
     world.setBlock(1, 2, 3, 9);
@@ -328,10 +339,10 @@ describe("WorldRenderer.surfaceColumnTop", () => {
       workerCount: 1,
     });
 
-  it("agrees with the generic scan for generated terrain and trees, loaded or not", () => {
+  it("agrees with the generic scan at non-city coordinates, loaded or not", () => {
     const world = build();
-    for (let x = -40; x <= 40; x += 3) {
-      for (let z = -40; z <= 40; z += 3) {
+    for (let x = 128; x <= 168; x += 3) {
+      for (let z = 128; z <= 168; z += 3) {
         expect(world.surfaceColumnTop(x, z)).toBe(topSolidY((bx, by, bz) => world.getBlock(bx, by, bz), x, z));
       }
     }
@@ -363,6 +374,22 @@ describe("WorldRenderer.surfaceColumnTop", () => {
     for (const [x, z] of [[-1, -1], [-16, -16], [-17, 15], [15, -17], [16, 16], [0, 0]] as const) {
       expect(world.surfaceColumnTop(x, z)).toBe(topSolidY((bx, by, bz) => world.getBlock(bx, by, bz), x, z));
     }
+    world.dispose();
+  });
+  it("ignores city fixtures and water while honoring unloaded saved edits", () => {
+    const world = build();
+    const x = -34;
+    const z = -112;
+
+    expect(world.getBlock(x, 60, z)).not.toBe(BLOCK_ID.air);
+    expect(world.getBlock(x, 61, z)).toBe(BLOCK_ID.plaster);
+    expect(world.surfaceColumnTop(x, z)).toBe(60);
+
+    world.applySavedEdits({ seed: 1234, edits: { "-34,65,-112": BLOCK_ID.water } });
+    expect(world.surfaceColumnTop(x, z)).toBe(60);
+
+    world.applySavedEdits({ seed: 1234, edits: { "-34,66,-112": BLOCK_ID.brick } });
+    expect(world.surfaceColumnTop(x, z)).toBe(66);
     world.dispose();
   });
 });
@@ -435,5 +462,86 @@ describe("worldRenderer loaded cells", () => {
     expect(world.isLoadedCell(-1, 0, -1)).toBe(true);
     expect(world.isLoadedCell(0, 0, 0)).toBe(false);
     world.dispose();
+  });
+});
+describe("WorldRenderer Warsaw tint edits", () => {
+  const seed = 1234;
+  const voxel = { x: -18, y: 82, z: -109 };
+
+  const build = (scene: THREE.Scene): WorldRenderer =>
+    new WorldRenderer({
+      scene,
+      seed,
+      atlasTexture: new THREE.Texture(),
+      atlasNormal: new THREE.Texture(),
+      atlasOrm: new THREE.Texture(),
+      waterNormal: new THREE.Texture(),
+      workerCount: 0,
+    });
+
+  const topFaceColor = (scene: THREE.Scene): [number, number, number] => {
+    let color: [number, number, number] | undefined;
+    scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const positions = object.geometry.getAttribute("position");
+      const normals = object.geometry.getAttribute("normal");
+      const colors = object.geometry.getAttribute("color");
+      for (let vertex = 0; vertex < positions.count; vertex += 4) {
+        const vertices = [0, 1, 2, 3].map((offset) => vertex + offset);
+        if (!vertices.every((index) => normals.getY(index) === 1 && positions.getY(index) + object.position.y === voxel.y + 1)) continue;
+        const xs = vertices.map((index) => positions.getX(index) + object.position.x);
+        const zs = vertices.map((index) => positions.getZ(index) + object.position.z);
+        if (
+          Math.min(...xs) > voxel.x || Math.max(...xs) < voxel.x + 1 ||
+          Math.min(...zs) > voxel.z || Math.max(...zs) < voxel.z + 1
+        ) continue;
+        color = [colors.getX(vertex), colors.getY(vertex), colors.getZ(vertex)];
+      }
+    });
+    if (!color) throw new Error("Missing Warsaw block top face");
+    return color;
+  };
+
+  const expectTinted = (color: [number, number, number]): void => {
+    expect(color[0]).toBeGreaterThan(color[1]);
+    expect(color[1]).toBeGreaterThan(color[2]);
+  };
+
+  const expectUntinted = (color: [number, number, number]): void => {
+    expect(color[0]).toBeCloseTo(color[1], 5);
+    expect(color[1]).toBeCloseTo(color[2], 5);
+  };
+
+  it("clears tint for direct, loaded-save, and unloaded-save edits then restores base tint", () => {
+    const scene = new THREE.Scene();
+    const world = build(scene);
+    try {
+      world.setBlock(voxel.x, voxel.y, voxel.z, BLOCK_ID.stone);
+      expectUntinted(topFaceColor(scene));
+
+      world.clearEdits();
+      expect(world.getBlock(voxel.x, voxel.y, voxel.z)).toBe(BLOCK_ID.plaster);
+      expectTinted(topFaceColor(scene));
+
+      world.applySavedEdits({ seed, edits: { [`${voxel.x},${voxel.y},${voxel.z}`]: BLOCK_ID.stone } });
+      expectUntinted(topFaceColor(scene));
+      world.clearEdits();
+      expectTinted(topFaceColor(scene));
+    } finally {
+      world.dispose();
+    }
+
+    const unloadedScene = new THREE.Scene();
+    const unloadedWorld = build(unloadedScene);
+    try {
+      unloadedWorld.applySavedEdits({ seed, edits: { [`${voxel.x},${voxel.y},${voxel.z}`]: BLOCK_ID.stone } });
+      unloadedWorld.setBlock(voxel.x + 1, voxel.y, voxel.z, BLOCK_ID.stone, false);
+      expect(unloadedWorld.getBlock(voxel.x, voxel.y, voxel.z)).toBe(BLOCK_ID.stone);
+      expectUntinted(topFaceColor(unloadedScene));
+      unloadedWorld.clearEdits();
+      expectTinted(topFaceColor(unloadedScene));
+    } finally {
+      unloadedWorld.dispose();
+    }
   });
 });

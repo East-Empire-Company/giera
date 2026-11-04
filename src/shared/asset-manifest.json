@@ -14,7 +14,13 @@
     "glass": "assets/textures/tiles/glass.png",
     "default_mineral_coal": "assets/textures/tiles/default_mineral_coal.png",
     "default_mineral_iron": "assets/textures/tiles/default_mineral_iron.png",
-    "default_mineral_gold": "assets/textures/tiles/default_mineral_gold.png"
+    "default_mineral_gold": "assets/textures/tiles/default_mineral_gold.png",
+    "asphalt": "assets/textures/pbr/Asphalt033/Asphalt033_1K-JPG_Color.jpg",
+    "paving": "assets/textures/pbr/PavingStones151/PavingStones151_1K-JPG_Color.jpg",
+    "brick": "assets/textures/pbr/Bricks097/Bricks097_1K-JPG_Color.jpg",
+    "plaster": "assets/textures/pbr/Plaster001/Plaster001_1K-JPG_Color.jpg",
+    "roof_tile": "assets/textures/pbr/RoofingTiles013A/RoofingTiles013A_1K-JPG_Color.jpg",
+    "tnt": "assets/textures/pbr/tnt/tnt_1K-JPG_Color.jpg"
   },
   "models": {
     "ziemek": "assets/models/characters/ziemek.glb",
@@ -39,7 +45,7 @@
     "companionWalk": "assets/models/kaykit/anims/Rig_Medium_MovementBasic.glb"
   },
   "concierge": {
-    "iskra": "assets/models/characters/tata.glb"
+    "iskra": "assets/models/concierge/iskra.glb"
   },
   "modelTextures": {
     "factoryKit": "assets/models/kenney-factory-kit/Textures/colormap.png"

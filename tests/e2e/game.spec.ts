@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { writeFileSync } from "node:fs";
+import { PNG } from "pngjs";
 
 test.describe("Giera Voxel Sandbox MVP E2E", () => {
   test("boot: loads page, canvas WebGL exists, ready state is true", async ({ page }) => {
@@ -25,11 +27,20 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
     expect(errors).toEqual([]);
   });
 
-  test("launch scene places the concierge beside the settings panel", async ({ page }) => {
+  test("launch scene renders the concierge beside the settings panel", async ({ page }, testInfo) => {
+    const iskraStatuses: number[] = [];
+    page.on("response", (response) => {
+      if (new URL(response.url()).pathname === "/assets/models/concierge/iskra.glb") {
+        iskraStatuses.push(response.status());
+      }
+    });
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/?seed=424242");
     await page.waitForFunction(() => window.__GIERA__?.ready === true);
     await page.waitForSelector("#concierge-panel:not([hidden])");
+    const canvas = page.locator("#concierge-canvas");
+    await canvas.waitFor({ state: "visible" });
+    await page.waitForSelector('#concierge-canvas[data-avatar-ready="true"]', { timeout: 30_000 });
 
     const bounds = await page.evaluate(() => {
       const panel = document.querySelector(".launch-panel")!.getBoundingClientRect();
@@ -37,9 +48,56 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
       const canvas = document.querySelector("#concierge-canvas")!.getBoundingClientRect();
       return { panelRight: panel.right, robotLeft: robot.left, canvasWidth: canvas.width };
     });
+    const screenshotPath = testInfo.outputPath("concierge-composited.png");
+    await canvas.screenshot({ path: screenshotPath, omitBackground: true });
+    const alphaDataUrl = await canvas.evaluate(async (element) => {
+      const source = element as HTMLCanvasElement;
+      const frame = Promise.withResolvers<void>();
+      requestAnimationFrame(() => frame.resolve());
+      await frame.promise;
+      const composite = document.createElement("canvas");
+      composite.width = source.width;
+      composite.height = source.height;
+      const context = composite.getContext("2d");
+      if (!context) throw new Error("Canvas 2D context unavailable");
+      context.drawImage(source, 0, 0);
+      return composite.toDataURL("image/png");
+    });
+    const alphaScreenshotPath = testInfo.outputPath("concierge-canvas-alpha.png");
+    const alphaScreenshot = Buffer.from(alphaDataUrl.slice(alphaDataUrl.indexOf(",") + 1), "base64");
+    writeFileSync(alphaScreenshotPath, alphaScreenshot);
+    const image = PNG.sync.read(alphaScreenshot);
+    let nontransparentPixels = 0;
+    for (let i = 3; i < image.data.length; i += 4) {
+      if (image.data[i] > 0) nontransparentPixels++;
+    }
+    const probePath = testInfo.outputPath("concierge-probe.json");
+    writeFileSync(
+      probePath,
+      JSON.stringify(
+        {
+          url: page.url(),
+          iskraStatuses,
+          avatarReady: await canvas.getAttribute("data-avatar-ready"),
+          compositeScreenshot: screenshotPath,
+          alphaScreenshot: alphaScreenshotPath,
+          width: image.width,
+          height: image.height,
+          nontransparentPixels,
+        },
+        null,
+        2
+      )
+    );
+    console.log(
+      `Concierge probe: ${JSON.stringify({ screenshotPath, alphaScreenshotPath, probePath, iskraStatuses, nontransparentPixels })}`
+    );
 
     expect(bounds.robotLeft).toBeGreaterThanOrEqual(bounds.panelRight);
     expect(bounds.canvasWidth).toBeGreaterThan(300);
+    expect(iskraStatuses).toContain(200);
+    expect(await canvas.getAttribute("data-avatar-ready")).toBe("true");
+    expect(nontransparentPixels).toBeGreaterThan(80_000);
   });
   test("launch: starts background playlist without music controls", async ({ page }) => {
     const musicRequests: string[] = [];

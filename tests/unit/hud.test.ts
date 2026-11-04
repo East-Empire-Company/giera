@@ -1,13 +1,18 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
-import { GameHUD } from "../../src/client/game/hud";
+import { GameHUD, getItemIcon } from "../../src/client/game/hud";
 import { GameInventory } from "../../src/client/game/inventory";
 import { ObjectiveManager } from "../../src/client/game/objectives";
+import manifest from "../../src/shared/asset-manifest.json";
 
 describe("GameHUD child-friendly visual interface", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
   });
+  it.each(["asphalt", "paving", "brick", "plaster", "roof_tile"] as const)("resolves the %s HUD icon to its tile image", (block) => {
+    expect(getItemIcon(block)).toBe(`/${manifest.tiles[block]}`);
+  });
+
   it("renders large image icons for occupied hotbar slots without requiring reading", () => {
     const inventory = new GameInventory();
     inventory.addMinedBlock("oak_log", 1);

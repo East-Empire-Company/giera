@@ -2,12 +2,23 @@ import { describe, expect, it } from "vitest";
 import { BLOCK_ID } from "../../src/shared/blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, getBlockIndex } from "../../src/shared/chunk";
 import { meshChunk, roundLeafVertex, smoothGroundOffset, smoothVertexHeight, type ChunkMesh } from "../../src/shared/mesher";
+import { NO_CITY_TINT } from "../../src/shared/warsaw-city-data";
+import { WARSAW_CITY_TINT_PALETTES } from "../../src/shared/warsaw-city-data.generated";
 
 const atlas: Record<string, { id: number; uv: readonly [number, number, number, number] }> = {
   stone: { id: 0, uv: [0, 0, 1, 1] },
   grass_top: { id: 1, uv: [0, 0, 1, 1] },
   grass_side: { id: 2, uv: [0, 0, 1, 1] },
 };
+
+function cityTintMultiplier(rgb: readonly number[]): number[] {
+  const linear = rgb.map((channel) => {
+    const srgb = channel / 255;
+    return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722;
+  return linear.map((channel) => 0.4 + 0.6 * channel / luminance);
+}
 
 describe("greedy chunk mesher", () => {
   it("emits six faces for one block", () => {
@@ -35,6 +46,151 @@ describe("greedy chunk mesher", () => {
     const xCoordinates = Array.from({ length: mesh.positions.length / 3 }, (_value, index) => mesh.positions[index * 3]);
     expect(Math.min(...xCoordinates)).toBe(1);
     expect(Math.max(...xCoordinates)).toBe(2);
+  });
+});
+
+describe("city vertex tint", () => {
+  it("applies linear palette colors and keeps differently tinted faces separate", () => {
+    const data = new Uint8Array(CHUNK_VOLUME);
+    const first = getBlockIndex(1, 1, 1);
+    const second = getBlockIndex(2, 1, 1);
+    data[first] = BLOCK_ID.plaster;
+    data[second] = BLOCK_ID.plaster;
+    const cityTintIds = new Uint8Array(CHUNK_VOLUME).fill(NO_CITY_TINT);
+    cityTintIds[first] = 0;
+    cityTintIds[second] = 1;
+    const plasterAtlas = { ...atlas, plaster: { id: 3, uv: [0, 0, 1, 1] as const } };
+    const mesh = meshChunk({
+      data,
+      cx: 0,
+      cy: 0,
+      cz: 0,
+      getBlock: () => BLOCK_ID.air,
+      atlas: plasterAtlas,
+      cityTintIds,
+      cityTintPalettes: WARSAW_CITY_TINT_PALETTES,
+    });
+
+    const topFaces: { minX: number; maxX: number; color: number[] }[] = [];
+    for (let vertex = 0; vertex < mesh.positions.length / 3; vertex += 4) {
+      const start = vertex * 3;
+      if (![0, 1, 2, 3].every((offset) => mesh.normals[(vertex + offset) * 3 + 1] === 1)) continue;
+      const y = [0, 1, 2, 3].map((offset) => mesh.positions[(vertex + offset) * 3 + 1]);
+      const z = [0, 1, 2, 3].map((offset) => mesh.positions[(vertex + offset) * 3 + 2]);
+      if (!y.every((value) => value === 2) || !z.every((value) => value >= 1 && value <= 2)) continue;
+      const x = [0, 1, 2, 3].map((offset) => mesh.positions[(vertex + offset) * 3]);
+      topFaces.push({
+        minX: Math.min(...x),
+        maxX: Math.max(...x),
+        color: [mesh.colors[start], mesh.colors[start + 1], mesh.colors[start + 2]],
+      });
+    }
+
+    expect(topFaces).toHaveLength(2);
+    const sortedTopFaces = topFaces.sort((a, b) => a.minX - b.minX);
+    expect(sortedTopFaces.map(({ minX, maxX }) => [minX, maxX])).toEqual([[1, 2], [2, 3]]);
+    for (const [index, face] of sortedTopFaces.entries()) {
+      cityTintMultiplier(WARSAW_CITY_TINT_PALETTES[BLOCK_ID.plaster]![index]!).forEach((channel, channelIndex) => {
+        expect(face.color[channelIndex]).toBeCloseTo(channel, 5);
+      });
+    }
+  });
+  it("merges coplanar faces from blocks with the same city tint", () => {
+    const data = new Uint8Array(CHUNK_VOLUME);
+    const first = getBlockIndex(1, 1, 1);
+    const second = getBlockIndex(2, 1, 1);
+    data[first] = BLOCK_ID.plaster;
+    data[second] = BLOCK_ID.plaster;
+    const cityTintIds = new Uint8Array(CHUNK_VOLUME).fill(NO_CITY_TINT);
+    cityTintIds[first] = 0;
+    cityTintIds[second] = 0;
+    const mesh = meshChunk({
+      data,
+      cx: 0,
+      cy: 0,
+      cz: 0,
+      getBlock: () => BLOCK_ID.air,
+      atlas: { ...atlas, plaster: { id: 3, uv: [0, 0, 1, 1] } },
+      cityTintIds,
+      cityTintPalettes: WARSAW_CITY_TINT_PALETTES,
+    });
+    const topFaces = [];
+    for (let vertex = 0; vertex < mesh.positions.length / 3; vertex += 4) {
+      const y = [0, 1, 2, 3].map((offset) => mesh.positions[(vertex + offset) * 3 + 1]);
+      const z = [0, 1, 2, 3].map((offset) => mesh.positions[(vertex + offset) * 3 + 2]);
+      if (y.every((value) => value === 2) && z.every((value) => value >= 1 && value <= 2)) {
+        const x = [0, 1, 2, 3].map((offset) => mesh.positions[(vertex + offset) * 3]);
+        topFaces.push([Math.min(...x), Math.max(...x)]);
+      }
+    }
+    expect(topFaces).toEqual([[1, 3]]);
+  });
+
+  it("multiplies city tint by ambient occlusion", () => {
+    const data = new Uint8Array(CHUNK_VOLUME);
+    const center = getBlockIndex(1, 1, 1);
+    data[center] = BLOCK_ID.plaster;
+    data[getBlockIndex(0, 2, 2)] = BLOCK_ID.stone;
+    data[getBlockIndex(2, 2, 0)] = BLOCK_ID.stone;
+    const cityTintIds = new Uint8Array(CHUNK_VOLUME).fill(NO_CITY_TINT);
+    cityTintIds[center] = 0;
+    const inputs = {
+      data,
+      cx: 0,
+      cy: 0,
+      cz: 0,
+      getBlock: () => BLOCK_ID.air,
+      atlas: { ...atlas, plaster: { id: 3, uv: [0, 0, 1, 1] as const } },
+    };
+    const plain = meshChunk(inputs);
+    const tinted = meshChunk({ ...inputs, cityTintIds, cityTintPalettes: WARSAW_CITY_TINT_PALETTES });
+    let shadedVertex = -1;
+    for (let vertex = 0; vertex < plain.positions.length / 3; vertex++) {
+      if (
+        plain.positions[vertex * 3 + 1] === 2
+        && plain.normals[vertex * 3 + 1] === 1
+        && plain.colors[vertex * 3]! < 1
+      ) {
+        shadedVertex = vertex * 3;
+        break;
+      }
+    }
+    expect(shadedVertex).toBeGreaterThanOrEqual(0);
+    const tintMultiplier = cityTintMultiplier(WARSAW_CITY_TINT_PALETTES[BLOCK_ID.plaster]![0]!);
+    for (let channel = 0; channel < 3; channel++) {
+      expect(tinted.colors[shadedVertex + channel]).toBeCloseTo(plain.colors[shadedVertex + channel]! * tintMultiplier[channel]!, 6);
+    }
+  });
+
+  it.each([BLOCK_ID.grass, BLOCK_ID.dirt, BLOCK_ID.sand])("keeps source-marked city block %i top faces at voxel height on chunk edges", (blockId) => {
+    const data = new Uint8Array(CHUNK_VOLUME);
+    const edgeBlock = getBlockIndex(CHUNK_SIZE - 1, 3, 8);
+    data[edgeBlock] = blockId;
+    const cityTintIds = new Uint8Array(CHUNK_VOLUME).fill(NO_CITY_TINT);
+    cityTintIds[edgeBlock] = 0;
+    const getBlock = (x: number, y: number, z: number) => {
+      if (x === CHUNK_SIZE && z === 8 && y >= 0 && y < 3) return blockId;
+      return BLOCK_ID.air;
+    };
+    const edgeAtlas = { ...atlas, dirt: { id: 3, uv: [0, 0, 1, 1] as const }, sand: { id: 4, uv: [0, 0, 1, 1] as const } };
+    const palette = { [blockId]: [[120, 120, 120] as const] };
+    const cityMesh = meshChunk({ data, cx: 0, cy: 0, cz: 0, getBlock, atlas: edgeAtlas, cityTintIds, cityTintPalettes: palette });
+    const ordinaryMesh = meshChunk({ data, cx: 0, cy: 0, cz: 0, getBlock, atlas: edgeAtlas });
+    const topHeights = (mesh: ChunkMesh) => {
+      const heights: number[] = [];
+      for (let vertex = 0; vertex < mesh.positions.length / 3; vertex += 4) {
+        if (![0, 1, 2, 3].every((offset) => mesh.normals[(vertex + offset) * 3 + 1] > 0)) continue;
+        for (let offset = 0; offset < 4; offset++) {
+          if (mesh.positions[(vertex + offset) * 3] === CHUNK_SIZE - 1 || mesh.positions[(vertex + offset) * 3] === CHUNK_SIZE) {
+            heights.push(mesh.positions[(vertex + offset) * 3 + 1]);
+          }
+        }
+      }
+      return heights;
+    };
+    expect(topHeights(cityMesh).length).toBeGreaterThan(0);
+    expect(topHeights(cityMesh).every((height) => height === 4)).toBe(true);
+    expect(topHeights(ordinaryMesh).some((height) => height !== 4)).toBe(true);
   });
 });
 

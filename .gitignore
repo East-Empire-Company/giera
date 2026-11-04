@@ -4,7 +4,8 @@ node_modules/
 .cache/
 dist/
 coverage/
-public/assets/textures/pbr/
+public/assets/textures/pbr/*
+!public/assets/textures/pbr/tnt/
 test-results/
 .vitest/
 tests/goldens/.staging/

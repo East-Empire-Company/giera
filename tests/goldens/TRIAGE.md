@@ -31,3 +31,6 @@ reason: QA composer time now follows deterministic simulation time
 ## 2026-11-03T00:40:42.520Z stage=goldens
 reason: Avatar ground-follow rework: footprint-sampled smoothGroundOffset with per-profile lift shifts character grounding slightly in tycoon view (companion/NPC terrain fix)
 
+## 2026-11-04T00:32:13.652Z stage=goldens
+reason: Visually reviewed expected/captured/diff for all 3. Intended changes only: Warsaw city connector (asphalt y=60 at x4..6,z<=4, probed via generateBlock) visible beside spawn; city district now fills tycoon-view background (camera looks toward -z); family avatars calibrated to 1.2 m (kids) so smaller at same positions. HUD, terrain, avatars intact; no blank or corrupt frames. Atlas TNT tile addition verified not to alter existing tiles (MAD<=2.85).
+

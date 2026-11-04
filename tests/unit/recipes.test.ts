@@ -59,4 +59,27 @@ describe("crafting recipes", () => {
     expect(ok).toBe(false);
     expect(inv.blocks.oak_log).toBe(2);
   });
+
+  it("crafts TNT from planks and coal ore into placeable blocks", () => {
+    const inv: InventoryState = {
+      blocks: { planks: 4, coal_ore: 1 },
+      items: {},
+    };
+    expect(canCraft(inv, "tnt")).toBe(true);
+    expect(craftRecipe(inv, "tnt")).toBe(true);
+    expect(inv.blocks.planks).toBe(0);
+    expect(inv.blocks.coal_ore).toBe(0);
+    expect(inv.blocks.tnt ?? 0).toBe(3);
+  });
+
+  it("rejects TNT crafting without the full cost", () => {
+    const inv: InventoryState = {
+      blocks: { planks: 3, coal_ore: 1 },
+      items: {},
+    };
+    expect(canCraft(inv, "tnt")).toBe(false);
+    expect(craftRecipe(inv, "tnt")).toBe(false);
+    expect(inv.blocks.planks).toBe(3);
+    expect(inv.blocks.tnt ?? 0).toBe(0);
+  });
 });

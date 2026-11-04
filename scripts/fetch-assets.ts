@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const kenneySlugs = ["voxel-pack", "blocky-characters", "ui-pack", "particle-pack"];
@@ -45,7 +45,7 @@ const sourceInfo: Record<AssetSourceId, { title: string; author: string; license
   "joeenderman-textures-1": { title: "Assorted Minecraft style textures", author: "JoeEnderman", license: "CC0", url: "https://opengameart.org/content/assorted-minecraft-style-textures" },
   "joeenderman-textures-2": { title: "Assorted Minecraft style textures", author: "JoeEnderman", license: "CC0", url: "https://opengameart.org/content/assorted-minecraft-style-textures" },
   "ambientcg-ice-normal": { title: "Ice 001 NormalGL", author: "ambientCG", license: "CC0 / Public Domain", url: "https://ambientcg.com/view?id=Ice001" },
-  "ambientcg-pbr": { title: "ambientCG PBR materials (Grass001, Ground020, Rock064, Rock058, Ground080, Bark001, ScatteredLeaves009, Planks010)", author: "ambientCG", license: "CC0 / Public Domain", url: "https://ambientcg.com" },
+  "ambientcg-pbr": { title: "ambientCG PBR materials (Grass001, Ground020, Rock064, Rock058, Ground080, Bark001, ScatteredLeaves009, Planks010, Asphalt033, PavingStones151, Bricks097, Plaster001, RoofingTiles013A)", author: "ambientCG", license: "CC0 / Public Domain", url: "https://ambientcg.com" },
   "polyhaven-hdri": { title: "Kloofendal 48d Partly Cloudy 1K HDR", author: "Poly Haven", license: "CC0", url: "https://polyhaven.com/a/kloofendal_48d_partly_cloudy" },
   "kaykit-adventurers": { title: "KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)", author: "Kay Lousberg", license: "CC0 1.0", url: "https://kaylousberg.itch.io/kaykit-adventurers" },
   "quaternius-nature": { title: "Ultimate Stylized Nature (Grass_Small, Bush_Small_Flowers, Flower_1)", author: "Quaternius", license: "CC0", url: "https://quaternius.com/packs/ultimatestylizednature.html" },
@@ -71,6 +71,11 @@ const assetPicks: Record<string, Record<string, AssetPick>> = {
     default_mineral_coal: { source: "joeenderman-textures-1", member: "default_mineral_coal.png", path: "assets/textures/tiles/default_mineral_coal.png" },
     default_mineral_iron: { source: "joeenderman-textures-1", member: "default_mineral_iron.png", path: "assets/textures/tiles/default_mineral_iron.png" },
     default_mineral_gold: { source: "joeenderman-textures-1", member: "default_mineral_gold.png", path: "assets/textures/tiles/default_mineral_gold.png" },
+    asphalt: { source: "ambientcg-pbr", member: "Asphalt033_1K-JPG_Color.jpg", path: "assets/textures/pbr/Asphalt033/Asphalt033_1K-JPG_Color.jpg", preplaced: true },
+    paving: { source: "ambientcg-pbr", member: "PavingStones151_1K-JPG_Color.jpg", path: "assets/textures/pbr/PavingStones151/PavingStones151_1K-JPG_Color.jpg", preplaced: true },
+    brick: { source: "ambientcg-pbr", member: "Bricks097_1K-JPG_Color.jpg", path: "assets/textures/pbr/Bricks097/Bricks097_1K-JPG_Color.jpg", preplaced: true },
+    plaster: { source: "ambientcg-pbr", member: "Plaster001_1K-JPG_Color.jpg", path: "assets/textures/pbr/Plaster001/Plaster001_1K-JPG_Color.jpg", preplaced: true },
+    roof_tile: { source: "ambientcg-pbr", member: "RoofingTiles013A_1K-JPG_Color.jpg", path: "assets/textures/pbr/RoofingTiles013A/RoofingTiles013A_1K-JPG_Color.jpg", preplaced: true },
   },
   models: {
     playerOne: { source: "kaykit-adventurers", member: "Characters/gltf/Knight.glb", path: "assets/models/kaykit/knight.glb", preplaced: true },
@@ -253,24 +258,48 @@ async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
   await writeFile(join(publicRoot, "NOTICES.md"), `${notices.join("\n")}\n`);
 }
 
-const pbrMaterialIds = ["Grass001", "Ground020", "Rock064", "Rock058", "Ground080", "Bark001", "ScatteredLeaves009", "Planks010"] as const;
+const pbrMaterialIds = ["Grass001", "Ground020", "Rock064", "Rock058", "Ground080", "Bark001", "ScatteredLeaves009", "Planks010", "Asphalt033", "PavingStones151", "Bricks097", "Plaster001", "RoofingTiles013A"] as const;
 
 async function fetchAmbientCgPbr(): Promise<void> {
   for (const id of pbrMaterialIds) {
     const target = join(publicRoot, "textures/pbr", id);
-    if (existsSync(join(target, `${id}_1K-JPG_Color.jpg`))) continue;
+    const requiredMaps = ["Color", "NormalGL", "Roughness"];
+    if (requiredMaps.every((map) => existsSync(join(target, `${id}_1K-JPG_${map}.jpg`)))) continue;
     const zip = join(cacheRoot, `${id}_1K-JPG.zip`);
     if (!existsSync(zip)) await download(`https://ambientcg.com/get?file=${id}_1K-JPG.zip`, zip);
     const extracted = join(cacheRoot, `${id}_1K-JPG`);
-    if (!existsSync(join(extracted, `${id}_1K-JPG_Color.jpg`))) {
+    if (!requiredMaps.every((map) => existsSync(join(extracted, `${id}_1K-JPG_${map}.jpg`)))) {
       await mkdir(extracted, { recursive: true });
       execFileSync("unzip", ["-oq", zip, "-d", extracted]);
     }
     await mkdir(target, { recursive: true });
-    for (const map of ["Color", "NormalGL", "Roughness", "AmbientOcclusion"]) {
+    for (const map of requiredMaps) {
       await copyFile(join(extracted, `${id}_1K-JPG_${map}.jpg`), join(target, `${id}_1K-JPG_${map}.jpg`));
     }
+    const ao = join(extracted, `${id}_1K-JPG_AmbientOcclusion.jpg`);
+    if (existsSync(ao)) await copyFile(ao, join(target, `${id}_1K-JPG_AmbientOcclusion.jpg`));
   }
+}
+
+async function packagePbrAssets(): Promise<void> {
+  const manifestPath = resolve("src/shared/asset-manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, Record<string, string>>;
+  for (const [key, pick] of Object.entries(assetPicks.tiles)) {
+    if (pick.source === "ambientcg-pbr") manifest.tiles[key] ??= pick.path;
+  }
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+  const noticesPath = join(publicRoot, "NOTICES.md");
+  const oldTitle = "ambientCG PBR materials (Grass001, Ground020, Rock064, Rock058, Ground080, Bark001, ScatteredLeaves009, Planks010)";
+  let notices = (await readFile(noticesPath, "utf8")).replaceAll(oldTitle, sourceInfo["ambientcg-pbr"].title);
+  const additions: string[] = [];
+  for (const pick of Object.values(assetPicks.tiles)) {
+    if (pick.source !== "ambientcg-pbr" || notices.includes(`| \`${pick.path}\` |`)) continue;
+    const info = sourceInfo[pick.source];
+    additions.push(`| \`${pick.path}\` | [${info.title}](${info.url}) / \`${pick.member}\` | ${info.author} | ${info.license} |`);
+  }
+  if (additions.length) notices = `${notices.endsWith("\n") ? notices : `${notices}\n`}${additions.join("\n")}\n`;
+  await writeFile(noticesPath, notices);
 }
 
 async function fetchHdri(): Promise<void> {
@@ -280,6 +309,12 @@ async function fetchHdri(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--pbr-only")) {
+    await mkdir(cacheRoot, { recursive: true });
+    await fetchAmbientCgPbr();
+    await packagePbrAssets();
+    return;
+  }
   if (process.argv.includes("--package-only")) {
     const fonts = (await readdir(join(publicRoot, "fonts"))).map((file) => `assets/fonts/${file}`);
     await packageSelectedAssets(fonts);

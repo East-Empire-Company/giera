@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BLOCK_ID } from "../../src/shared/blocks";
+import { BLOCK_ID, getBlockDef } from "../../src/shared/blocks";
 import { CHUNK_SIZE, getBlockIndex } from "../../src/shared/chunk";
-import { generateBlock, generateChunk, surfaceHeight } from "../../src/shared/worldgen";
+import { citySurfaceColumnTop, generateBlock, generateChunk, generateChunkWithCityTints, MAX_GENERATED_BLOCK_Y, surfaceHeight } from "../../src/shared/worldgen";
 import { MAX_TYCOON_SLOTS, tycoonSlotOrigin } from "../../src/shared/tycoon-slots";
 
 describe("world generation", () => {
@@ -58,13 +58,57 @@ describe("world generation", () => {
       expect(chunk[getBlockIndex(localX, localY, localZ)]).toBe(generateBlock(x, y, z, seed));
     }
   });
+  it("uses pinned Warsaw solids, source air, and source ground height", () => {
+    const seed = 424242;
+
+    expect(surfaceHeight(-80, -112, seed)).toBe(58);
+    expect(generateBlock(-80, 58, -112, seed)).toBe(BLOCK_ID.paving);
+    expect(generateBlock(-80, 59, -112, seed)).toBe(BLOCK_ID.air);
+    expect(generateBlock(-80, 17, -112, seed)).toBe(BLOCK_ID.dirt);
+    expect(generateBlock(-80, 0, -112, seed)).toBe(BLOCK_ID.bedrock);
+  });
+  it("raises Warsaw surface only for solid edited blocks above source ground", () => {
+    const edits = new Map([[59, BLOCK_ID.water], [61, BLOCK_ID.planks], [64, BLOCK_ID.glass]]);
+    const editedBlockAt = (y: number) => edits.get(y);
+
+    expect(citySurfaceColumnTop(-80, -112, editedBlockAt)).toBe(64);
+    expect(citySurfaceColumnTop(4, -16, () => undefined)).toBe(60);
+    expect(citySurfaceColumnTop(-81, -112, () => undefined)).toBeNull();
+    expect(citySurfaceColumnTop(8, -5, () => undefined)).toBeNull();
+  });
+
+
+  it("builds the flat four-wide connector with support and overhead clearance", () => {
+    for (let z = -16; z <= 4; z++) {
+      for (let x = 4; x <= 7; x++) {
+        expect(surfaceHeight(x, z, 424242)).toBe(60);
+        expect(generateBlock(x, 60, z, 424242)).toBe(BLOCK_ID.asphalt);
+        expect(getBlockDef(generateBlock(x, 59, z, 424242)).solid).toBe(true);
+        expect(generateBlock(x, 61, z, 424242)).toBe(BLOCK_ID.air);
+        expect(generateBlock(x, MAX_GENERATED_BLOCK_Y, z, 424242)).toBe(BLOCK_ID.air);
+      }
+    }
+    expect(generateBlock(4, 0, -16, 424242)).toBe(BLOCK_ID.bedrock);
+  });
+  it("returns block-identical chunks with tints only where source colors exist", () => {
+    const city = generateChunkWithCityTints(-5, 3, -7, 424242);
+    const sourceIndex = getBlockIndex(0, 10, 0);
+    const sourceAirIndex = getBlockIndex(0, 11, 0);
+
+    expect(city.data).toEqual(generateChunk(-5, 3, -7, 424242));
+    expect(city.data[sourceIndex]).toBe(BLOCK_ID.paving);
+    expect(city.cityTintIds?.[sourceIndex]).toBe(0);
+    expect(city.cityTintIds?.[sourceAirIndex]).toBe(255);
+    expect(city.cityTintIds).toHaveLength(CHUNK_SIZE ** 3);
+    expect(generateChunkWithCityTints(8, 3, 8, 424242).cityTintIds).toBeUndefined();
+  });
 
   it("pins the tycoon floor height and keeps it dry across seeds", () => {
     for (const seed of [17, 424242, 1337]) {
       for (let z = 4; z <= 20; z++) {
         for (let x = 4; x <= 20; x++) {
           expect(surfaceHeight(x, z, seed)).toBe(60);
-          expect(generateBlock(x, 60, z, seed)).toBe(BLOCK_ID.grass);
+          expect(generateBlock(x, 60, z, seed)).toBe(x <= 7 && z === 4 ? BLOCK_ID.asphalt : BLOCK_ID.grass);
           expect(generateBlock(x, 40, z, seed)).not.toBe(BLOCK_ID.water);
         }
       }
@@ -104,6 +148,17 @@ describe("world generation", () => {
         }
       }
     }
+  });
+  it.each([
+    { seed: 424242, x: -77, z: -114 },
+    { seed: 2, x: 2, z: -5 },
+    { seed: 59, x: 16, z: -20 },
+    { seed: 95, x: -81, z: -60 },
+    { seed: 24, x: 8, z: -5 },
+  ])("excludes Warsaw-overlapping tree center at ($x, $z) for seed $seed", ({ seed, x, z }) => {
+    const rootY = surfaceHeight(x, z, seed) + 1;
+
+    expect(generateBlock(x, rootY, z, seed)).not.toBe(BLOCK_ID.oak_log);
   });
   it("keeps tycoon approach and tree buffer clear across seeds", () => {
     for (const seed of [17, 424242, 1337]) {

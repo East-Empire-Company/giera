@@ -209,7 +209,7 @@ test("lan: two clients join one room, exchange a block edit, server persists the
   await A.locator("canvas#game").hover();
   await A.evaluate(([y]) => {
     const g = (window as unknown as G).__GIERA__;
-    (g.inventory as any).setHotbarSlot(0, 3);
+    (g.inventory as any).setHotbarSlot(0, 20);
     (g.inventory as any).selectSlot(0);
     g.player.yaw = y as number;
     g.player.pitch = 0;
@@ -223,7 +223,7 @@ test("lan: two clients join one room, exchange a block edit, server persists the
     ([t]) => (window as unknown as G).__GIERA__.world.getBlock(t.x, t.y, t.z),
     [placeTarget]
   );
-  expect(placedId, "client A did not place any block").not.toBe(0);
+  expect(placedId, "client A did not place any block").toBe(20);
 
   const placed = { ...placeTarget, id: placedId };
   await B.waitForFunction(

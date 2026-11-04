@@ -1,5 +1,6 @@
 import { getBlockDef } from "./blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, getBlockIndex } from "./chunk";
+import { NO_CITY_TINT, type WarsawTintColor } from "./warsaw-city-data";
 import { terrainMaterialFor } from "./terrain-materials";
 
 export type TileUV = readonly number[];
@@ -14,7 +15,7 @@ export type ChunkMesh = {
   indices: Uint32Array;
   groups: MeshGroup[];
 };
-type Face = { tile: AtlasTile; sign: number; ao0: number; ao1: number; ao2: number; ao3: number; key: string; smooth: boolean; leaf: boolean };
+type Face = { tile: AtlasTile; sign: number; ao0: number; ao1: number; ao2: number; ao3: number; tintR: number; tintG: number; tintB: number; key: string; smooth: boolean; leaf: boolean };
 type TileMesh = { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; tileIds: number[]; indices: number[] };
 
 const AXES = [
@@ -124,8 +125,11 @@ export function meshChunk(input: {
   cz: number;
   getBlock: (x: number, y: number, z: number) => number;
   atlas: Record<string, AtlasTile>;
+  cityTintIds?: Uint8Array;
+  cityTintPalettes?: Readonly<Record<number, readonly WarsawTintColor[]>>;
 }): ChunkMesh {
   if (input.data.length !== CHUNK_VOLUME) throw new RangeError(`Expected ${CHUNK_VOLUME} block IDs`);
+  if (input.cityTintIds && input.cityTintIds.length !== CHUNK_VOLUME) throw new RangeError(`Expected ${CHUNK_VOLUME} city tint IDs`);
   const origin = [input.cx * CHUNK_SIZE, input.cy * CHUNK_SIZE, input.cz * CHUNK_SIZE];
   const materialByTile = new Map<number, number>();
   for (const [name, tile] of Object.entries(input.atlas)) materialByTile.set(tile.id, terrainMaterialFor(name));
@@ -188,7 +192,7 @@ export function meshChunk(input: {
         else if (i === 2) shade = face.ao2;
         else if (i === 3) shade = face.ao1;
       }
-      mesh.colors.push(shade, shade, shade);
+      mesh.colors.push(shade * face.tintR, shade * face.tintG, shade * face.tintB);
       mesh.tileIds.push(face.tile.id);
     }
     if (face.ao0 + face.ao2 > face.ao1 + face.ao3) {
@@ -239,8 +243,26 @@ export function meshChunk(input: {
             }
             const smoothBlock = blockId === 4 || blockId === 5 || blockId === 6;
             const leaf = blockId === 8;
-            const key = `${blockId}:${tile.id}:${sign}:${ao0.toFixed(3)},${ao1.toFixed(3)},${ao2.toFixed(3)},${ao3.toFixed(3)}${smoothBlock || leaf ? `@${px},${py},${pz}` : ""}`;
-            mask[u + CHUNK_SIZE * v] = { tile, sign, ao0, ao1, ao2, ao3, key, smooth: smoothBlock, leaf };
+            const tintId = input.cityTintIds?.[getBlockIndex(px, py, pz)] ?? NO_CITY_TINT;
+            const tint = tintId === NO_CITY_TINT ? undefined : input.cityTintPalettes?.[blockId]?.[tintId];
+            if (tintId !== NO_CITY_TINT && !tint) throw new RangeError(`Missing city tint ${tintId} for block ${blockId}`);
+            const tintR = tint ? linearChannel(tint[0]) : 1;
+            const tintG = tint ? linearChannel(tint[1]) : 1;
+            const tintB = tint ? linearChannel(tint[2]) : 1;
+            let colorR = 1;
+            let colorG = 1;
+            let colorB = 1;
+            if (tint) {
+              const luminance = 0.2126 * tintR + 0.7152 * tintG + 0.0722 * tintB;
+              const normalization = luminance > 0 ? 1 / luminance : 0;
+              colorR = 0.4 + 0.6 * tintR * normalization;
+              colorG = 0.4 + 0.6 * tintG * normalization;
+              colorB = 0.4 + 0.6 * tintB * normalization;
+            }
+            const smooth = smoothBlock && tintId === NO_CITY_TINT;
+            const tintKey = tint ? `:${tintId}` : "";
+            const key = `${blockId}:${tile.id}:${sign}:${ao0.toFixed(3)},${ao1.toFixed(3)},${ao2.toFixed(3)},${ao3.toFixed(3)}${tintKey}${smooth || leaf ? `@${px},${py},${pz}` : ""}`;
+            mask[u + CHUNK_SIZE * v] = { tile, sign, ao0, ao1, ao2, ao3, tintR: colorR, tintG: colorG, tintB: colorB, key, smooth, leaf };
           }
         }
         for (let v = 0; v < CHUNK_SIZE; v++) {
@@ -303,4 +325,8 @@ export function meshChunk(input: {
     indices: new Uint32Array(indices),
     groups,
   };
+}
+function linearChannel(channel: number): number {
+  const srgb = channel / 255;
+  return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
 }

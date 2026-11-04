@@ -1,4 +1,4 @@
-import { BLOCK_ID, type BlockId } from "../../shared/blocks";
+import { BLOCK_ID, isStoneFamily, type BlockId } from "../../shared/blocks";
 import { RECIPES, type InventoryState } from "./recipes";
 
 export const MAX_EDITS_PER_CHUNK = 20_000;
@@ -109,10 +109,7 @@ export class GameInventory {
       blockId === BLOCK_ID.oak_log ||
       blockId === BLOCK_ID.oak_leaves ||
       blockId === BLOCK_ID.planks;
-    const isStoneOrOre =
-      blockId === BLOCK_ID.stone ||
-      blockId === BLOCK_ID.cobblestone ||
-      blockId >= BLOCK_ID.coal_ore;
+    const isStoneOrOre = isStoneFamily(blockId);
 
     if (!isWood && !isStoneOrOre) return 1;
     const targetMaterial = isWood ? "wood" : "stone";

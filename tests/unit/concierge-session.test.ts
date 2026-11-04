@@ -12,7 +12,8 @@ vi.mock("@elevenlabs/client", () => ({
 import { ConciergeSession } from "../../src/client/concierge/session";
 import type { ConciergeHost } from "../../src/client/concierge/actions";
 import type { ConciergeSessionOptions } from "../../src/client/concierge/session";
-import type { SpeechService } from "../../src/client/audio/speech";
+import { SpeechService } from "../../src/client/audio/speech";
+import { LaunchMenuController } from "../../src/client/startup/launch-menu";
 import { BLOCK_ID } from "../../src/shared/blocks";
 import { createMinePlan, applyMinePlan } from "../../src/client/game/terrain-cheats";
 import { GameInventory } from "../../src/client/game/inventory";
@@ -263,6 +264,59 @@ describe("ConciergeSession", () => {
       expect(speech.streamReady).toHaveBeenCalledTimes(1);
     } finally {
       h.session.dispose();
+    }
+  });
+
+  it("closes the visible panel and ends Tata's stream when launch starts", async () => {
+    const speech = new SpeechService({
+      getSpeechVolume: () => 1,
+      getContext: () => null,
+      hasBrowserVoice: () => false,
+      decode: async () => ({} as AudioBuffer),
+      loadBuffer: async () => null,
+      playBuffer: async () => {},
+      speakWithBrowserVoice: async () => {},
+    });
+    const ended = vi.fn();
+    speech.addEventListener("speech:ended", ended);
+    startSession.mockImplementationOnce(async (options: { onAudio?: () => void; onConnect?: () => void }) => {
+      options.onConnect?.();
+      options.onAudio?.();
+      return { endSession, type: "voice", setVolume: setConversationVolume };
+    });
+    const h = build(Promise.resolve("wss://signed"), { speech });
+    const root = document.createElement("section");
+    root.hidden = true;
+    const startButton = document.createElement("button");
+    const modeButton = document.createElement("button");
+    root.append(startButton, modeButton, h.launchSlot);
+    document.body.append(root);
+    const onStart = vi.fn();
+    const menu = new LaunchMenuController({
+      root,
+      startButton,
+      modeButton,
+      onStart,
+      conciergeSession: h.session,
+    });
+
+    try {
+      await h.session.open("launch");
+      expect(h.panel.hidden).toBe(false);
+      menu.show();
+      startButton.click();
+
+      expect(root.hidden).toBe(true);
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(ended.mock.invocationCallOrder[0]).toBeLessThan(onStart.mock.invocationCallOrder[0]);
+      expect(h.panel.hidden).toBe(true);
+      expect(ended).toHaveBeenCalledTimes(1);
+      expect((ended.mock.calls[0][0] as CustomEvent<{ id: number; failed: boolean }>).detail)
+        .toEqual({ id: 1, failed: false });
+      expect(endSession).toHaveBeenCalledTimes(1);
+    } finally {
+      h.session.dispose();
+      root.remove();
     }
   });
 

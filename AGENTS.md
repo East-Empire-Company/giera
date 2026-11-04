@@ -51,6 +51,16 @@ Report lands in `.ai/evidence/pipeline/report.md` + `report.json`.
 - `.ai/evidence/qa/` — the original 17-row manual QA matrix evidence
 - `.ai/evidence/manual/` — dated manual-checklist runs (`YYYY-MM-DD/`)
 
+## Warsaw city status
+
+- The source-backed district is 96×96 blocks at x=-80..15, z=-112..-17. Its connector spans x=4..7, z=-16..4 at y=60. See `src/shared/warsaw-city-manifest.json` and `docs/superpowers/specs/2026-11-03-giera-city-design.md` for pinned-source and licensing references. Source code is MIT-licensed; generated city data has ODbL and GUGiK attribution requirements.
+- Real route, mine/reload, LAN parity, host edit sync, and server-save evidence: `.ai/evidence/qa/warsaw-city-smoke/interaction-smoke-followup.json`.
+- The targeted `perf` project passed separately. Fresh artifacts are `.ai/evidence/pipeline/perf.json` and `.ai/evidence/pipeline/perf-results.json`: boot 1686 ms, solo FPS p50 61, split FPS p50 60, max draw calls 5456.
+- Real WASD route, plaster pickup, UI hotbar placement, and reload persistence passed; evidence: `.ai/evidence/qa/warsaw-city-smoke/family-place-reach-verified-20261103T164136Z.json`.
+- Radius-20 FPS evidence: `.ai/evidence/qa/warsaw-city-smoke/family-place-radius20-followup-20261103T161001Z.json` records 12-second p50 58 FPS with 9,198 chunks stable; reused counters show 4,805 draw calls, 3,881,988 triangles, and 1,518,819 greedy faces.
+- The full pipeline report `.ai/evidence/pipeline/report.json` from 2026-11-03 19:06Z passed `typecheck`, `unit`, `content`, `build`, and `e2e-mechanics`; `goldens` failed. `performance`, `network`, and `quality` were skipped fail-fast.
+- Visual acceptance remains open. Spawn/split views show the elevated connector side exposed above terrain dropping to y=49; tycoon capture shows a dominant city facade. Require user acceptance before changing golden baselines.
+
 ## Manual checklist
 
 Hardware-only checks (Xbox pads, real mic STT, touch overlay, Xbox Edge fps) live in `tests/MANUAL-CHECKLIST.md`. Run `bun run manual` to boot the dev server and print the checklist path.
@@ -64,7 +74,7 @@ Hardware-only checks (Xbox pads, real mic STT, touch overlay, Xbox Edge fps) liv
 Presentation only — worldgen, physics, mining, crafting, NPC logic, LAN protocol and saves stay voxel-driven.
 
 - Block faces read three atlases built by `bun run assets:atlas` (`scripts/build-atlas.ts`): `atlas.png` (albedo, sRGB), `atlas-normal.png` (NormalGL), `atlas-orm.png` (R=AO, G=roughness). Sources are AmbientCG CC0 1K-JPG maps that `bun run assets:fetch` writes to `public/assets/textures/pbr/<id>/` (git-ignored, re-downloadable); `src/shared/atlas-manifest.json` holds the UV rects.
-- Smooth-top terrain uses shared height-gradient normals across chunk borders. Terrain shaders blend grass-top and cliff-side atlas tiles by world normal; oak bark keeps its warm base palette with fine vertical grain in the shared voxel shader.
+- Smooth-top terrain uses shared height-gradient normals across chunk borders. Terrain shaders blend grass-top and cliff-side atlas tiles by world normal; oak-log sides use Bark001 PBR with a warm, stylized vertical-grain palette, while cut ends keep the pixelated atlas tile.
 - Heroes and NPCs use family GLBs in `public/assets/models/characters/`; `Avatar.load` normalizes each configured world height and aligns the feet with the root. Grounded player following blends center terrain height with footprint probes, then smooths terrain correction separately from profile-specific locomotion lifts; the total render offset is capped at 0.5, with physics positions unchanged. Each NPC uses a seeded, character-specific idle clip list, separate from wandering. Idle clip names live in `src/client/entities/npc.ts`, and motion mappings live in `src/client/entities/avatar.ts`. Decor props are Quaternius CC0 glTF in `public/assets/models/props/`.
 - Environment lighting uses a Poly Haven CC0 HDR (`HDRLoader` → `PMREMGenerator` → `scene.environment`). `SkyCycle` coordinates HDR intensity, procedural sky, hemisphere fill, daylight-driven sun, and horizon-matched fog.
 - Shadows use the official Three r186 `CSM` addon (`src/client/render/cascaded-shadows.ts`): 2 practical cascades at 1024², range capped at `MAX_SHADOW_DISTANCE` (128) via `shadowDistanceFor`, `PCFShadowMap` (r186 removed `PCFSoftShadowMap`; it warns and falls back; `tests/unit/shadow-map-type.test.ts` guards this). The `SkyCycle` sun is hidden and only supplies direction, colour and intensity. `PostFX` calls `prepareView(camera)` before each composer render so split-screen cascades follow each camera. CSM overwrites the global `lights_fragment_begin` chunk with a pre-r186 copy that lacks `material.dfg`/`multiScatteringCompensation`; `spliceStockPrelude` keeps Three's stock prelude and takes only CSM's directional tail, and `dispose()` restores both global chunks. Re-check this splice on every Three upgrade (it throws if the marker moves).

@@ -14,4 +14,13 @@ describe("block registry", () => {
     expect(getBlockDef(11).solid).toBe(false);
     expect(() => getBlockDef(99 as BlockId)).toThrow(RangeError);
   });
+
+  it("defines TNT as id 20 with city ids 15-19 untouched", () => {
+    expect(getBlockDef(20).name).toBe("TNT");
+    expect(getBlockDef(20).tiles.side).toBe("tnt");
+    expect(getBlockDef(20).hardness).toBe(0.1);
+    expect(getBlockDef(20).solid).toBe(true);
+    expect(getBlockDef(15).name).toBe("Asfalt");
+    expect(getBlockDef(19).name).toBe("Dachówka");
+  });
 });

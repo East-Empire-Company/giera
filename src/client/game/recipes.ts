@@ -1,3 +1,5 @@
+import { BLOCK_ID } from "../../shared/blocks";
+
 export type RecipeCost = Record<string, number>;
 
 export type RecipeDef = {
@@ -91,6 +93,13 @@ export const RECIPES: RecipeDef[] = [
     output: { item: "iron_sword", count: 1 },
     toolBonus: { material: "combat", speedMultiplier: 3.5 },
   },
+  {
+    id: "tnt",
+    name: "TNT",
+    description: "Ładunek wybuchowy: postaw i podpal lewym przyciskiem",
+    cost: { planks: 4, coal_ore: 1 },
+    output: { item: "tnt", count: 3 },
+  },
 ];
 
 export function getResourceCount(inv: InventoryState, key: string): number {
@@ -122,7 +131,7 @@ export function craftRecipe(inv: InventoryState, recipeId: string): boolean {
   }
 
   const { item, count } = recipe.output;
-  if (item === "planks") {
+  if (Object.hasOwn(BLOCK_ID, item)) {
     inv.blocks[item] = (inv.blocks[item] ?? 0) + count;
   } else {
     inv.items[item] = (inv.items[item] ?? 0) + count;

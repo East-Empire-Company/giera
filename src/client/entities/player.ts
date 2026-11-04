@@ -60,7 +60,7 @@ export class PlayerController {
 
   async loadAvatar(): Promise<Avatar> {
     const modelId = this.characterProfile === "ziemek" ? "ziemek" : "gniewko";
-    const targetHeight = this.characterProfile === "ziemek" ? 2.16 : 1.85;
+    const targetHeight = 1.2;
     const avatar = await Avatar.load(modelId, { targetHeight });
     this.avatar = avatar;
     this.syncAvatar();

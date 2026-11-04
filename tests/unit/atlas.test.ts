@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { tmpdir } from "node:os";
 import sharp from "sharp";
 import { composeAtlas, packTiles } from "../../scripts/build-atlas";
+import atlasManifest from "../../src/shared/atlas-manifest.json";
+import * as atlasBuilder from "../../scripts/build-atlas";
+
 
 describe("source-pixel atlas packing", () => {
   it("keeps native image sizes inside a non-overlapping atlas", () => {
@@ -35,8 +38,64 @@ describe("source-pixel atlas packing", () => {
     expect([...output.slice(4, 8)]).toEqual([10, 20, 30, 255]);
   });
 
+  it("exposes runtime UV rectangles for all city material tiles", () => {
+    for (const name of ["asphalt", "paving", "brick", "plaster", "roof_tile"] as const) {
+      const tile = atlasManifest.tiles[name];
+      expect(tile).toBeDefined();
+      expect(tile!.uv).toHaveLength(4);
+      expect(tile!.uv[0]).toBeGreaterThanOrEqual(0);
+      expect(tile!.uv[1]).toBeGreaterThanOrEqual(0);
+      expect(tile!.uv[2]).toBeLessThanOrEqual(1);
+      expect(tile!.uv[3]).toBeLessThanOrEqual(1);
+      expect(tile!.uv[2]).toBeGreaterThan(tile!.uv[0]);
+      expect(tile!.uv[3]).toBeGreaterThan(tile!.uv[1]);
+    }
+  });
+  it("accepts the configured 24-tile atlas capacity and rejects overflow", () => {
+    const runtimeExports = atlasBuilder as unknown as Record<string, unknown>;
+    const candidate = runtimeExports["atlasGridDimensions"];
+    expect(typeof candidate).toBe("function");
+    if (typeof candidate !== "function") return;
+    const atlasGridDimensions = candidate as (
+      tileCount: number,
+      resolution: number,
+      gutter: number,
+    ) => { columns: number; rows: number; cell: number; width: number; height: number };
+    expect(atlasGridDimensions(21, 512, 8)).toEqual({
+      columns: 4,
+      rows: 6,
+      cell: 528,
+      width: 2112,
+      height: 3168,
+    });
+    expect(() => atlasGridDimensions(25, 512, 8)).toThrow(RangeError);
+  });
+
 
   it("rejects images wider than atlas capacity", () => {
     expect(() => packTiles([{ name: "large", width: 1024, height: 16 }])).toThrow(RangeError);
   });
+  it("packs oak log ends from the pixel tile with flat tangent normals", async () => {
+    const tile = atlasManifest.tiles.oak_log_top;
+    const x = Math.round(tile.uv[0] * atlasManifest.width - 0.5);
+    const y = Math.round((1 - tile.uv[3]) * atlasManifest.height - 0.5);
+    const [expected, actual, normalPixels] = await Promise.all([
+      sharp(`public/${tile.path}`).resize(atlasManifest.tileRes, atlasManifest.tileRes, { kernel: "nearest" }).removeAlpha().raw().toBuffer(),
+      sharp("public/assets/textures/atlas.webp")
+        .extract({ left: x, top: y, width: atlasManifest.tileRes, height: atlasManifest.tileRes })
+        .removeAlpha()
+        .raw()
+        .toBuffer(),
+      sharp("public/assets/textures/atlas-normal.webp")
+        .extract({ left: x, top: y, width: atlasManifest.tileRes, height: atlasManifest.tileRes })
+        .png()
+        .toBuffer(),
+    ]);
+    const normal = await sharp(normalPixels).stats();
+    expect(normal.channels.slice(0, 3).map(({ min, max }) => [min, max])).toEqual([[128, 128], [128, 128], [255, 255]]);
+    let difference = 0;
+    for (let i = 0; i < expected.length; i++) difference += Math.abs(expected[i] - actual[i]);
+    expect(difference / expected.length).toBeLessThan(8);
+  });
 });
+

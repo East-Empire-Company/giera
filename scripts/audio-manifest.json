@@ -14,7 +14,8 @@
     { "id": "ui_open", "kind": "sfx", "text": "soft short panel open whoosh, subtle, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.6, "output_format": "mp3_44100_128" },
     { "id": "water_enter", "kind": "sfx", "text": "gentle short water splash, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.8, "output_format": "mp3_44100_128" },
     { "id": "npc_chat_pop", "kind": "sfx", "text": "soft short chat bubble pop, subtle, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 0.5, "output_format": "mp3_44100_128" },
-    { "id": "ambience_forest", "kind": "sfx", "text": "soft continuous forest ambience, light wind in leaves, distant birds, steady texture, no events, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 30, "loop": true, "output_format": "mp3_44100_128" }
+    { "id": "ambience_forest", "kind": "sfx", "text": "soft continuous forest ambience, light wind in leaves, distant birds, steady texture, no events, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.7, "duration_seconds": 30, "loop": true, "output_format": "mp3_44100_128" },
+    { "id": "explosion", "kind": "sfx", "text": "huge cinematic voxel explosion, deep bass boom, sharp crack, crackling debris and dust rumble tail, no music", "model_id": "eleven_text_to_sound_v2", "prompt_influence": 0.8, "duration_seconds": 2.5, "output_format": "mp3_44100_128" }
   ],
   "music": [
     { "id": "music_day_loop", "kind": "music", "prompt": "cheerful cozy chiptune game loop, 4 bars, 100 BPM, key of C major, square wave lead, soft triangle bass, gentle noise percussion, no vocals, no dramatic build, no ending", "model_id": "music_v2_5", "music_length_ms": 60000, "force_instrumental": true, "loop": true, "output_format": "mp3_44100_128" },

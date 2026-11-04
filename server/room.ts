@@ -1,6 +1,6 @@
 import { MAX_ROOM_NAME_LENGTH, type BuildPreviewInfo, type CompanionState, type PlayerProfile, type PlayerState } from "../src/shared/lan-protocol";
 import { nextFreeTycoonSlot } from "../src/shared/tycoon-slots";
-import { generateBlock, generateChunk } from "../src/shared/worldgen";
+import { citySurfaceColumnTop, generateBlock, generateChunk } from "../src/shared/worldgen";
 import { CHUNK_SIZE, encodeRLE, getBlockIndex, WORLD_HEIGHT } from "../src/shared/chunk";
 import { BLOCK_ID } from "../src/shared/blocks";
 
@@ -106,6 +106,8 @@ export class RoomState {
   }
 
   surfaceColumnTop(x: number, z: number): number {
+    const cityTop = citySurfaceColumnTop(x, z, (y) => this.edits.get(`${x},${y},${z}`));
+    if (cityTop !== null) return cityTop;
     for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
       if (this.getWorldBlock(x, y, z) !== BLOCK_ID.air) return y;
     }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RoomState } from "../../server/room";
+import { BLOCK_ID } from "../../src/shared/blocks";
 import { buildLanRoomsPayload, buildRoomSummary, handleLanRooms } from "../../server/lan-discovery";
 import { createRoomRegistry, createWsConnection, handleWsMessage, type WsDeps, type WsSocket } from "../../server/ws-handler";
 import { generateChunk } from "../../src/shared/worldgen";
@@ -104,6 +105,39 @@ describe("RoomState", () => {
   it("serves the worldgen chunk for its seed when there are no edits", () => {
     const room = new RoomState("K7QX", 9999);
     expect(Array.from(decodeRLE(room.getChunkRLE(0, 2, 0)))).toEqual(Array.from(generateChunk(0, 2, 0, 9999)));
+  });
+  it("serves Warsaw city and connector blocks through block-only RLE", () => {
+    const room = new RoomState("K7QX", 9999);
+    const city = decodeRLE(room.getChunkRLE(-5, 3, -7));
+    const connector = decodeRLE(room.getChunkRLE(0, 3, -1));
+
+    expect(room.getWorldBlock(-80, 58, -112)).toBe(BLOCK_ID.paving);
+    expect(city[getBlockIndex(0, 10, 0)]).toBe(BLOCK_ID.paving);
+    expect(room.getWorldBlock(4, 60, -16)).toBe(BLOCK_ID.asphalt);
+    expect(connector[getBlockIndex(4, 12, 0)]).toBe(BLOCK_ID.asphalt);
+
+    room.setBlock(-80, 58, -112, BLOCK_ID.stone);
+    expect(readBlock(room, -80, 58, -112)).toBe(BLOCK_ID.stone);
+  });
+  it("ignores city fixtures and water when finding the saved room surface", () => {
+    const source = new RoomState("K7QX", 9999);
+    expect(source.getWorldBlock(-34, 60, -112)).not.toBe(BLOCK_ID.air);
+    expect(source.getWorldBlock(-34, 61, -112)).toBe(BLOCK_ID.plaster);
+    expect(source.surfaceColumnTop(-34, -112)).toBe(60);
+
+    const waterEdit = RoomState.fromJSON("K7QX", {
+      seed: 9999,
+      edits: { "-34,65,-112": BLOCK_ID.water },
+      savedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(waterEdit.surfaceColumnTop(-34, -112)).toBe(60);
+
+    const solidEdit = RoomState.fromJSON("K7QX", {
+      seed: 9999,
+      edits: { "-34,66,-112": BLOCK_ID.brick },
+      savedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(solidEdit.surfaceColumnTop(-34, -112)).toBe(66);
   });
 
   it.each([1, 2])("loads existing room edits with current terrain (legacy metadata %i)", (worldgenVersion) => {

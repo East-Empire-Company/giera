@@ -1,14 +1,16 @@
 import * as THREE from "three";
 import { CHUNK_SIZE, CHUNK_VOLUME, chunkKey, getBlockIndex, type ChunkPosition } from "../../shared/chunk";
 import { meshChunk, type ChunkMesh, type MeshGroup } from "../../shared/mesher";
+import { NO_CITY_TINT } from "../../shared/warsaw-city-data";
+import { WARSAW_CITY_TINT_PALETTES } from "../../shared/warsaw-city-data.generated";
 import { TERRAIN_MATERIAL, TERRAIN_MATERIAL_COUNT, terrainMaterialFor } from "../../shared/terrain-materials";
-import { generateBlock, MAX_GENERATED_BLOCK_Y, surfaceHeight } from "../../shared/worldgen";
+import { citySurfaceColumnTop, generateBlock, generateChunkWithCityTints, MAX_GENERATED_BLOCK_Y, surfaceHeight } from "../../shared/worldgen";
 import type { ChunkBuildRequest, ChunkBuildResponse } from "../../shared/chunk-worker-protocol";
 import atlasManifest from "../../shared/atlas-manifest.json";
 import { addFoliageWind, decorRadiiFor, disposeGroundDecor, placeGroundDecor, scatterGrassBlades, scatterGroundDecor, setFoliageWindTime } from "./ground-decor";
 import { BLOCK_ID } from "../../shared/blocks";
 
-type ChunkView = { data: Uint8Array; mesh?: THREE.Mesh; cx: number; cy: number; cz: number };
+type ChunkView = { data: Uint8Array; cityTintIds?: Uint8Array; mesh?: THREE.Mesh; cx: number; cy: number; cz: number };
 type ChunkEdit = { id: number; persist: boolean };
 export type SavedEdits = { seed: number; edits: Record<string, number> };
 type ChunkJob = {
@@ -508,7 +510,7 @@ export class WorldRenderer {
       try {
         const result = await this.workers.generate({ ...position, seed: this.seed });
         if ("error" in result) throw new Error(result.error);
-        const chunk: ChunkView = { data: result.data, cx: position.cx, cy: position.cy, cz: position.cz };
+        const chunk: ChunkView = { data: result.data, cityTintIds: result.cityTintIds, cx: position.cx, cy: position.cy, cz: position.cz };
         this.chunks.set(key, chunk);
         const hasEdits = this.applyChunkEdits(chunk);
         if (hasEdits) {
@@ -587,6 +589,17 @@ export class WorldRenderer {
   surfaceColumnTop(x: number, z: number): number {
     const cx = Math.floor(x / CHUNK_SIZE);
     const cz = Math.floor(z / CHUNK_SIZE);
+    let editedCy = Number.NaN;
+    let editBucket: Map<number, ChunkEdit> | undefined;
+    const cityTop = citySurfaceColumnTop(x, z, (y) => {
+      const cy = Math.floor(y / CHUNK_SIZE);
+      if (cy !== editedCy) {
+        editedCy = cy;
+        editBucket = this.edits.get(chunkKey(cx, cy, cz));
+      }
+      return editBucket?.get(blockIndex(x, y, z))?.id;
+    });
+    if (cityTop !== null) return cityTop;
     const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     let cachedCy = Number.NaN;
@@ -613,20 +626,13 @@ export class WorldRenderer {
     this.recordEdit(x, y, z, blockId, persist);
     let chunk = this.chunks.get(key);
     if (!chunk) {
-      const data = new Uint8Array(CHUNK_VOLUME);
-      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-        for (let ly = 0; ly < CHUNK_SIZE; ly++) {
-          for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-            data[getBlockIndex(lx, ly, lz)] = generateBlock(cx * CHUNK_SIZE + lx, cy * CHUNK_SIZE + ly, cz * CHUNK_SIZE + lz, this.seed);
-          }
-        }
-      }
-      chunk = { data, cx, cy, cz };
+      const generated = generateChunkWithCityTints(cx, cy, cz, this.seed);
+      chunk = { ...generated, cx, cy, cz };
       this.chunks.set(key, chunk);
       this.applyChunkEdits(chunk);
     }
     const { lx, ly, lz } = localCoords(x, y, z);
-    chunk.data[getBlockIndex(lx, ly, lz)] = blockId;
+    this.writeBlock(chunk, x, y, z, blockId);
     this.remeshChunk(cx, cy, cz);
     this.remeshBorderNeighbours(cx, cy, cz, lx, ly, lz);
   }
@@ -667,16 +673,9 @@ export class WorldRenderer {
   clearEdits(): void {
     this.edits.clear();
     for (const chunk of this.chunks.values()) {
-      for (let lz = 0; lz < CHUNK_SIZE; lz += 1) {
-        for (let ly = 0; ly < CHUNK_SIZE; ly += 1) {
-          for (let lx = 0; lx < CHUNK_SIZE; lx += 1) {
-            const x = chunk.cx * CHUNK_SIZE + lx;
-            const y = chunk.cy * CHUNK_SIZE + ly;
-            const z = chunk.cz * CHUNK_SIZE + lz;
-            chunk.data[getBlockIndex(lx, ly, lz)] = generateBlock(x, y, z, this.seed);
-          }
-        }
-      }
+      const generated = generateChunkWithCityTints(chunk.cx, chunk.cy, chunk.cz, this.seed);
+      chunk.data = generated.data;
+      chunk.cityTintIds = generated.cityTintIds;
     }
     for (const chunk of this.chunks.values()) this.remeshChunk(chunk.cx, chunk.cy, chunk.cz);
   }
@@ -696,14 +695,18 @@ export class WorldRenderer {
     if (!bucket || bucket.size === 0) return false;
     for (const [index, edit] of bucket) {
       const { lx, ly, lz } = localFromIndex(index);
-      chunk.data[getBlockIndex(lx, ly, lz)] = edit.id;
+      const blockIndex = getBlockIndex(lx, ly, lz);
+      chunk.data[blockIndex] = edit.id;
+      if (chunk.cityTintIds) chunk.cityTintIds[blockIndex] = NO_CITY_TINT;
     }
     return true;
   }
 
   private writeBlock(chunk: ChunkView, x: number, y: number, z: number, blockId: number): void {
     const { lx, ly, lz } = localCoords(x, y, z);
-    chunk.data[getBlockIndex(lx, ly, lz)] = blockId;
+    const index = getBlockIndex(lx, ly, lz);
+    chunk.data[index] = blockId;
+    if (chunk.cityTintIds) chunk.cityTintIds[index] = NO_CITY_TINT;
   }
 
   private remeshBorderNeighbours(cx: number, cy: number, cz: number, lx: number, ly: number, lz: number): void {
@@ -740,6 +743,8 @@ export class WorldRenderer {
     if (!chunk) return;
     const meshData = meshChunk({
       data: chunk.data,
+      cityTintIds: chunk.cityTintIds,
+      cityTintPalettes: WARSAW_CITY_TINT_PALETTES,
       cx,
       cy,
       cz,

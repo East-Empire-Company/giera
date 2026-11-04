@@ -74,18 +74,42 @@ const PBR_SOURCES: Record<string, string | null> = {
   cobblestone: "Rock058",
   sand: "Ground080",
   oak_log_side: "Bark001",
-  oak_log_top: "Bark001",
+  oak_log_top: null,
   ginkgo_leaves: "ScatteredLeaves009",
   oak_planks: "Planks010",
   default_mineral_coal: "Rock064",
   default_mineral_iron: "Rock064",
   default_mineral_gold: "Rock064",
+  asphalt: "Asphalt033",
+  paving: "PavingStones151",
+  brick: "Bricks097",
+  plaster: "Plaster001",
+  roof_tile: "RoofingTiles013A",
+  tnt: "tnt",
   glass: null,
   water: null,
 };
 
 const GUTTER = 8;
 const GRID_COLUMNS = 4;
+const MAX_TILES = 24;
+
+export function atlasGridDimensions(tileCount: number, resolution: number, gutter: number): {
+  columns: number;
+  rows: number;
+  cell: number;
+  width: number;
+  height: number;
+} {
+  if (!Number.isInteger(tileCount) || tileCount < 0 || tileCount > MAX_TILES) throw new RangeError(`Tile count exceeds ${GRID_COLUMNS}x${Math.ceil(MAX_TILES / GRID_COLUMNS)} grid`);
+  if (!Number.isInteger(resolution) || resolution < 1 || !Number.isInteger(gutter) || gutter < 0) {
+    throw new RangeError("Atlas resolution and gutter must be valid integers");
+  }
+  const columns = GRID_COLUMNS;
+  const rows = Math.max(1, Math.ceil(tileCount / columns));
+  const cell = resolution + 2 * gutter;
+  return { columns, rows, cell, width: columns * cell, height: rows * cell };
+}
 
 type TileMaps = { albedo: Buffer; normal: Buffer; orm: Buffer };
 
@@ -98,13 +122,15 @@ async function loadTileMaps(name: string, tilePath: string, res: number): Promis
   if (sourceId === undefined) throw new Error(`No PBR source mapping for tile: ${name}`);
   if (sourceId === null) {
     const legacy = await sharp(resolve("public", tilePath)).resize(res, res, { kernel: "nearest" }).png().toBuffer();
+    const flatNormal = Buffer.alloc(res * res * 4, Buffer.from([128, 128, 255, 255]));
     const neutralOrm = Buffer.alloc(res * res * 4);
     for (let i = 0; i < res * res; i++) {
       neutralOrm[i * 4] = 255;
       neutralOrm[i * 4 + 1] = 230;
     }
+    const normal = sharp(flatNormal, { raw: { width: res, height: res, channels: 4 } }).png().toBuffer();
     const orm = sharp(neutralOrm, { raw: { width: res, height: res, channels: 4 } }).png().toBuffer();
-    return { albedo: legacy, normal: legacy, orm: await orm };
+    return { albedo: legacy, normal: await normal, orm: await orm };
   }
   for (const map of ["Color", "NormalGL", "Roughness"]) {
     if (!existsSync(pbrPath(sourceId, map))) throw new Error(`Missing PBR map for ${name}: ${pbrPath(sourceId, map)} (run bun run assets:fetch)`);
@@ -129,6 +155,7 @@ async function loadTileMaps(name: string, tilePath: string, res: number): Promis
   const orm = sharp(ormRaw, { raw: { width: res, height: res, channels: 4 } }).png().toBuffer();
   return { albedo: await albedo, normal: await normal, orm: await orm };
 }
+
 
 async function addGutter(tile: Buffer, res: number): Promise<Buffer> {
   const g = GUTTER;
@@ -163,10 +190,8 @@ async function main(): Promise<void> {
   const resIndex = process.argv.indexOf("--res");
   const res = resIndex >= 0 ? Number(process.argv[resIndex + 1]) : 512;
   if (![256, 512].includes(res)) throw new RangeError("Unsupported --res (use 256 or 512)");
-  const cell = res + 2 * GUTTER;
-  const size = GRID_COLUMNS * cell;
+  const { columns, rows, cell, width: atlasWidth, height: atlasHeight } = atlasGridDimensions(Object.keys(assetManifest.tiles).length, res, GUTTER);
   const entries = Object.entries(assetManifest.tiles).sort(([a], [b]) => a.localeCompare(b));
-  if (entries.length > GRID_COLUMNS * GRID_COLUMNS) throw new RangeError("Tile count exceeds 4x4 grid");
 
   const albedoCells: Array<{ input: Buffer; left: number; top: number }> = [];
   const normalCells: Array<{ input: Buffer; left: number; top: number }> = [];
@@ -174,20 +199,20 @@ async function main(): Promise<void> {
   const tiles: Record<string, { id: number; uv: [number, number, number, number]; normalRect: [number, number, number, number]; ormRect: [number, number, number, number]; path: string }> = {};
   for (const [id, [name, tilePath]] of entries.entries()) {
     const maps = await loadTileMaps(name, tilePath, res);
-    const cx = (id % GRID_COLUMNS) * cell;
-    const cy = Math.floor(id / GRID_COLUMNS) * cell;
+    const cx = (id % columns) * cell;
+    const cy = Math.floor(id / columns) * cell;
     albedoCells.push({ input: await addGutter(maps.albedo, res), left: cx, top: cy });
     normalCells.push({ input: await addGutter(maps.normal, res), left: cx, top: cy });
     ormCells.push({ input: await addGutter(maps.orm, res), left: cx, top: cy });
-    const u0 = (cx + GUTTER + 0.5) / size;
-    const u1 = (cx + cell - GUTTER - 0.5) / size;
-    const v0 = 1 - (cy + cell - GUTTER - 0.5) / size;
-    const v1 = 1 - (cy + GUTTER + 0.5) / size;
+    const u0 = (cx + GUTTER + 0.5) / atlasWidth;
+    const u1 = (cx + cell - GUTTER - 0.5) / atlasWidth;
+    const v0 = 1 - (cy + cell - GUTTER - 0.5) / atlasHeight;
+    const v1 = 1 - (cy + GUTTER + 0.5) / atlasHeight;
     tiles[name] = { id, uv: [u0, v0, u1, v1], normalRect: [u0, v0, u1, v1], ormRect: [u0, v0, u1, v1], path: tilePath };
   }
 
   const compose = async (cells: typeof albedoCells, lossless = false): Promise<Buffer> =>
-    sharp({ create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } })
+    sharp({ create: { width: atlasWidth, height: atlasHeight, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } })
       .composite(cells)
       .webp(lossless ? { lossless: true, effort: 6 } : { quality: ATLAS_WEBP_QUALITY, alphaQuality: 100, effort: 6 })
       .toBuffer();
@@ -200,9 +225,9 @@ async function main(): Promise<void> {
   await writeFile(atlasPath, albedoWebp);
   await writeFile(resolve("public/assets/textures/atlas-normal.webp"), normalWebp);
   await writeFile(resolve("public/assets/textures/atlas-orm.webp"), ormWebp);
-  const atlasManifest = { width: size, height: size, tileRes: res, gutter: GUTTER, tiles };
+  const atlasManifest = { width: atlasWidth, height: atlasHeight, tileRes: res, gutter: GUTTER, tiles };
   await writeFile(resolve("src/shared/atlas-manifest.json"), `${JSON.stringify(atlasManifest, null, 2)}\n`);
-  console.log(`Packed ${entries.length} tiles into 3 atlases at ${dirname(atlasPath)} (${size}x${size}, res ${res}).`);
+  console.log(`Packed ${entries.length} tiles into 3 atlases at ${dirname(atlasPath)} (${atlasWidth}x${atlasHeight}, ${columns}x${rows}, res ${res}).`);
 }
 
 if (import.meta.main) await main();

@@ -1,7 +1,8 @@
-import { BLOCK_ID } from "./blocks";
+import { BLOCK_ID, getBlockDef } from "./blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, getBlockIndex, WORLD_HEIGHT } from "./chunk";
 import { MAX_TYCOON_SLOTS, tycoonSlotOrigin } from "./tycoon-slots";
-
+import { NO_CITY_TINT, lookupWarsawConnectorHeight, lookupWarsawGroundHeight, lookupWarsawPaletteIndex } from "./warsaw-city-data";
+import { WARSAW_CITY_PALETTE_BLOCK_IDS, WARSAW_CITY_PALETTE_TINT_IDS } from "./warsaw-city-data.generated";
 const MAX_SURFACE_HEIGHT = Math.round(32 + 23 + 3 / 2 + 24 + 14);
 const MAX_TREE_BLOCKS_ABOVE_SURFACE = 9;
 export const MAX_GENERATED_BLOCK_Y = Math.min(WORLD_HEIGHT - 1, MAX_SURFACE_HEIGHT + MAX_TREE_BLOCKS_ABOVE_SURFACE);
@@ -100,7 +101,7 @@ function slotPadWeight(x: number, z: number, slot: number): number {
   return distance >= SLOT_PAD_TRANSITION ? 0 : 1 - smooth(distance / SLOT_PAD_TRANSITION);
 }
 
-export function surfaceHeight(x: number, z: number, seed: number): number {
+function terrainSurfaceHeight(x: number, z: number, seed: number): number {
   const natural = naturalSurfaceHeight(x, z, seed);
   let weight = 0;
   let target = TYCOON_SURFACE_HEIGHT;
@@ -124,6 +125,29 @@ export function surfaceHeight(x: number, z: number, seed: number): number {
   if (weight === 0) return natural;
   return Math.round(natural + (target - natural) * weight);
 }
+export function surfaceHeight(x: number, z: number, seed: number): number {
+  const cityGround = lookupWarsawGroundHeight(x, z);
+  if (cityGround !== null) return cityGround;
+  return lookupWarsawConnectorHeight(x, z) ?? terrainSurfaceHeight(x, z, seed);
+}
+export function citySurfaceColumnTop(
+  x: number,
+  z: number,
+  editedBlockAt: (y: number) => number | undefined,
+): number | null {
+  const ground = lookupWarsawGroundHeight(x, z);
+  const connector = ground === null ? lookupWarsawConnectorHeight(x, z) : null;
+  const base = ground ?? connector;
+  if (base === null) return null;
+
+  let top = base;
+  for (let y = base + 1; y < WORLD_HEIGHT; y++) {
+    const blockId = editedBlockAt(y);
+    if (blockId !== undefined && getBlockDef(blockId).solid) top = y;
+  }
+  return top;
+}
+
 
 function treeHeight(x: number, z: number, seed: number): number {
   return 5 + Math.floor(hash2(x, z, seed ^ 0x6c8e9cf5) * 3);
@@ -148,6 +172,12 @@ function hasTreeSite(x: number, z: number, seed: number): boolean {
     const at = tycoonSlotOrigin(slot);
     if (Math.abs(x - at.x) <= SLOT_PAD_TREE_CLEARANCE && Math.abs(z - at.z) <= SLOT_PAD_TREE_CLEARANCE) return false;
   }
+  if (
+    (x >= -80 - TREE_CROWN_MAX_RADIUS && x <= 15 + TREE_CROWN_MAX_RADIUS &&
+      z >= -112 - TREE_CROWN_MAX_RADIUS && z <= -17 + TREE_CROWN_MAX_RADIUS) ||
+    (x >= 4 - TREE_CROWN_MAX_RADIUS && x <= 7 + TREE_CROWN_MAX_RADIUS &&
+      z >= -16 - TREE_CROWN_MAX_RADIUS && z <= 4 + TREE_CROWN_MAX_RADIUS)
+  ) return false;
 
   const chance = hash2(x, z, seed ^ 0x4f1bbcdc);
   if (chance < 0.945) return false;
@@ -175,16 +205,17 @@ function treeBlock(x: number, y: number, z: number, seed: number): number {
   return BLOCK_ID.air;
 }
 
-export function generateBlock(x: number, y: number, z: number, seed: number): number {
-  if (y < 0 || y >= WORLD_HEIGHT) return BLOCK_ID.air;
-  if (y === 0) return BLOCK_ID.bedrock;
-  const height = surfaceHeight(x, z, seed);
+function packGeneratedBlock(blockId: number, tintId = NO_CITY_TINT): number {
+  return blockId | (tintId << 8);
+}
+
+function terrainBlockAtHeight(x: number, y: number, z: number, seed: number, height: number): number {
   let block: number = BLOCK_ID.air;
   if (y <= height) {
     const isBeach = height <= WATER_LEVEL + 2;
     if (y === height) block = isBeach ? BLOCK_ID.sand : BLOCK_ID.grass;
-    else if (y > height - (isBeach ? 4 : 4)) block = isBeach ? BLOCK_ID.sand : BLOCK_ID.dirt;
-    else if (y < height - 4 && valueNoise3(x * 0.075, y * 0.08, z * 0.075, seed ^ 0x13a5ba1d) > 0.72) block = BLOCK_ID.air;
+    else if (y > height - 4) block = isBeach ? BLOCK_ID.sand : BLOCK_ID.dirt;
+    else if (valueNoise3(x * 0.075, y * 0.08, z * 0.075, seed ^ 0x13a5ba1d) > 0.72) block = BLOCK_ID.air;
     else if (y < 52 && hash3(x, y, z, seed ^ 0x7f4a7c15) > 0.993) block = BLOCK_ID.coal_ore;
     else if (y < 32 && hash3(x, y, z, seed ^ 0x2b992ddf) > 0.996) block = BLOCK_ID.iron_ore;
     else if (y < 20 && hash3(x, y, z, seed ^ 0x3c6ef372) > 0.9985) block = BLOCK_ID.gold_ore;
@@ -199,18 +230,89 @@ export function generateBlock(x: number, y: number, z: number, seed: number): nu
   return block;
 }
 
-export function generateChunk(cx: number, cy: number, cz: number, seed: number): Uint8Array {
-  if (!Number.isInteger(cx) || !Number.isInteger(cy) || !Number.isInteger(cz) || !Number.isInteger(seed)) throw new RangeError("Chunk coordinates and seed must be integers");
-  const data = new Uint8Array(CHUNK_VOLUME);
+function generateBlockValue(x: number, y: number, z: number, seed: number): number {
+  if (y < 0 || y >= WORLD_HEIGHT) return packGeneratedBlock(BLOCK_ID.air);
+  if (y === 0) return packGeneratedBlock(BLOCK_ID.bedrock);
+
+  const paletteIndex = lookupWarsawPaletteIndex(x, y, z);
+  if (paletteIndex >= 0) {
+    return packGeneratedBlock(
+      WARSAW_CITY_PALETTE_BLOCK_IDS[paletteIndex]!,
+      WARSAW_CITY_PALETTE_TINT_IDS[paletteIndex]!,
+    );
+  }
+
+  const cityGround = lookupWarsawGroundHeight(x, z);
+  if (cityGround !== null) {
+    if (y >= cityGround) return packGeneratedBlock(BLOCK_ID.air);
+    return packGeneratedBlock(terrainBlockAtHeight(x, y, z, seed, cityGround));
+  }
+
+  const connectorHeight = lookupWarsawConnectorHeight(x, z);
+  if (connectorHeight !== null) {
+    if (y === connectorHeight) return packGeneratedBlock(BLOCK_ID.asphalt);
+    if (y > connectorHeight) return packGeneratedBlock(BLOCK_ID.air);
+    const ground = terrainSurfaceHeight(x, z, seed);
+    return packGeneratedBlock(y > ground ? BLOCK_ID.stone : terrainBlockAtHeight(x, y, z, seed, ground));
+  }
+
+  return packGeneratedBlock(terrainBlockAtHeight(x, y, z, seed, terrainSurfaceHeight(x, z, seed)));
+}
+
+export function generateBlock(x: number, y: number, z: number, seed: number): number {
+  return generateBlockValue(x, y, z, seed) & 0xff;
+}
+
+function validateChunkCoordinates(cx: number, cy: number, cz: number, seed: number): void {
+  if (!Number.isInteger(cx) || !Number.isInteger(cy) || !Number.isInteger(cz) || !Number.isInteger(seed)) {
+    throw new RangeError("Chunk coordinates and seed must be integers");
+  }
+}
+
+function fillChunk(
+  data: Uint8Array,
+  cx: number,
+  cy: number,
+  cz: number,
+  seed: number,
+  collectTints: boolean,
+): Uint8Array | undefined {
+  let cityTintIds: Uint8Array | undefined;
   const originX = cx * CHUNK_SIZE;
   const originY = cy * CHUNK_SIZE;
   const originZ = cz * CHUNK_SIZE;
   for (let y = 0; y < CHUNK_SIZE; y++) {
     for (let z = 0; z < CHUNK_SIZE; z++) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
-        data[getBlockIndex(x, y, z)] = generateBlock(originX + x, originY + y, originZ + z, seed);
+        const index = getBlockIndex(x, y, z);
+        const generated = generateBlockValue(originX + x, originY + y, originZ + z, seed);
+        data[index] = generated & 0xff;
+        if (!collectTints) continue;
+        const tintId = generated >>> 8;
+        if (tintId === NO_CITY_TINT) continue;
+        cityTintIds ??= new Uint8Array(CHUNK_VOLUME).fill(NO_CITY_TINT);
+        cityTintIds[index] = tintId;
       }
     }
   }
+  return cityTintIds;
+}
+
+export function generateChunk(cx: number, cy: number, cz: number, seed: number): Uint8Array {
+  validateChunkCoordinates(cx, cy, cz, seed);
+  const data = new Uint8Array(CHUNK_VOLUME);
+  fillChunk(data, cx, cy, cz, seed, false);
   return data;
+}
+
+export function generateChunkWithCityTints(
+  cx: number,
+  cy: number,
+  cz: number,
+  seed: number,
+): { data: Uint8Array; cityTintIds?: Uint8Array } {
+  validateChunkCoordinates(cx, cy, cz, seed);
+  const data = new Uint8Array(CHUNK_VOLUME);
+  const cityTintIds = fillChunk(data, cx, cy, cz, seed, true);
+  return cityTintIds ? { data, cityTintIds } : { data };
 }

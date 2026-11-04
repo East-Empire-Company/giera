@@ -14,6 +14,12 @@ export const BLOCK_ID = {
   coal_ore: 12,
   iron_ore: 13,
   gold_ore: 14,
+  asphalt: 15,
+  paving: 16,
+  brick: 17,
+  plaster: 18,
+  roof_tile: 19,
+  tnt: 20,
 } as const;
 
 export type BlockId = (typeof BLOCK_ID)[keyof typeof BLOCK_ID];
@@ -46,6 +52,12 @@ export const BLOCK_BY_ID: Record<BlockId, BlockDef> = {
   12: { id: BLOCK_ID.coal_ore, name: "Ruda węgla", tiles: { top: "default_mineral_coal", bottom: "default_mineral_coal", side: "default_mineral_coal" }, hardness: 3.2, solid: true, liquid: false },
   13: { id: BLOCK_ID.iron_ore, name: "Ruda żelaza", tiles: { top: "default_mineral_iron", bottom: "default_mineral_iron", side: "default_mineral_iron" }, hardness: 3.6, solid: true, liquid: false },
   14: { id: BLOCK_ID.gold_ore, name: "Ruda złota", tiles: { top: "default_mineral_gold", bottom: "default_mineral_gold", side: "default_mineral_gold" }, hardness: 4, solid: true, liquid: false },
+  15: { id: BLOCK_ID.asphalt, name: "Asfalt", tiles: { top: "asphalt", bottom: "asphalt", side: "asphalt" }, hardness: 1.5, solid: true, liquid: false },
+  16: { id: BLOCK_ID.paving, name: "Kostka brukowa", tiles: { top: "paving", bottom: "paving", side: "paving" }, hardness: 1.2, solid: true, liquid: false },
+  17: { id: BLOCK_ID.brick, name: "Cegła", tiles: { top: "brick", bottom: "brick", side: "brick" }, hardness: 2, solid: true, liquid: false },
+  18: { id: BLOCK_ID.plaster, name: "Tynk", tiles: { top: "plaster", bottom: "plaster", side: "plaster" }, hardness: 1.2, solid: true, liquid: false },
+  19: { id: BLOCK_ID.roof_tile, name: "Dachówka", tiles: { top: "roof_tile", bottom: "roof_tile", side: "roof_tile" }, hardness: 1.5, solid: true, liquid: false },
+  20: { id: BLOCK_ID.tnt, name: "TNT", tiles: { top: "tnt", bottom: "tnt", side: "tnt" }, hardness: 0.1, solid: true, liquid: false },
 };
 
 export const BLOCKS = Object.values(BLOCK_BY_ID);
@@ -53,4 +65,12 @@ export const BLOCKS = Object.values(BLOCK_BY_ID);
 export function getBlockDef(id: number): BlockDef {
   if (!Number.isInteger(id) || !Object.hasOwn(BLOCK_BY_ID, id)) throw new RangeError(`Unknown block id: ${id}`);
   return BLOCK_BY_ID[id as BlockId];
+}
+
+export function isStoneFamily(id: number): boolean {
+  return id === BLOCK_ID.stone ||
+    id === BLOCK_ID.cobblestone ||
+    id === BLOCK_ID.coal_ore ||
+    id === BLOCK_ID.iron_ore ||
+    id === BLOCK_ID.gold_ore;
 }

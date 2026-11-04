@@ -1,7 +1,7 @@
-import { BLOCK_ID, type BlockId } from "./blocks";
+import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "./blocks";
 import { WORLD_HEIGHT } from "./chunk";
+import { lookupWarsawConnectorHeight, lookupWarsawGroundHeight, lookupWarsawVoxel } from "./warsaw-city-data";
 import { makeRng } from "./rng";
-
 export type HouseWorld = {
   getBlock(x: number, y: number, z: number): number;
   surfaceColumnTop(x: number, z: number): number;
@@ -17,6 +17,25 @@ export type HousePlan = {
 };
 
 const MAX_HOUSE_BLOCKS = 150;
+
+function hasSourceSolidsAboveGround(x: number, z: number): boolean {
+  const groundY = lookupWarsawGroundHeight(x, z);
+  if (groundY === null) return false;
+  if (lookupWarsawConnectorHeight(x, z) !== null) return true;
+  for (let y = groundY + 1; y < WORLD_HEIGHT; y++) {
+    const voxel = lookupWarsawVoxel(x, y, z);
+    if (voxel && BLOCK_BY_ID[voxel.blockId as BlockId].solid) return true;
+  }
+  return false;
+}
+
+function isPavedSurface(world: HouseWorld, x: number, y: number, z: number): boolean {
+  const sourceGroundY = lookupWarsawGroundHeight(x, z);
+  const sourceGround = sourceGroundY === null ? null : lookupWarsawVoxel(x, sourceGroundY, z);
+  const blockId = world.getBlock(x, y, z);
+  return blockId === BLOCK_ID.asphalt || blockId === BLOCK_ID.paving ||
+    sourceGround?.blockId === BLOCK_ID.asphalt || sourceGround?.blockId === BLOCK_ID.paving;
+}
 
 export function createHousePlan(
   world: HouseWorld,
@@ -66,8 +85,10 @@ export function createHousePlan(
       let flat = true;
       for (let column = 0; column < width; column++) {
         for (let row = 0; row < depth; row++) {
-          const y = world.surfaceColumnTop(xAt(column, row), zAt(column, row));
-          if (!Number.isFinite(y)) {
+          const x = xAt(column, row);
+          const z = zAt(column, row);
+          const y = world.surfaceColumnTop(x, z);
+          if (!Number.isFinite(y) || hasSourceSolidsAboveGround(x, z) || isPavedSurface(world, x, y, z)) {
             flat = false;
             break;
           }

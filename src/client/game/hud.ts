@@ -1,3 +1,4 @@
+import assetManifest from "../../shared/asset-manifest.json";
 import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "../../shared/blocks";
 import type { GameInventory } from "./inventory";
 import type { ObjectiveManager } from "./objectives";
@@ -27,7 +28,15 @@ export function getItemIcon(key: string): string {
     iron_axe: "/assets/ui/icons/axe_iron.png",
     iron_sword: "/assets/ui/icons/axe_iron.png",
   };
-  return icons[key] ?? "/assets/ui/kenney/star.png";
+  const cityIcons: Record<string, string> = {
+    asphalt: `/${assetManifest.tiles.asphalt}`,
+    paving: `/${assetManifest.tiles.paving}`,
+    brick: `/${assetManifest.tiles.brick}`,
+    plaster: `/${assetManifest.tiles.plaster}`,
+    roof_tile: `/${assetManifest.tiles.roof_tile}`,
+    tnt: `/${assetManifest.tiles.tnt}`,
+  };
+  return icons[key] ?? cityIcons[key] ?? "/assets/ui/kenney/star.png";
 }
 
 export class GameHUD {

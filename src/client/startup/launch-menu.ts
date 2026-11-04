@@ -1,4 +1,5 @@
 import type { PlayerProfile } from "../../shared/lan-protocol";
+import type { ConciergeSession } from "../concierge/session";
 
 export type LaunchSettings = { splitScreen: boolean; profile: PlayerProfile };
 export type LaunchStartSource = "control" | "gamepad";
@@ -8,6 +9,7 @@ type LaunchMenuOptions = {
   startButton: HTMLButtonElement;
   modeButton: HTMLButtonElement;
   onStart: (settings: LaunchSettings, source: LaunchStartSource) => void;
+  conciergeSession: Pick<ConciergeSession, "close">;
 };
 
 export class LaunchMenuController {
@@ -201,6 +203,7 @@ export class LaunchMenuController {
     this.options.root.hidden = true;
     this.options.startButton.disabled = true;
     this.options.modeButton.disabled = true;
+    void this.options.conciergeSession.close("menu");
     this.options.onStart(this.settings, source);
   }
 }

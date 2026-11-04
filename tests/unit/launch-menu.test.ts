@@ -13,7 +13,13 @@ function createMenu() {
   const startButton = document.querySelector<HTMLButtonElement>("#launch-start")!;
   const modeButton = document.querySelector<HTMLButtonElement>("#launch-mode")!;
   const onStart = vi.fn();
-  const menu = new LaunchMenuController({ root, startButton, modeButton, onStart });
+  const menu = new LaunchMenuController({
+    root,
+    startButton,
+    modeButton,
+    onStart,
+    conciergeSession: { close: async () => {} },
+  });
   return { root, startButton, modeButton, onStart, menu };
 }
 
@@ -123,7 +129,13 @@ describe("LaunchMenuController", () => {
     const modeButton = document.querySelector<HTMLButtonElement>("#launch-mode")!;
     const slider = document.querySelector<HTMLInputElement>("#launch-music-volume")!;
     const details = document.querySelector<HTMLDetailsElement>("#launch-audio-category")!;
-    const menu = new LaunchMenuController({ root, startButton, modeButton, onStart: vi.fn() });
+    const menu = new LaunchMenuController({
+      root,
+      startButton,
+      modeButton,
+      onStart: vi.fn(),
+      conciergeSession: { close: async () => {} },
+    });
     const volumes: number[] = [];
     slider.addEventListener("input", () => volumes.push(Number(slider.value)));
     menu.show();

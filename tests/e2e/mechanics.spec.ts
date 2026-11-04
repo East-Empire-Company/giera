@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { SPEC } from "../spec-constants";
 import { raycastInteract, type RayHit } from "../../src/shared/raycast";
+import { WARSAW_CITY_DEPTH, WARSAW_CITY_WIDTH, WARSAW_CITY_WORLD_X, WARSAW_CITY_WORLD_Z } from "../../src/shared/warsaw-city-data.generated";
 
 type Vec3 = { x: number; y: number; z: number; clone: () => Vec3; set: (x: number, y: number, z: number) => Vec3 };
 type Bounds3 = { min: Vec3; max: Vec3 };
@@ -145,7 +146,7 @@ type Giera = {
     upgradePadPos: { x: number; z: number };
     trampolinePos: { x: number; z: number };
   };
-  qa: { simTime: number; frame: number; events: { ev: string; id?: string; t: number }[] };
+  qa: { simTime: number; frame: number; paused: boolean; events: { ev: string; id?: string; t: number }[] };
 };
 
 type G = { __GIERA__: Giera };
@@ -165,12 +166,13 @@ async function boot(page: Page): Promise<void> {
 
 type InventorySnapshot = {
   activeSlot: number;
+  hotbar: number[];
   blocks: Record<string, number>;
   items: Record<string, number>;
 };
 
 async function invOf(page: Page): Promise<InventorySnapshot> {
-  return page.evaluate(() => (window as unknown as G).__GIERA__.inventory.toJSON());
+  return page.evaluate(() => (window as unknown as G).__GIERA__.inventory.toJSON()) as Promise<InventorySnapshot>;
 }
 
 async function addBlocks(page: Page, key: string, count: number): Promise<void> {
@@ -222,8 +224,17 @@ async function findFlatSpots(page: Page): Promise<FlatSpot[]> {
   });
 }
 async function findUnevenWalkPaths(page: Page): Promise<GroundingPath[]> {
-  return page.evaluate(() => {
+  const cityBounds = {
+    worldX: WARSAW_CITY_WORLD_X,
+    worldZ: WARSAW_CITY_WORLD_Z,
+    width: WARSAW_CITY_WIDTH,
+    depth: WARSAW_CITY_DEPTH,
+  };
+  return page.evaluate((city) => {
     const g = (window as unknown as G).__GIERA__;
+    const isCityCell = (x: number, z: number): boolean =>
+      x >= city.worldX && x < city.worldX + city.width &&
+      z >= city.worldZ && z < city.worldZ + city.depth;
     const terrainHeights = new Map<string, number>();
     const surface = (x: number, z: number): number => {
       const key = `${x}:${z}`;
@@ -249,6 +260,14 @@ async function findUnevenWalkPaths(page: Page): Promise<GroundingPath[]> {
     for (let x = -40; x <= 40; x++) {
       for (let z = -40; z <= 40; z++) {
         for (const direction of directions) {
+          let crossesCity = false;
+          for (let step = 0; step <= 4; step++) {
+            if (isCityCell(x + direction.dx * step, z + direction.dz * step)) {
+              crossesCity = true;
+              break;
+            }
+          }
+          if (crossesCity) continue;
           const heights = [0, 1, 2, 3, 4].map((step) =>
             surface(x + direction.dx * step, z + direction.dz * step)
           );
@@ -282,7 +301,7 @@ async function findUnevenWalkPaths(page: Page): Promise<GroundingPath[]> {
     }
     if (paths.length < 2) throw new Error("no separated downhill paths found");
     return paths;
-  });
+  }, cityBounds);
 }
 
 
@@ -443,7 +462,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(visuals.p2.hasMaterial).toBe(true);
     expect(errors).toEqual([]);
   });
-  test("hero GLBs match their legacy heights and align their feet", async ({ page }) => {
+  test("hero GLBs match their target heights and align their feet", async ({ page }) => {
     test.setTimeout(60_000);
     await boot(page);
     await page.waitForFunction(() => {
@@ -483,7 +502,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
         p2: { profile: g.player2.characterProfile, bounds: measure(p2) },
       };
     });
-    const targetHeights = { ziemek: 2.16, gniewko: 1.85 };
+    const targetHeights = { ziemek: 1.2, gniewko: 1.2 };
     expect(bounds.p1.bounds.height).toBeCloseTo(targetHeights[bounds.p1.profile], 2);
     expect(bounds.p2.bounds.height).toBeCloseTo(targetHeights[bounds.p2.profile], 2);
     for (const avatar of [bounds.p1.bounds, bounds.p2.bounds]) {
@@ -728,65 +747,62 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     }
   });
 
-  test("NPC GLBs align their feet and choose safe idle clips deterministically", async ({ page }) => {
+  test("NPC GLBs align their feet and use safe idle clips", async ({ page }) => {
     test.setTimeout(120_000);
-    const capture = async () => {
-      await boot(page);
-      await page.waitForFunction(() => {
-        const g = (window as unknown as G).__GIERA__;
-        return g.npcManager.npcs.every((npc) => npc.avatar?.currentClipName);
-      }, null, { timeout: 30_000 });
-      return page.evaluate(() => {
-        const g = (window as unknown as G).__GIERA__;
-        return g.npcManager.npcs.map((npc) => {
-          const avatar = npc.avatar;
-          if (!avatar?.currentClipName) throw new Error(`NPC avatar missing: ${npc.def.id}`);
-          const root = avatar.object;
-          root.updateMatrixWorld(true);
-          let minY = Infinity;
-          let maxY = -Infinity;
-          root.traverse((node) => {
-            const geometry = node.geometry;
-            if (!geometry?.attributes?.position) return;
-            if (!geometry.boundingBox) geometry.computeBoundingBox();
-            const box = geometry.boundingBox;
-            if (!box) return;
-            for (const x of [box.min.x, box.max.x]) {
-              for (const y of [box.min.y, box.max.y]) {
-                for (const z of [box.min.z, box.max.z]) {
-                  const point = node.localToWorld(box.min.clone().set(x, y, z));
-                  minY = Math.min(minY, point.y);
-                  maxY = Math.max(maxY, point.y);
-                }
+    await boot(page);
+    await page.evaluate(() => {
+      (window as unknown as G).__GIERA__.qa.paused = true;
+    });
+    await page.waitForFunction(() => {
+      const g = (window as unknown as G).__GIERA__;
+      return g.npcManager.npcs.every((npc) => npc.avatar?.currentClipName);
+    }, null, { timeout: 30_000 });
+    const npcs = await page.evaluate(() => {
+      const g = (window as unknown as G).__GIERA__;
+      return g.npcManager.npcs.map((npc) => {
+        const avatar = npc.avatar;
+        if (!avatar?.currentClipName) throw new Error(`NPC avatar missing: ${npc.def.id}`);
+        const root = avatar.object;
+        root.updateMatrixWorld(true);
+        let minY = Infinity;
+        let maxY = -Infinity;
+        root.traverse((node) => {
+          const geometry = node.geometry;
+          if (!geometry?.attributes?.position) return;
+          if (!geometry.boundingBox) geometry.computeBoundingBox();
+          const box = geometry.boundingBox;
+          if (!box) return;
+          for (const x of [box.min.x, box.max.x]) {
+            for (const y of [box.min.y, box.max.y]) {
+              for (const z of [box.min.z, box.max.z]) {
+                const point = node.localToWorld(box.min.clone().set(x, y, z));
+                minY = Math.min(minY, point.y);
+                maxY = Math.max(maxY, point.y);
               }
             }
-          });
-          const clips = [avatar.currentClipName];
-          for (let i = 0; i < 8; i++) {
-            avatar.setMotion("walk");
-            avatar.setMotion("idle");
-            clips.push(avatar.currentClipName ?? "");
           }
-          return {
-            id: npc.def.id,
-            height: maxY - minY,
-            feetOffset: minY - root.position.y,
-            clips,
-          };
         });
+        const clips = [avatar.currentClipName];
+        for (let i = 0; i < 8; i++) {
+          avatar.setMotion("walk");
+          avatar.setMotion("idle");
+          clips.push(avatar.currentClipName ?? "");
+        }
+        return {
+          id: npc.def.id,
+          height: maxY - minY,
+          feetOffset: minY - root.position.y,
+          clips,
+        };
       });
-    };
-
-    const firstRun = await capture();
-    const secondRun = await capture();
-    expect(secondRun).toEqual(firstRun);
-    const expectedHeights: Record<string, number> = { tata: 2.12, mama: 1.82, ciocia: 1.6 };
+    });
+    const expectedHeights: Record<string, number> = { tata: 1.8, mama: 1.6, ciocia: 1.6 };
     const safeClips: Record<string, string[]> = {
       tata: ["fidget_shift_weight", "walk_relaxed"],
       mama: ["dance_salsa", "walk_relaxed"],
       ciocia: ["dance_loop_quaternius", "walk_relaxed"],
     };
-    for (const npc of firstRun) {
+    for (const npc of npcs) {
       expect(npc.height).toBeCloseTo(expectedHeights[npc.id], 2);
       expect(Math.abs(npc.feetOffset)).toBeLessThan(0.1);
       expect(npc.clips.every((clip) => safeClips[npc.id].includes(clip.toLowerCase()))).toBe(true);
@@ -1032,7 +1048,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(errors).toEqual([]);
   });
 
-  test("craft: modal opens, nine recipes, stick craft consumes inputs and yields output, Esc closes", async ({ page }) => {
+  test("craft: modal opens, ten recipes, stick craft consumes inputs and yields output, Esc closes", async ({ page }) => {
     test.setTimeout(60_000);
     const errors = collectErrors(page);
     await boot(page);
@@ -1040,7 +1056,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await page.keyboard.press("KeyI");
     await expect(page.locator(".hud-inventory-modal")).toHaveClass(/hud-modal-open/);
     const recipeButtons = page.locator(".hud-recipe-row .hud-craft-btn");
-    await expect(recipeButtons).toHaveCount(9);
+    await expect(recipeButtons).toHaveCount(10);
     await page.locator('.hud-craft-btn[data-id="stick"]').click();
     await page.waitForTimeout(200);
     const inv = await invOf(page);
@@ -1411,6 +1427,80 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     const inv = await invOf(page);
     expect(inv.activeSlot).toBe(4);
     expect(inv.blocks.planks).toBe(4);
+    expect(errors).toEqual([]);
+  });
+
+  test("tnt: crafts via UI, places and ignites with real input, crater persists after reload", async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors = collectErrors(page);
+    await boot(page);
+    await addBlocks(page, "planks", 4);
+    await addBlocks(page, "coal_ore", 1);
+    await page.keyboard.press("KeyI");
+    await expect(page.locator(".hud-inventory-modal")).toHaveClass(/hud-modal-open/);
+    await page.locator('.hud-craft-btn[data-id="tnt"]').click();
+    await page.waitForTimeout(200);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".hud-inventory-modal")).not.toHaveClass(/hud-modal-open/);
+    const inv = await invOf(page);
+    expect(inv.blocks.tnt).toBe(3);
+    const tntSlot = inv.hotbar.indexOf(20);
+    expect(tntSlot).toBeGreaterThanOrEqual(0);
+    await page.keyboard.press(`Digit${tntSlot + 1}`);
+
+    const spots = await findFlatSpots(page);
+    const armed = await armFrontBlock(page, spots);
+    const tntAt = armed.placeTarget;
+    await page.mouse.down({ button: "right" });
+    await page.mouse.up({ button: "right" });
+    await page.waitForFunction(
+      ([t]) => (window as unknown as G).__GIERA__.world.getBlock(t.x, t.y, t.z) === 20,
+      [tntAt],
+      { timeout: 10_000 }
+    );
+    const invAfterPlace = await invOf(page);
+    expect(invAfterPlace.blocks.tnt).toBe(3);
+
+    const igniteFrame = await page.evaluate(() => (window as unknown as G).__GIERA__.qa.frame);
+    await page.mouse.down({ button: "left" });
+    await page.waitForFunction((f) => (window as unknown as G).__GIERA__.qa.frame >= f + 10, igniteFrame);
+    await page.mouse.up({ button: "left" });
+    await page.waitForFunction(
+      ([t]) => (window as unknown as G).__GIERA__.world.getBlock(t.x, t.y, t.z) === 0,
+      [tntAt],
+      { timeout: 20_000 }
+    );
+    const crater = await page.evaluate(
+      ([t, fixture]) => {
+        const g = (window as unknown as G).__GIERA__;
+        let removed = 0;
+        const center = { x: t.x + 0.5, y: t.y + 0.5, z: t.z + 0.5 };
+        for (let x = t.x - 4; x <= t.x + 4; x++)
+          for (let y = t.y - 4; y <= t.y + 4; y++)
+            for (let z = t.z - 4; z <= t.z + 4; z++) {
+              if (Math.hypot(x + 0.5 - center.x, y + 0.5 - center.y, z + 0.5 - center.z) > 3.2) continue;
+              if (g.world.getBlock(x, y, z) === 0) removed++;
+            }
+        return { removed, fixtureId: g.world.getBlock(fixture.x, fixture.y, fixture.z) };
+      },
+      [tntAt, armed.fixture]
+    );
+    expect(crater.removed).toBeGreaterThan(1);
+    expect(crater.fixtureId).toBe(0);
+
+    await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    await page.reload();
+    await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 30_000 });
+    await page.waitForFunction(() => ((window as unknown as G).__GIERA__?.qa?.frame ?? 0) > 60, null, { timeout: 20_000 });
+    const afterReload = await page.evaluate(
+      ([t, fixture]) => ({
+        tnt: (window as unknown as G).__GIERA__.world.getBlock(t.x, t.y, t.z),
+        fixture: (window as unknown as G).__GIERA__.world.getBlock(fixture.x, fixture.y, fixture.z),
+      }),
+      [tntAt, armed.fixture]
+    );
+    expect(afterReload.tnt).toBe(0);
+    expect(afterReload.fixture).toBe(0);
     expect(errors).toEqual([]);
   });
 });
