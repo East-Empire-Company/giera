@@ -84,6 +84,31 @@ body {
   color: #5c3d23;
 }
 
+#launch-menu {
+  background: linear-gradient(90deg, rgba(17, 39, 48, 0.9) 0%, rgba(17, 39, 48, 0.7) 32%, rgba(17, 39, 48, 0.08) 72%, transparent 100%);
+}
+
+#launch-menu .launch-layout {
+  grid-template-columns: minmax(0, 430px) minmax(320px, 1fr);
+  width: 100%;
+  margin: 0;
+}
+
+#launch-menu .launch-panel {
+  width: 430px;
+  max-width: 100%;
+}
+
+#launch-concierge-slot {
+  align-self: end;
+  justify-self: end;
+  width: min(300px, 28vw);
+}
+
+#launch-concierge-slot .concierge-canvas {
+  height: clamp(200px, 36vh, 300px);
+}
+
 .launch-brand {
   display: flex;
   align-items: center;
@@ -416,6 +441,26 @@ body {
     width: min(640px, 100%);
   }
 
+  #launch-menu {
+    background: rgba(17, 39, 48, 0.5);
+  }
+
+  #launch-menu .launch-layout {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(640px, 100%);
+    margin: auto;
+  }
+
+  #launch-menu .launch-panel {
+    width: auto;
+  }
+
+  #launch-concierge-slot {
+    align-self: auto;
+    justify-self: stretch;
+    width: 100%;
+  }
+
   #launch-concierge-slot,
   #pause-concierge-slot {
     grid-column: 1;
@@ -654,17 +699,53 @@ body {
   font-weight: bold;
 }
 
+.hud-tycoon-chip.is-collect {
+  border-color: #65dc8c;
+  background: rgba(24, 86, 58, 0.96);
+  transform: scale(1.06);
+}
+
+.hud-tycoon-chip.is-upgrade,
+.hud-tycoon-chip.is-expand {
+  border-color: #ffd84d;
+  background: rgba(105, 72, 15, 0.96);
+  transform: scale(1.06);
+}
+
+.hud-tycoon-fly-star {
+  position: fixed;
+  left: -18px;
+  top: -18px;
+  z-index: 45;
+  display: none;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.45));
+  will-change: transform, opacity;
+}
+
+.hud-tycoon-fly-star.is-active {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-tycoon-fly-star {
+    display: none !important;
+  }
+}
+
 .hud-tycoon-chip img {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   image-rendering: pixelated;
 }
 
 .hud-tycoon-tier {
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 3px 9px;
+  border-radius: 6px;
   background: #3c7760;
-  font-size: 12px;
+  font-size: 14px;
   color: #f7eed9;
 }
 

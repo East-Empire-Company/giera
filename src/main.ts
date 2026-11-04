@@ -351,8 +351,10 @@ async function boot(): Promise<void> {
   const menuStage = new MenuStage({
     radius: 13,
     height: 8.5,
-    speed: 0.06,
+    speed: 0.035,
     startAngle: 0.7,
+    focusOffset: { x: -1.5, z: -1.5 },
+    lookHeight: 1.4,
     solid: camSolid,
     groundAt: (x, z) => surfaceHeight(x, z, seed),
   });
@@ -471,6 +473,33 @@ async function boot(): Promise<void> {
       return isSplit;
     },
   });
+
+  const tycoonFeedback = (
+    actingPlayer: PlayerController,
+    actingCamera: THREE.PerspectiveCamera,
+    secondary: boolean,
+    kind: "collect" | "upgrade" | "expand",
+    amount = 3
+  ): void => {
+    const position = new THREE.Vector3(
+      actingPlayer.position.x,
+      actingPlayer.position.y + (kind === "collect" ? 1.4 : 0.8),
+      actingPlayer.position.z
+    );
+    gameplayVfx.emit("collect", position);
+    audio.play(kind === "collect" ? "celebrate_collect" : "celebrate_win");
+    if (kind === "collect") {
+      audio.play("craft_ok", { rate: 1.4 });
+      actingPlayer.avatar?.playOnce("pickup");
+    }
+    const viewport = getSplitViewports(window.innerWidth, window.innerHeight, splitScreen.isSplitScreen)[secondary ? 1 : 0];
+    position.project(actingCamera);
+    hud.flyTycoonStars({
+      x: viewport.x + (position.x * 0.5 + 0.5) * viewport.width,
+      y: viewport.y + (-position.y * 0.5 + 0.5) * viewport.height,
+    }, amount);
+    hud.pulseTycoon(kind);
+  };
 
   let saveQueue: Promise<boolean> = Promise.resolve(true);
   const savedStateFor = (key: string): SavedGameState => ({
@@ -1870,7 +1899,7 @@ async function boot(): Promise<void> {
     if (!gameStarted) {
       launchMenu.pollGamepad();
       const menuDelta = qa ? 1 / 60 : Math.min(0.05, realDelta);
-      tycoon.updateVisuals(menuDelta);
+      tycoon.updateMenuVisuals(menuDelta);
       menuStage.update(menuDelta, camera, tycoon.origin);
       postfx.noteFrame(menuDelta);
       beatTracker.update();
@@ -2269,15 +2298,8 @@ async function boot(): Promise<void> {
     tycoon.update(
       delta,
       player.position,
-      () => {
-        audio.play("craft_ok", { rate: 1.4 });
-        gameplayVfx.emit("collect", new THREE.Vector3(player.position.x, player.position.y + 1.4, player.position.z));
-        player.avatar?.playOnce("pickup");
-        audio.play("celebrate_collect");
-      },
-      () => {
-        audio.play("celebrate_win");
-      },
+      (coins) => tycoonFeedback(player, camera, false, "collect", coins),
+      () => tycoonFeedback(player, camera, false, "upgrade", 6),
       () => {
         player.velocity.y = 22.0;
         gameplayVfx.emit("bounce", new THREE.Vector3(player.position.x, player.position.y + 0.2, player.position.z));
@@ -2285,25 +2307,15 @@ async function boot(): Promise<void> {
         audio.play("jump", { rate: 1.5, volume: 1.0 });
       },
       player.velocity.y,
-      () => {
-        audio.play("celebrate_win");
-        gameplayVfx.emit("collect", new THREE.Vector3(player.position.x, player.position.y + 0.6, player.position.z));
-      }
+      () => tycoonFeedback(player, camera, false, "expand", 6)
     );
 
     if (splitScreen.isSplitScreen) {
       tycoon.updateSecondary(
         delta,
         player2.position,
-        () => {
-          audio.play("craft_ok", { rate: 1.4 });
-          gameplayVfx.emit("collect", new THREE.Vector3(player2.position.x, player2.position.y + 1.4, player2.position.z));
-          player2.avatar?.playOnce("pickup");
-          audio.play("celebrate_collect");
-        },
-        () => {
-          audio.play("celebrate_win");
-        },
+        (coins) => tycoonFeedback(player2, camera2, true, "collect", coins),
+        () => tycoonFeedback(player2, camera2, true, "upgrade", 6),
         () => {
           gameplayVfx.emit("bounce", new THREE.Vector3(player2.position.x, player2.position.y + 0.2, player2.position.z));
           player2.velocity.y = 22.0;
@@ -2311,12 +2323,10 @@ async function boot(): Promise<void> {
           audio.play("jump", { rate: 1.5, volume: 1.0 });
         },
         player2.velocity.y,
-        () => {
-          audio.play("celebrate_win");
-          gameplayVfx.emit("collect", new THREE.Vector3(player2.position.x, player2.position.y + 0.6, player2.position.z));
-        }
+        () => tycoonFeedback(player2, camera2, true, "expand", 6)
       );
     }
+    hud.updateTycoonFeedback(delta);
     hud.updateTycoon(tycoon.collectedStars, tycoon.vaultCoins, tycoon.dropperTier, tycoon.upgradeCost);
     for (const remote of remoteTycoons.values()) remote.updateVisuals(delta);
 

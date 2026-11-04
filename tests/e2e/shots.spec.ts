@@ -12,6 +12,17 @@ test.describe("Evidence screenshot generator", () => {
       timeout: 25_000,
     });
     await expect(page.locator("#launch-menu")).toBeVisible();
+    await expect(page.locator("#boot-status")).toBeHidden();
+    await page.waitForFunction(() => {
+      let loaded = false;
+      window.__GIERA__?.scene.traverse((node) => {
+        if (node.name === "tycoon-plot" && node.children.length > 10) loaded = true;
+      });
+      return loaded;
+    }, null, { timeout: 15_000 });
+    const launchPath = resolve(EVIDENCE_DIR, "00-launch.png");
+    await page.screenshot({ path: launchPath });
+    expect(statSync(launchPath).size).toBeGreaterThan(10_000);
     await page.getByRole("button", { name: "Rozpocznij grę" }).click();
 
     // 01-boot.png

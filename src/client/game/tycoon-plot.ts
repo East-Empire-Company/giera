@@ -4,13 +4,10 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import assetManifest from "../../shared/asset-manifest.json";
 import { withRetry } from "../../shared/retry";
 import type { Cylinder } from "../../shared/entity-collision";
+import { TycoonCollisionRoots } from "./tycoon-collision";
+import { createStarToken } from "./tycoon-visuals";
 
-export type TycoonPlotOptions = {
-  surfaceAt: (x: number, z: number) => number;
-  blocked?: (x: number, z: number) => boolean;
-};
-
-type FactoryModel =
+export type FactoryModel =
   | "factoryConveyor"
   | "factoryLongConveyor"
   | "factoryMachine"
@@ -18,6 +15,16 @@ type FactoryModel =
   | "factoryScanner"
   | "factoryButton"
   | "factoryGear";
+
+export type FactoryPartProvider = {
+  clonePart(name: FactoryModel): THREE.Group | undefined;
+};
+
+export type TycoonPlotOptions = {
+  surfaceAt: (x: number, z: number) => number;
+  blocked?: (x: number, z: number) => boolean;
+  onPartsReady?: (provider: FactoryPartProvider) => void;
+};
 
 type Stage = { tier: number; object: THREE.Group; age: number };
 type AnimatedButton = { mixer: THREE.AnimationMixer; action: THREE.AnimationAction; root: THREE.Object3D };
@@ -47,17 +54,16 @@ export class TycoonPlot {
   readonly group = new THREE.Group();
   private readonly surfaceAt: (x: number, z: number) => number;
   private readonly blocked?: (x: number, z: number) => boolean;
+  private readonly onPartsReady?: (provider: FactoryPartProvider) => void;
   private readonly originY: number;
   private readonly templates = new Map<FactoryModel, THREE.Group>();
   private readonly clips = new Map<FactoryModel, THREE.AnimationClip[]>();
   private readonly stages: Stage[] = [];
-  private readonly colliderRoots: THREE.Object3D[] = [];
-  private readonly collisionBodies: Cylinder[] = [];
-  private readonly collisionBounds = new THREE.Box3();
-  private readonly collisionSize = new THREE.Vector3();
+  private readonly collision = new TycoonCollisionRoots();
   private readonly gears: THREE.Group[] = [];
   private readonly buttons: AnimatedButton[] = [];
   private readonly products: Product[] = [];
+  private menuPreview?: Product;
   private pendingProducts = 0;
   private productBeltTop = 0;
   private productBottom = 0;
@@ -66,45 +72,19 @@ export class TycoonPlot {
   private tier = 1;
   private lastTier = 0;
   private disposed = false;
-  private collisionDirty = true;
 
   private registerCollider(root: THREE.Object3D): void {
-    this.colliderRoots.push(root);
-    this.collisionDirty = true;
+    this.collision.add(root);
   }
 
   getCollisionBodies(): readonly Cylinder[] {
-    if (!this.collisionDirty) return this.collisionBodies;
-    this.group.updateWorldMatrix(true, true);
-    let count = 0;
-    for (const root of this.colliderRoots) {
-      if (!root.visible) continue;
-      this.collisionBounds.makeEmpty();
-      this.collisionBounds.setFromObject(root);
-      if (this.collisionBounds.isEmpty()) continue;
-      const size = this.collisionBounds.getSize(this.collisionSize);
-      const radius = Math.max(size.x, size.z) * 0.5;
-      if (radius <= 0.05 || size.y <= 0.05) continue;
-      let body = this.collisionBodies[count];
-      if (!body) {
-        body = { x: 0, y: 0, z: 0, radius: 0, height: 0 };
-        this.collisionBodies.push(body);
-      }
-      body.x = (this.collisionBounds.min.x + this.collisionBounds.max.x) * 0.5;
-      body.y = this.collisionBounds.min.y;
-      body.z = (this.collisionBounds.min.z + this.collisionBounds.max.z) * 0.5;
-      body.radius = radius;
-      body.height = size.y;
-      count++;
-    }
-    this.collisionBodies.length = count;
-    this.collisionDirty = false;
-    return this.collisionBodies;
+    return this.collision.get(this.group);
   }
 
   constructor(origin: THREE.Vector3, options: TycoonPlotOptions) {
     this.surfaceAt = options.surfaceAt;
     this.blocked = options.blocked;
+    this.onPartsReady = options.onPartsReady;
     this.originY = origin.y;
     this.group.position.copy(origin);
     this.group.name = "tycoon-plot";
@@ -159,6 +139,9 @@ export class TycoonPlot {
     this.initializeProductPool();
     this.lastTier = 0;
     this.syncTier(this.tier);
+    this.onPartsReady?.({
+      clonePart: (name) => this.templates.get(name)?.clone(true) as THREE.Group | undefined,
+    });
   }
 
   private registerModelMaterials(root: THREE.Object3D): void {
@@ -275,24 +258,23 @@ export class TycoonPlot {
 
   private initializeProductPool(): void {
     const conveyor = this.templates.get("factoryLongConveyor");
-    const template = this.templates.get("factoryGear");
-    if (!conveyor || !template) return;
+    if (!conveyor) return;
     this.productBeltTop = new THREE.Box3().setFromObject(conveyor).max.y;
-    const first = template.clone(true);
-    first.rotation.z = Math.PI / 2;
-    first.scale.setScalar(PRODUCT_SCALE);
-    this.productBottom = new THREE.Box3().setFromObject(first).min.y;
     for (let i = 0; i < PRODUCT_POOL_SIZE; i++) {
-      const object = i === 0 ? first : template.clone(true);
-      if (i > 0) {
-        object.rotation.z = Math.PI / 2;
-        object.scale.setScalar(PRODUCT_SCALE);
-      }
+      const object = createStarToken();
+      object.scale.setScalar(PRODUCT_SCALE);
+      this.productBottom = new THREE.Box3().setFromObject(object).min.y;
       object.name = `tycoon-product-${i}`;
       object.visible = false;
       this.group.add(object);
       this.products.push({ object, age: -1 });
     }
+    const preview = createStarToken();
+    preview.name = "tycoon-menu-preview";
+    preview.scale.setScalar(PRODUCT_SCALE);
+    preview.visible = false;
+    this.group.add(preview);
+    this.menuPreview = { object: preview, age: 0 };
     const pending = this.pendingProducts;
     this.pendingProducts = 0;
     for (let i = 0; i < pending; i++) {
@@ -344,15 +326,23 @@ export class TycoonPlot {
         if (stage.tier <= tier && !stage.object.visible) {
           stage.object.visible = true;
           stage.age = 0;
-          this.collisionDirty = true;
+          this.collision.markDirty();
         }
       }
       this.lastTier = tier;
     }
   }
 
+  updateMenuPreview(delta: number): void {
+    if (this.disposed || !this.menuPreview) return;
+    this.menuPreview.age = (this.menuPreview.age + delta) % PRODUCT_DURATION;
+    this.menuPreview.object.visible = true;
+    this.positionProduct(this.menuPreview);
+  }
+
   update(delta: number, tier: number): void {
     if (this.disposed) return;
+    if (this.menuPreview) this.menuPreview.object.visible = false;
     this.time += delta;
     this.tier = tier;
     for (const gear of this.gears) gear.rotation.x = this.time * 1.25;
@@ -366,10 +356,10 @@ export class TycoonPlot {
         stage.age = Math.min(0.45, stage.age + delta);
         const progress = stage.age / 0.45;
         stage.object.scale.setScalar(Math.min(1.05, progress * (1 + Math.sin(progress * Math.PI) * 0.16)));
-        this.collisionDirty = true;
+        this.collision.markDirty();
       } else if (stage.object.scale.x !== 1) {
         stage.object.scale.setScalar(1);
-        this.collisionDirty = true;
+        this.collision.markDirty();
       }
     }
   }
@@ -411,8 +401,7 @@ export class TycoonPlot {
     this.clips.clear();
     this.gears.length = 0;
     this.products.length = 0;
-    this.colliderRoots.length = 0;
-    this.collisionBodies.length = 0;
+    this.collision.clear();
     this.pendingProducts = 0;
     this.stages.length = 0;
   }

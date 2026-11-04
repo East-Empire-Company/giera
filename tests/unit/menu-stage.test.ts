@@ -19,6 +19,27 @@ describe("MenuStage", () => {
     expect(camera.position.z).toBeCloseTo(12 + 13 * Math.cos(0.12), 5);
   });
 
+  it("frames an offset factory focal point without moving the player spawn", () => {
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+    const focus = new THREE.Vector3(12, 60, 12);
+    const stage = new MenuStage({
+      radius: 13,
+      height: 8.5,
+      speed: 0.035,
+      startAngle: 0,
+      focusOffset: { x: 1, z: -3 },
+      lookHeight: 2.2,
+    });
+
+    stage.update(0, camera, focus);
+
+    expect(camera.position.toArray()).toEqual([13, 68.5, 22]);
+    const direction = camera.getWorldDirection(new THREE.Vector3());
+    const expected = new THREE.Vector3(13, 62.2, 9).sub(camera.position).normalize();
+    expect(direction.distanceTo(expected)).toBeLessThan(0.00001);
+    expect(focus.toArray()).toEqual([12, 60, 12]);
+  });
+
   it("pulls the camera in when the orbit path is blocked", () => {
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
     const focus = new THREE.Vector3(12, 60, 12);

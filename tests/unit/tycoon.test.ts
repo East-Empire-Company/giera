@@ -11,6 +11,19 @@ describe("TycoonManager", () => {
     expect(tycoon.vaultCoins).toBe(0);
   });
 
+  it("exposes read-only presentation state without changing progression", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.restore({ vaultCoins: 2, collectedStars: 20, dropperTier: 4, expansions: [0] });
+
+    const view = tycoon.getPresentationState();
+
+    expect(view.recommendedAction).toBe("collect");
+    expect(view.upgradeCost).toBe(20);
+    expect(view.expansions).toHaveLength(6);
+    expect(view.expansions[0]).toEqual({ index: 0, cost: 20, state: "owned" });
+    expect(tycoon.toJSON()).toEqual({ vaultCoins: 2, collectedStars: 20, dropperTier: 4, expansions: [0] });
+  });
+
   it("restores durable tycoon progress", () => {
     const saved = { vaultCoins: 3, collectedStars: 17, dropperTier: 4, expansions: [0] };
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
@@ -85,6 +98,23 @@ describe("TycoonManager", () => {
     expect(colors).toEqual([0x38a169, 0xd69e2e, 0xe53e3e, 0xf6e05e]);
   });
 
+  it("pulses only the recommended pad without moving either trigger", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 }, new THREE.Scene());
+    const pads = (tycoon.object?.children ?? []).filter((c) => (c as THREE.Mesh).isMesh) as THREE.Mesh[];
+    const [collector, upgrade] = pads;
+
+    tycoon.updateVisuals(1 / 60);
+    expect(collector.scale.x).toBe(1);
+    expect(upgrade.scale.x).toBe(1);
+
+    tycoon.restore({ vaultCoins: 2, collectedStars: 0, dropperTier: 1 });
+    tycoon.updateVisuals(1 / 60);
+    expect(collector.scale.x).toBeGreaterThan(1);
+    expect(upgrade.scale.x).toBe(1);
+    expect(tycoon.collectorPadPos.toArray()).toEqual([-3, 50, 6]);
+    expect(tycoon.upgradePadPos.toArray()).toEqual([-1, 50, 6]);
+  });
+
   it("registers shadow materials for pads, plot and expansions", () => {
     const scene = new THREE.Scene();
     const tycoon = new TycoonManager({ x: 0, y: 50, z: 0 }, scene);
@@ -107,6 +137,12 @@ describe("TycoonManager", () => {
     tycoon.updateVisuals(10);
 
     expect([tycoon.vaultCoins, tycoon.collectedStars]).toEqual([0, 0]);
+  });
+
+  it("animates menu previews without producing or banking stars", () => {
+    const tycoon = new TycoonManager({ x: 0, y: 50, z: 0 }, new THREE.Scene());
+    tycoon.updateMenuVisuals(10);
+    expect([tycoon.vaultCoins, tycoon.collectedStars, tycoon.dropperTier]).toEqual([0, 0, 1]);
   });
 
   it("lets the second player collect the shared vault", () => {
@@ -336,5 +372,23 @@ describe("TycoonManager", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     tycoon.addStars(5);
     expect(tycoon.buyNextExpansionWithPrice()).toEqual({ bought: false, stars: 5, cost: 20 });
+  });
+
+  it("includes solid expansion modules in one persistent collision array", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
+    tycoon.expansion.bindFactoryParts({
+      clonePart: () => new THREE.Group().add(
+        new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial())
+      ),
+    });
+    tycoon.addStars(20);
+    expect(tycoon.buyExpansion(0)).toBe(true);
+    tycoon.updateVisuals(0.6);
+
+    const bodies = tycoon.getCollisionBodies();
+    expect(bodies).toHaveLength(1);
+    expect(tycoon.getCollisionBodies()).toBe(bodies);
+    expect(tycoon.collectedStars).toBe(0);
+    expect(tycoon.toJSON().expansions).toEqual([0]);
   });
 });

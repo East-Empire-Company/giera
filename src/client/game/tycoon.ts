@@ -3,6 +3,8 @@ import { TycoonPlot } from "./tycoon-plot";
 import { TycoonExpansion, EXPANSION_SLOTS, type ExpansionSlot } from "./tycoon-expansion";
 import type { TycoonTheme } from "../../shared/tycoon-slots";
 import type { Cylinder } from "../../shared/entity-collision";
+import { selectTycoonPresentation, type TycoonPresentationState } from "./tycoon-presentation";
+import { TycoonLabelView } from "./tycoon-visuals";
 
 export type TycoonUpgrade = {
   tier: number;
@@ -67,7 +69,7 @@ function createNameLabel(text: string, accent: number): THREE.Sprite | undefined
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false })
   );
-  sprite.scale.set(4.2, 1.05, 1);
+  sprite.scale.set(3.2, 0.8, 1);
   return sprite;
 }
 
@@ -92,6 +94,9 @@ export class TycoonManager {
   private trampolineMesh?: THREE.Mesh;
   private plot?: TycoonPlot;
   private label?: THREE.Sprite;
+  private readonly collectorLabel = new TycoonLabelView();
+  private readonly upgradeLabel = new TycoonLabelView();
+  private readonly collisionBodies: Cylinder[] = [];
 
   constructor(spawn: { x: number; y: number; z: number }, scene?: THREE.Scene, options?: TycoonOptions) {
     this.origin = new THREE.Vector3(spawn.x, spawn.y, spawn.z);
@@ -146,6 +151,15 @@ export class TycoonManager {
       this.upgradeMesh.receiveShadow = true;
       this.object.add(this.upgradeMesh);
 
+      if (this.collectorLabel.sprite) {
+        this.collectorLabel.sprite.position.set(0, groundOffset(0, -2) + 1.35, -2);
+        this.object.add(this.collectorLabel.sprite);
+      }
+      if (this.upgradeLabel.sprite) {
+        this.upgradeLabel.sprite.position.set(2, groundOffset(2, -2) + 1.35, -2);
+        this.object.add(this.upgradeLabel.sprite);
+      }
+
       const trampBaseGeo = new THREE.CylinderGeometry(0.85, 0.95, 0.25, 24);
       const redMat = new THREE.MeshStandardMaterial({ color: theme.trampoline, roughness: 0.4 });
       const trampBase = new THREE.Mesh(trampBaseGeo, redMat);
@@ -178,12 +192,16 @@ export class TycoonManager {
         blocked: blockedAt
           ? (localX, localZ) => blockedAt(this.origin.x + localX, this.origin.z + localZ)
           : undefined,
+        onPartsReady: (parts) => this.expansion.bindFactoryParts(parts),
       });
       scene.add(this.plot.group);
     }
   }
   getCollisionBodies(): readonly Cylinder[] {
-    return this.plot?.getCollisionBodies() ?? EMPTY_COLLISION_BODIES;
+    this.collisionBodies.length = 0;
+    if (this.plot) this.collisionBodies.push(...this.plot.getCollisionBodies());
+    this.collisionBodies.push(...this.expansion.getCollisionBodies());
+    return this.collisionBodies;
   }
   registerShadowMaterials(register: (material: THREE.Material) => void): void {
     this.object?.traverse((child) => {
@@ -199,6 +217,16 @@ export class TycoonManager {
 
   get upgradeCost(): number {
     return this.dropperTier * 5;
+  }
+
+  getPresentationState(): TycoonPresentationState {
+    return selectTycoonPresentation({
+      vaultCoins: this.vaultCoins,
+      collectedStars: this.collectedStars,
+      dropperTier: this.dropperTier,
+      slots: this.expansion.slots,
+      owned: this.expansion.ownedIndices(),
+    });
   }
 
   toJSON(): SerializedTycoon {
@@ -276,14 +304,31 @@ export class TycoonManager {
 
   updateVisuals(delta: number): void {
     this.pulseTime += delta;
-    if (this.collectorMesh && this.upgradeMesh) {
-      const pulse = Math.sin(this.pulseTime * 0.005) * 0.05 + 1.0;
-      this.collectorMesh.scale.set(pulse, 1, pulse);
-      this.upgradeMesh.scale.set(pulse, 1, pulse);
-    }
+    const view = this.getPresentationState();
+    this.collectorLabel.update({
+      icon: "star",
+      text: String(view.vaultCoins),
+      accent: "#65dc8c",
+    });
+    this.upgradeLabel.update({
+      icon: "upgrade",
+      text: `${view.collectedStars}/${view.upgradeCost}`,
+      accent: view.upgradeAffordable ? "#ffd84d" : "#9fb3bc",
+    });
+
+    const pulse = 1 + Math.sin(this.pulseTime * 2.4) * 0.045;
+    const collectorScale = view.recommendedAction === "collect" ? pulse : 1;
+    const upgradeScale = view.recommendedAction === "upgrade" ? pulse : 1;
+    if (this.collectorMesh) this.collectorMesh.scale.set(collectorScale, 1, collectorScale);
+    if (this.upgradeMesh) this.upgradeMesh.scale.set(upgradeScale, 1, upgradeScale);
 
     this.plot?.update(delta, this.dropperTier);
     this.expansion.update(delta);
+  }
+
+  updateMenuVisuals(delta: number): void {
+    this.updateVisuals(delta);
+    this.plot?.updateMenuPreview(delta);
   }
 
   updateSecondary(
@@ -364,6 +409,8 @@ export class TycoonManager {
     this.plot?.dispose();
     this.plot = undefined;
     this.expansion.dispose();
+    this.collectorLabel.dispose();
+    this.upgradeLabel.dispose();
     if (this.label) {
       this.label.material.map?.dispose();
       this.label.material.dispose();

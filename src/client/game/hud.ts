@@ -39,6 +39,20 @@ export function getItemIcon(key: string): string {
   return icons[key] ?? cityIcons[key] ?? "/assets/ui/kenney/star.png";
 }
 
+type TycoonFeedbackKind = "collect" | "upgrade" | "expand";
+type FlyingStar = {
+  el: HTMLImageElement;
+  active: boolean;
+  age: number;
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+};
+
+const TYCOON_FLIGHT_SECONDS = 0.65;
+const TYCOON_PULSE_SECONDS = 0.45;
+
 export class GameHUD {
   private readonly container: HTMLElement;
   private readonly crosshair: HTMLElement;
@@ -51,6 +65,9 @@ export class GameHUD {
   private readonly tycoonVault: HTMLElement;
   private readonly tycoonUpgradeCost: HTMLElement;
   private readonly tycoonTier: HTMLElement;
+  private readonly tycoonFlyStars: FlyingStar[] = [];
+  private tycoonPulseRemaining = 0;
+  private tycoonPulseKind?: TycoonFeedbackKind;
   private readonly inventoryModal: HTMLElement;
   private readonly inventoryGrid: HTMLElement;
   private readonly recipeList: HTMLElement;
@@ -128,7 +145,7 @@ export class GameHUD {
       return { group, value };
     };
     const stars = createMetric("/assets/ui/kenney/star.png", "hud-tycoon-stars-icon", "hud-tycoon-stars");
-    const vault = createMetric("/assets/ui/icons/ore_gold.png", "hud-tycoon-vault-icon", "hud-tycoon-vault");
+    const vault = createMetric("/assets/ui/kenney/star.png", "hud-tycoon-vault-icon", "hud-tycoon-vault");
     const upgradeCost = createMetric(
       "/assets/ui/kenney/star.png",
       "hud-tycoon-upgrade-icon",
@@ -146,6 +163,15 @@ export class GameHUD {
     this.tycoonTier.className = "hud-tycoon-tier";
     this.tycoonChip.append(stars.group, vault.group, upgradeCost.group, this.tycoonTier);
     this.container.appendChild(this.tycoonChip);
+    for (let i = 0; i < 8; i++) {
+      const el = document.createElement("img");
+      el.className = "hud-tycoon-fly-star";
+      el.src = "/assets/ui/kenney/star.png";
+      el.alt = "";
+      el.setAttribute("aria-hidden", "true");
+      this.container.appendChild(el);
+      this.tycoonFlyStars.push({ el, active: false, age: 0, startX: 0, startY: 0, targetX: 0, targetY: 0 });
+    }
 
     // NPC speech bubbles (world-anchored)
     this.speechLayer = document.createElement("div");
@@ -453,6 +479,57 @@ export class GameHUD {
     } else {
       this.breakBar.style.display = "block";
       this.breakFill.style.width = `${Math.min(100, Math.round(progress * 100))}%`;
+    }
+  }
+
+  pulseTycoon(kind: TycoonFeedbackKind): void {
+    if (this.tycoonPulseKind) this.tycoonChip.classList.remove(`is-${this.tycoonPulseKind}`);
+    this.tycoonPulseKind = kind;
+    this.tycoonPulseRemaining = TYCOON_PULSE_SECONDS;
+    this.tycoonChip.classList.add(`is-${kind}`);
+  }
+
+  flyTycoonStars(start: { x: number; y: number }, amount: number): void {
+    if (amount <= 0 || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const target = this.tycoonStars.parentElement?.getBoundingClientRect();
+    const targetX = target ? target.left + target.width / 2 : 20;
+    const targetY = target ? target.top + target.height / 2 : 76;
+    const count = Math.min(this.tycoonFlyStars.length, Math.max(1, Math.ceil(amount)));
+    for (let i = 0; i < count; i++) {
+      const star = this.tycoonFlyStars[i];
+      star.active = true;
+      star.age = 0;
+      star.startX = start.x;
+      star.startY = start.y;
+      star.targetX = targetX;
+      star.targetY = targetY;
+      star.el.classList.add("is-active");
+    }
+    this.updateTycoonFeedback(0);
+  }
+
+  updateTycoonFeedback(delta: number): void {
+    if (this.tycoonPulseRemaining > 0) {
+      this.tycoonPulseRemaining = Math.max(0, this.tycoonPulseRemaining - delta);
+      if (this.tycoonPulseRemaining === 0 && this.tycoonPulseKind) {
+        this.tycoonChip.classList.remove(`is-${this.tycoonPulseKind}`);
+        this.tycoonPulseKind = undefined;
+      }
+    }
+    for (const star of this.tycoonFlyStars) {
+      if (!star.active) continue;
+      star.age += delta;
+      const progress = Math.min(1, star.age / TYCOON_FLIGHT_SECONDS);
+      if (progress === 1) {
+        star.active = false;
+        star.el.classList.remove("is-active");
+        continue;
+      }
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const x = star.startX + (star.targetX - star.startX) * eased;
+      const y = star.startY + (star.targetY - star.startY) * eased - Math.sin(progress * Math.PI) * 48;
+      star.el.style.transform = `translate(${x}px, ${y}px) scale(${1 - progress * 0.35})`;
+      star.el.style.opacity = String(Math.min(1, (1 - progress) * 2.5));
     }
   }
 

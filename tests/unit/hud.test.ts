@@ -191,7 +191,7 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(chip).not.toBeNull();
 
     expect((chip?.querySelector(".hud-tycoon-stars-icon") as HTMLImageElement).src).toContain("star.png");
-    expect((chip?.querySelector(".hud-tycoon-vault-icon") as HTMLImageElement).src).toContain("ore_gold.png");
+    expect((chip?.querySelector(".hud-tycoon-vault-icon") as HTMLImageElement).src).toContain("star.png");
     expect((chip?.querySelector(".hud-tycoon-upgrade-icon") as HTMLImageElement).src).toContain("star.png");
 
     hud.updateTycoon(7, 3, 2, 10);
@@ -204,6 +204,23 @@ describe("GameHUD child-friendly visual interface", () => {
     hud.updateTycoon(7, 3, 2, 10);
     expect(chip?.querySelector(".hud-tycoon-vault")?.textContent).toBe("3");
     expect(chip?.querySelector(".hud-tycoon-upgrade-cost")?.textContent).toBe("10");
+  });
+
+  it("pulses tycoon rewards and flies a bounded pool of stars on simulation time", () => {
+    const hud = new GameHUD({ inventory: new GameInventory(), objectives: new ObjectiveManager() });
+
+    hud.pulseTycoon("collect");
+    expect(document.querySelector(".hud-tycoon-chip")?.classList.contains("is-collect")).toBe(true);
+    hud.flyTycoonStars({ x: 300, y: 300 }, 3);
+    expect(document.querySelectorAll(".hud-tycoon-fly-star.is-active")).toHaveLength(3);
+    hud.updateTycoonFeedback(0.3);
+    expect(document.querySelectorAll(".hud-tycoon-fly-star.is-active")).toHaveLength(3);
+    hud.updateTycoonFeedback(0.4);
+    expect(document.querySelectorAll(".hud-tycoon-fly-star.is-active")).toHaveLength(0);
+    expect(document.querySelector(".hud-tycoon-chip")?.classList.contains("is-collect")).toBe(false);
+    expect(document.querySelectorAll(".hud-tycoon-fly-star")).toHaveLength(8);
+    hud.updateTycoon(8, 0, 2, 10);
+    expect(document.querySelector(".hud-tycoon-stars")?.textContent).toBe("8");
   });
 
   it("shows and positions world-anchored NPC speech bubbles", () => {

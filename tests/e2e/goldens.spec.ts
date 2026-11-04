@@ -28,6 +28,12 @@ type Giera = {
     syncAvatar: () => void;
   };
   world: { loadedChunkCount: number; decor: { children: { name?: string }[] } };
+  scene: { traverse: (fn: (node: any) => void) => void };
+  tycoon: {
+    origin: { x: number; y: number; z: number };
+    addStars: (amount: number) => void;
+    buyExpansion: (index: number) => boolean;
+  };
   qa: {
     frame: number;
     paused: boolean;
@@ -144,13 +150,29 @@ test.describe("Giera graphics goldens", () => {
     await settle(page);
     await page.evaluate(() => {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
-      g.player.position.set(-3, g.player.position.y, 7);
-      g.player.velocity.set(0, 0, 0);
-      g.player.yaw = 0;
-      g.player.pitch = -0.12;
-      g.player.syncAvatar();
+      g.tycoon.addStars(120);
+      g.tycoon.buyExpansion(0);
+      g.tycoon.buyExpansion(1);
     });
-    await freeze(page);
+    await page.waitForFunction(() => {
+      const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
+      const built = new Set<number>();
+      g.scene.traverse((node) => {
+        const match = /^expansion-module-([01])$/.exec(node.name);
+        if (match && node.scale.x === 1) built.add(Number(match[1]));
+      });
+      return built.size === 2;
+    }, null, { timeout: 15_000 });
+    const frame = await page.evaluate(() => {
+      const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
+      g.player.position.set(g.tycoon.origin.x, g.tycoon.origin.y + 6, g.tycoon.origin.z - 10);
+      g.player.velocity.set(0, 0, 0);
+      g.player.yaw = Math.PI;
+      g.player.pitch = 0.35;
+      g.player.syncAvatar();
+      return g.qa.frame;
+    });
+    await freeze(page, frame + 2);
     await capture(page, "tycoon-view");
     expect(errors).toEqual([]);
   });

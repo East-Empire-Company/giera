@@ -8,6 +8,8 @@ export type MenuStageOptions = {
   height: number;
   speed: number;
   startAngle: number;
+  focusOffset?: { x: number; z: number };
+  lookHeight?: number;
   solid?: (x: number, y: number, z: number) => boolean;
   groundAt?: (x: number, z: number) => number;
 };
@@ -24,12 +26,14 @@ export class MenuStage {
   update(delta: number, camera: THREE.PerspectiveCamera, focus: THREE.Vector3): void {
     this.time += delta;
     const angle = this.options.startAngle + this.time * this.options.speed;
-    const targetX = focus.x + Math.sin(angle) * this.options.radius;
-    const targetZ = focus.z + Math.cos(angle) * this.options.radius;
+    const focusX = focus.x + (this.options.focusOffset?.x ?? 0);
+    const focusZ = focus.z + (this.options.focusOffset?.z ?? 0);
+    const targetX = focusX + Math.sin(angle) * this.options.radius;
+    const targetZ = focusZ + Math.cos(angle) * this.options.radius;
     const ground = this.options.groundAt ? this.options.groundAt(targetX, targetZ) : Number.NEGATIVE_INFINITY;
     const targetY = Math.max(focus.y + this.options.height, ground + 2.0);
     camera.position.set(targetX, targetY, targetZ);
-    this.lookTarget.set(focus.x, focus.y + LOOK_HEIGHT, focus.z);
+    this.lookTarget.set(focusX, focus.y + (this.options.lookHeight ?? LOOK_HEIGHT), focusZ);
     if (this.options.solid) {
       const clamped = collideCamera(this.lookTarget, camera.position, this.options.solid);
       camera.position.set(clamped.x, clamped.y, clamped.z);
