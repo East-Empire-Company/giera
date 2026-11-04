@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
+import { BLOCKS, BLOCK_ID } from "../../src/shared/blocks";
 import { GameHUD, getItemIcon } from "../../src/client/game/hud";
 import { GameInventory } from "../../src/client/game/inventory";
 import { ObjectiveManager } from "../../src/client/game/objectives";
@@ -24,6 +25,26 @@ describe("GameHUD child-friendly visual interface", () => {
     const firstIcon = slots[0].querySelector("img.hud-slot-icon") as HTMLImageElement;
     expect(firstIcon).not.toBeNull();
     expect(firstIcon.src).toContain(".png");
+  });
+
+  it("points every placeable block's hotbar icon at its real tile image", () => {
+    const placeable = BLOCKS.filter((block) => block.id !== BLOCK_ID.air);
+    const hotbar = placeable.slice(0, 9).map((block) => block.id);
+    const inventory = new GameInventory({ creative: true, hotbar: hotbar as never });
+    new GameHUD({ inventory, objectives: new ObjectiveManager() });
+    const icons = [...document.querySelectorAll<HTMLImageElement>(".hud-hotbar-slot img.hud-slot-icon")].map((img) => img.getAttribute("src"));
+    expect(icons).toEqual(
+      placeable.slice(0, 9).map((block) => {
+        const tile = block.tiles.top ?? block.tiles.side ?? "dirt";
+        return `/${(manifest.tiles as Record<string, string>)[tile]}`;
+      })
+    );
+
+    const city = new GameInventory({ creative: true, hotbar: [BLOCK_ID.asphalt, BLOCK_ID.brick, BLOCK_ID.tnt, 0, 0, 0, 0, 0, 0] as never });
+    document.body.innerHTML = "";
+    new GameHUD({ inventory: city, objectives: new ObjectiveManager() });
+    const srcs = [...document.querySelectorAll<HTMLImageElement>(".hud-hotbar-slot img.hud-slot-icon")].map((img) => img.getAttribute("src"));
+    expect(srcs).toEqual([`/${manifest.tiles.asphalt}`, `/${manifest.tiles.brick}`, `/${manifest.tiles.tnt}`]);
   });
   it("keeps music controls out of the HUD", () => {
     new GameHUD({ inventory: new GameInventory(), objectives: new ObjectiveManager() });

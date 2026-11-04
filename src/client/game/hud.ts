@@ -507,10 +507,11 @@ export class GameHUD {
       slot.dataset.slotIndex = String(index);
       const def = BLOCK_BY_ID[blockId as BlockId];
       const tileName = def?.tiles.top ?? def?.tiles.side ?? "dirt";
+      const tileSrc = `/${(assetManifest.tiles as Record<string, string>)[tileName] ?? `assets/textures/tiles/${tileName}.png`}`;
       const isEmpty = !blockId || (blockId as number) === 0;
       slot.innerHTML = `
         <span class="hud-slot-num">${index + 1}</span>
-        ${isEmpty ? "" : `<img class="hud-slot-icon" src="/assets/textures/tiles/${tileName}.png" alt="" />`}
+        ${isEmpty ? "" : `<img class="hud-slot-icon" src="${tileSrc}" alt="" />`}
         <span class="hud-slot-name">${isEmpty ? "" : (def?.name ?? "Blok")}</span>
       `;
       slot.addEventListener("click", () => {
