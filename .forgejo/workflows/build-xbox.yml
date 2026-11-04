@@ -76,7 +76,7 @@ jobs:
             artifacts/ 2>/dev/null || true
           ls -la artifacts/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           name: giera-msix
           path: artifacts/*.msix
