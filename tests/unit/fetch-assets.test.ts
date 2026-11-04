@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseGoogleFontCss, resolveKenneyZipUrl } from "../../scripts/fetch-assets";
+import assetManifest from "../../src/shared/asset-manifest.json";
+import { assetPicks, parseGoogleFontCss, resolveKenneyZipUrl } from "../../scripts/fetch-assets";
 
 describe("Kenney download resolution", () => {
   it("finds the current asset archive without pinning its changing hash", () => {
@@ -19,5 +20,12 @@ describe("Google Fonts localization", () => {
       css: "@font-face { src: url(\"./pixelify-sans-0.ttf\") format('truetype'); }",
       files: [{ url: "https://fonts.gstatic.com/font.ttf", file: "pixelify-sans-0.ttf" }],
     });
+  });
+});
+
+describe("asset manifest packaging", () => {
+  it("keeps every runtime tile reproducible from the source picks", () => {
+    const picked = Object.fromEntries(Object.entries(assetPicks.tiles).map(([key, pick]) => [key, pick.path]));
+    expect(picked).toEqual(assetManifest.tiles);
   });
 });

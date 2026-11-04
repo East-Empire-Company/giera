@@ -31,7 +31,8 @@ type AssetSourceId =
   | "kaykit-adventurers"
   | "quaternius-nature"
   | "kenney-factory-kit"
-  | "valid-rocketbox";
+  | "valid-rocketbox"
+  | "local-tnt-texture";
 type AssetPick = { source: AssetSourceId; member: string; path: string; preplaced?: boolean };
 
 const sourceInfo: Record<AssetSourceId, { title: string; author: string; license: string; url: string }> = {
@@ -51,9 +52,10 @@ const sourceInfo: Record<AssetSourceId, { title: string; author: string; license
   "quaternius-nature": { title: "Ultimate Stylized Nature (Grass_Small, Bush_Small_Flowers, Flower_1)", author: "Quaternius", license: "CC0", url: "https://quaternius.com/packs/ultimatestylizednature.html" },
   "kenney-factory-kit": { title: "Factory Kit 3.0", author: "Kenney", license: "CC0", url: "https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip" },
   "valid-rocketbox": { title: "Validated Avatar Library (VALID) / Microsoft Rocketbox", author: "Tiffany Do, Microsoft Rocketbox", license: "MIT", url: "https://github.com/c-frame/valid-avatars-glb" },
+  "local-tnt-texture": { title: "TNT block texture (supplied locally; original source not recorded)", author: "Unknown (provenance not recorded)", license: "Unverified", url: "" },
 };
 
-const assetPicks: Record<string, Record<string, AssetPick>> = {
+export const assetPicks: Record<string, Record<string, AssetPick>> = {
   tiles: {
     stone: { source: "kenney-voxel-pack", member: "PNG/Tiles/stone.png", path: "assets/textures/tiles/stone.png" },
     cobblestone: { source: "kenney-voxel-pack", member: "PNG/Tiles/gravel_stone.png", path: "assets/textures/tiles/cobblestone.png" },
@@ -76,6 +78,7 @@ const assetPicks: Record<string, Record<string, AssetPick>> = {
     brick: { source: "ambientcg-pbr", member: "Bricks097_1K-JPG_Color.jpg", path: "assets/textures/pbr/Bricks097/Bricks097_1K-JPG_Color.jpg", preplaced: true },
     plaster: { source: "ambientcg-pbr", member: "Plaster001_1K-JPG_Color.jpg", path: "assets/textures/pbr/Plaster001/Plaster001_1K-JPG_Color.jpg", preplaced: true },
     roof_tile: { source: "ambientcg-pbr", member: "RoofingTiles013A_1K-JPG_Color.jpg", path: "assets/textures/pbr/RoofingTiles013A/RoofingTiles013A_1K-JPG_Color.jpg", preplaced: true },
+    tnt: { source: "local-tnt-texture", member: "tnt_1K-JPG_Color.jpg", path: "assets/textures/pbr/tnt/tnt_1K-JPG_Color.jpg", preplaced: true },
   },
   models: {
     playerOne: { source: "kaykit-adventurers", member: "Characters/gltf/Knight.glb", path: "assets/models/kaykit/knight.glb", preplaced: true },
@@ -241,7 +244,7 @@ async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
         }
       }
       manifest[group][key] = pick.path;
-      notices.push(`| \`${pick.path}\` | [${info.title}](${info.url}) / \`${pick.member}\` | ${info.author} | ${info.license} |`);
+      notices.push(`| \`${pick.path}\` | ${info.url ? `[${info.title}](${info.url})` : info.title} / \`${pick.member}\` | ${info.author} | ${info.license} |`);
     }
   }
   manifest.overlays = { crack: "assets/textures/crackover.png" };
@@ -252,7 +255,7 @@ async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
     "| `assets/models/kaykit/anims/Rig_Medium_*.glb` | [KayKit - Character Pack : Adventurers 2.0](https://kaylousberg.itch.io/kaykit-adventurers) / `Animations/gltf/Rig_Medium/*.glb` | Kay Lousberg | CC0 1.0 |",
     "| `assets/models/props/*` | [Ultimate Stylized Nature](https://quaternius.com/packs/ultimatestylizednature.html) / `glTF/{Grass_Small,Bush_Small_Flowers,Flower_1}.*` | Quaternius | CC0 |",
     "| `assets/sky/kloofendal_48d_partly_cloudy_1k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `1k HDR` | Poly Haven | CC0 |",
-    "| `assets/textures/pbr/*` | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |",
+    "| `assets/textures/pbr/*` (except `tnt/`) | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |",
   );
   await writeFile(resolve("src/shared/asset-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(join(publicRoot, "NOTICES.md"), `${notices.join("\n")}\n`);
