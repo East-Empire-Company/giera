@@ -67,7 +67,7 @@ import { CHUNK_SIZE, chunkKey } from "./shared/chunk";
 import { raycastInteract } from "./shared/raycast";
 import { makeRng } from "./shared/rng";
 import { generateBlock, surfaceHeight } from "./shared/worldgen";
-import { TntFuseQueue, TNT_CHAIN_FUSE_SECONDS, TNT_FUSE_SECONDS, TNT_RADIUS, TNT_KNOCKBACK_RANGE, TNT_KNOCKBACK_STRENGTH } from "./client/game/tnt";
+import { TntFuseQueue, TNT_CHAIN_FUSE_SECONDS, TNT_FUSE_SECONDS, TNT_RADIUS, TNT_KNOCKBACK_RANGE, TNT_KNOCKBACK_STRENGTH, planBlast } from "./client/game/tnt";
 
 const PLAYER_GROUNDED_LOCOMOTION_LIFT: Record<PlayerProfile, number> = {
   ziemek: 0.06,
@@ -1636,18 +1636,12 @@ async function boot(): Promise<void> {
   let shakeTime = 0;
   let shakeAmp = 0;
   const explodeTnt = (cx: number, cy: number, cz: number): void => {
-    for (let x = Math.floor(cx - TNT_RADIUS); x <= Math.ceil(cx + TNT_RADIUS); x++) {
-      for (let y = Math.floor(cy - TNT_RADIUS); y <= Math.ceil(cy + TNT_RADIUS); y++) {
-        for (let z = Math.floor(cz - TNT_RADIUS); z <= Math.ceil(cz + TNT_RADIUS); z++) {
-          if (Math.hypot(x + 0.5 - (cx + 0.5), y + 0.5 - (cy + 0.5), z + 0.5 - (cz + 0.5)) > TNT_RADIUS) continue;
-          const b = world.getBlock(x, y, z);
-          if (b === BLOCK_ID.air || b === BLOCK_ID.bedrock) continue;
-          world.setBlock(x, y, z, BLOCK_ID.air);
-          lanClient?.sendBlockEdit(x, y, z, BLOCK_ID.air);
-          if (b === BLOCK_ID.tnt) tntFuses.ignite(x, y, z, TNT_CHAIN_FUSE_SECONDS);
-        }
-      }
+    const blast = planBlast((x, y, z) => world.getBlock(x, y, z), cx, cy, cz);
+    for (const cell of blast.cleared) {
+      world.setBlock(cell.x, cell.y, cell.z, BLOCK_ID.air);
+      lanClient?.sendBlockEdit(cell.x, cell.y, cell.z, BLOCK_ID.air);
     }
+    for (const cell of blast.chained) tntFuses.ignite(cell.x, cell.y, cell.z, TNT_CHAIN_FUSE_SECONDS);
     const center = new THREE.Vector3(cx + 0.5, cy + 0.5, cz + 0.5);
     gameplayVfx.emit("explosion", center);
     audio.play("explosion");

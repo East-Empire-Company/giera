@@ -1,3 +1,5 @@
+import { BLOCK_ID } from "../../shared/blocks";
+
 export const TNT_FUSE_SECONDS = 1.2;
 export const TNT_CHAIN_FUSE_SECONDS = 0.25;
 export const TNT_SPARK_INTERVAL = 0.22;
@@ -47,4 +49,30 @@ export class TntFuseQueue {
       onExplode(fuse.x, fuse.y, fuse.z);
     }
   }
+}
+
+export type BlastCell = { x: number; y: number; z: number };
+export type BlastPlan = { cleared: BlastCell[]; chained: BlastCell[] };
+
+export function planBlast(
+  getBlock: (x: number, y: number, z: number) => number,
+  cx: number,
+  cy: number,
+  cz: number,
+  radius = TNT_RADIUS
+): BlastPlan {
+  const cleared: BlastCell[] = [];
+  const chained: BlastCell[] = [];
+  for (let x = Math.floor(cx - radius); x <= Math.ceil(cx + radius); x++) {
+    for (let y = Math.floor(cy - radius); y <= Math.ceil(cy + radius); y++) {
+      for (let z = Math.floor(cz - radius); z <= Math.ceil(cz + radius); z++) {
+        if (Math.hypot(x - cx, y - cy, z - cz) > radius) continue;
+        const block = getBlock(x, y, z);
+        if (block === BLOCK_ID.air || block === BLOCK_ID.bedrock) continue;
+        cleared.push({ x, y, z });
+        if (block === BLOCK_ID.tnt && !(x === cx && y === cy && z === cz)) chained.push({ x, y, z });
+      }
+    }
+  }
+  return { cleared, chained };
 }
