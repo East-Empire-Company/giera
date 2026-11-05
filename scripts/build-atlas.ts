@@ -86,13 +86,17 @@ const PBR_SOURCES: Record<string, string | null> = {
   plaster: "Plaster001",
   roof_tile: "RoofingTiles013A",
   tnt: "tnt",
+  hero_floor: null,
+  hero_wall: null,
+  hero_glass: null,
+  neon_block: null,
   glass: null,
   water: null,
 };
 
 const GUTTER = 8;
 const GRID_COLUMNS = 4;
-const MAX_TILES = 24;
+const MAX_TILES = 32;
 
 export function atlasGridDimensions(tileCount: number, resolution: number, gutter: number): {
   columns: number;
@@ -127,6 +131,7 @@ async function loadTileMaps(name: string, tilePath: string, res: number): Promis
     for (let i = 0; i < res * res; i++) {
       neutralOrm[i * 4] = 255;
       neutralOrm[i * 4 + 1] = 230;
+      neutralOrm[i * 4 + 3] = 255;
     }
     const normal = sharp(flatNormal, { raw: { width: res, height: res, channels: 4 } }).png().toBuffer();
     const orm = sharp(neutralOrm, { raw: { width: res, height: res, channels: 4 } }).png().toBuffer();

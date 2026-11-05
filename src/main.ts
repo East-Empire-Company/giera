@@ -25,7 +25,8 @@ import { smoothGroundOffset } from "./shared/mesher";
 import { placeHousePlan } from "./client/game/house-builder";
 import { applyMinePlan, createMinePlan } from "./client/game/terrain-cheats";
 import { OBJECTIVE_STEPS, ObjectiveManager } from "./client/game/objectives";
-import { TycoonManager } from "./client/game/tycoon";
+import { TycoonManager, type SerializedTycoon } from "./client/game/tycoon";
+import { TycoonBase } from "./client/game/tycoon-base";
 import { tycoonSlotOrigin, tycoonTheme } from "./shared/tycoon-slots";
 import { COMPANION_PROFILES, MISSING_COMPANION_ASSET_MESSAGE, type CompanionProfileId } from "./shared/companion";
 import { COMPANION_LINES, interpretCompanionUtterance, type CompanionLineId } from "./shared/companion-speech";
@@ -258,18 +259,39 @@ async function boot(): Promise<void> {
 
   const dummyY = surfaceHeight(1.5, 3, seed);
 
-  const makeTycoon = (slot: number, label?: string): TycoonManager => {
+  let localConstructionReady = false;
+  let roomSyncApplied = false;
+  let pendingTycoonRestore: SerializedTycoon | undefined = saved?.tycoon;
+  const makeTycoon = (slot: number, label?: string, local = false): TycoonManager => {
     const at = tycoonSlotOrigin(slot);
-    return new TycoonManager({ x: at.x, y: surfaceHeight(at.x, at.z, seed), z: at.z }, scene, {
+    const origin = { x: at.x, y: surfaceHeight(at.x, at.z, seed), z: at.z };
+    const base = local ? new TycoonBase(origin, {
+      getBlock: (x, y, z) => world.getBlock(x, y, z),
+      getGeneratedBlock: (x, y, z) => generateBlock(x, y, z, seed),
+      hasEdit: (x, y, z) => world.hasEdit(x, y, z),
+      setBlock: (x, y, z, id) => {
+        world.setBlock(x, y, z, id);
+        lanClient?.sendBlockEdit(x, y, z, id);
+      },
+      refreshDecor: () => world.refreshGroundDecorNow(),
+    }) : undefined;
+    return new TycoonManager(origin, scene, {
       surfaceAt: (x, z) => surfaceHeight(x, z, seed),
       blocked: (x, z) => generateBlock(x, surfaceHeight(x, z, seed) + 1, z, seed) !== 0,
       theme: tycoonTheme(slot),
       label,
+      base,
+      constructionReady: () => localConstructionReady,
     });
   };
   let tycoonSlot = 0;
-  let tycoon = makeTycoon(0, player.profile.name);
-  if (saved?.tycoon) tycoon.restore(saved.tycoon);
+  let tycoon = makeTycoon(0, player.profile.name, true);
+  const restorePendingTycoon = (): void => {
+    if (!localConstructionReady || !pendingTycoonRestore) return;
+    const progress = pendingTycoonRestore;
+    pendingTycoonRestore = undefined;
+    tycoon.restore(progress);
+  };
   const remoteTycoons = new Map<string, TycoonManager>();
 
   const splitScreen = new SplitScreenManager(false);
@@ -343,18 +365,22 @@ async function boot(): Promise<void> {
   });
 
   world.applySavedEdits(saved);
+  if (!activeRoomSession) {
+    localConstructionReady = true;
+    restorePendingTycoon();
+  }
 
   const camSolid = (x: number, y: number, z: number): boolean => {
     const id = world.getBlock(x, y, z);
     return id !== BLOCK_ID.air && id !== BLOCK_ID.water && id !== BLOCK_ID.oak_leaves;
   };
   const menuStage = new MenuStage({
-    radius: 13,
-    height: 8.5,
+    radius: 10.5,
+    height: 7,
     speed: 0.035,
     startAngle: 0.7,
-    focusOffset: { x: -1.5, z: -1.5 },
-    lookHeight: 1.4,
+    focusOffset: { x: -2.5, z: -2.8 },
+    lookHeight: 1.8,
     solid: camSolid,
     groundAt: (x, z) => surfaceHeight(x, z, seed),
   });
@@ -394,11 +420,11 @@ async function boot(): Promise<void> {
 
   const setOwnTycoonSlot = (slot: number): void => {
     if (slot === tycoonSlot) return;
-    const progress = tycoon.toJSON();
+    pendingTycoonRestore = tycoon.toJSON();
     tycoon.dispose();
     tycoonSlot = slot;
-    tycoon = makeTycoon(slot, player.profile.name);
-    tycoon.restore(progress);
+    tycoon = makeTycoon(slot, player.profile.name, true);
+    restorePendingTycoon();
     tycoon.registerShadowMaterials((material) => cascadedShadows?.registerMaterial(material));
     if (window.__GIERA__) window.__GIERA__.tycoon = tycoon;
   };
@@ -501,6 +527,32 @@ async function boot(): Promise<void> {
     hud.pulseTycoon(kind);
   };
 
+  const dispenserReward = (
+    actingPlayer: PlayerController,
+    actingCamera: THREE.PerspectiveCamera,
+    secondary: boolean,
+    item: string,
+    count: number
+  ): void => {
+    if (Object.hasOwn(BLOCK_ID, item)) inventory.addMinedBlock(item, count);
+    else inventory.items[item] = (inventory.items[item] ?? 0) + count;
+    inventory.syncHotbarWithBlocks();
+    hud.renderHotbar(inventory);
+    actingPlayer.avatar?.playOnce("pickup");
+    audio.play("craft_ok", { rate: 1.4 });
+
+    const position = new THREE.Vector3(
+      actingPlayer.position.x,
+      actingPlayer.position.y + 1.4,
+      actingPlayer.position.z
+    ).project(actingCamera);
+    const viewport = getSplitViewports(window.innerWidth, window.innerHeight, splitScreen.isSplitScreen)[secondary ? 1 : 0];
+    hud.showResourceGain(item, count, {
+      x: viewport.x + (position.x * 0.5 + 0.5) * viewport.width,
+      y: viewport.y + (-position.y * 0.5 + 0.5) * viewport.height,
+    });
+  };
+
   let saveQueue: Promise<boolean> = Promise.resolve(true);
   const savedStateFor = (key: string): SavedGameState => ({
     seed,
@@ -548,6 +600,8 @@ async function boot(): Promise<void> {
       return true;
     }
     roomReady = true;
+    localConstructionReady = roomSyncApplied;
+    restorePendingTycoon();
     return true;
   };
   const leaveRoom = async (): Promise<boolean> => {
@@ -597,6 +651,7 @@ async function boot(): Promise<void> {
         seed: opts.seed,
         callbacks: {
           onWelcome: async (welcome) => {
+            localConstructionReady = false;
             ownId = welcome.id;
             splitScreen.setSplitScreen(false);
             hud.modeBtn.textContent = "Tryb: 1 Gracz";
@@ -644,6 +699,7 @@ async function boot(): Promise<void> {
               world.setBlock(b.x, b.y, b.z, b.id, false);
               companionController.blockPlaced(b);
             } else if (routed === "overflow") {
+              localConstructionReady = false;
               if (activeSyncId) lanClient?.roomSyncAbort(activeSyncId);
               roomSyncBuffer.abort();
               activeSyncId = null;
@@ -715,6 +771,8 @@ async function boot(): Promise<void> {
             showCompanionNotice("Budowa zatrzymana.");
           },
           onRoomSyncBegin: (m) => {
+            localConstructionReady = false;
+            roomSyncApplied = false;
             activeSyncId = m.syncId;
             roomSyncBuffer.begin(m.syncId);
           },
@@ -724,8 +782,11 @@ async function boot(): Promise<void> {
             }
           },
           onRoomSyncEnd: (m) => {
-            roomSyncBuffer.end(m.syncId, (b) => world.setBlock(b.x, b.y, b.z, b.id, false));
+            const applied = roomSyncBuffer.end(m.syncId, (b) => world.setBlock(b.x, b.y, b.z, b.id, false));
             activeSyncId = null;
+            roomSyncApplied = applied;
+            localConstructionReady = roomReady && applied;
+            restorePendingTycoon();
           },
         },
       });
@@ -2005,12 +2066,21 @@ async function boot(): Promise<void> {
     const sprint = keys.has("ShiftLeft") || (p1Pad?.sprint ?? false);
 
     const wasOnGround = player.onGround;
-    player.step(delta, (x, y, z) => world.getBlock(x, y, z) !== 0, {
-      forward,
-      right,
-      jump,
-      sprint,
-    });
+    const elevatorPose = tycoon.stepElevator(0, player.position, delta);
+    if (elevatorPose) {
+      player.position.set(elevatorPose.x, elevatorPose.y, elevatorPose.z);
+      player.velocity.set(0, 0, 0);
+      player.onGround = false;
+      player.updateMotion(false, false);
+      player.syncAvatar();
+    } else {
+      player.step(delta, (x, y, z) => world.getBlock(x, y, z) !== 0, {
+        forward,
+        right,
+        jump,
+        sprint,
+      });
+    }
     const nearTrampoline = Math.hypot(player.position.x - tycoon.trampolinePos.x, player.position.z - tycoon.trampolinePos.z) < 1.1;
     if (jump && wasOnGround && !player.onGround && player.velocity.y > 0 && !nearTrampoline) {
       audio.play("jump", { rate: 1.15, volume: 0.9 });
@@ -2046,12 +2116,21 @@ async function boot(): Promise<void> {
 
       const wasOnGround2 = player2.onGround;
       const nearTrampoline2 = Math.hypot(player2.position.x - tycoon.trampolinePos.x, player2.position.z - tycoon.trampolinePos.z) < 1.1;
-      player2.step(delta, (x, y, z) => world.getBlock(x, y, z) !== 0, {
-        forward: p2Forward,
-        right: p2Right,
-        jump: p2Jump,
-        sprint: p2Sprint,
-      });
+      const elevatorPose2 = tycoon.stepElevator(1, player2.position, delta);
+      if (elevatorPose2) {
+        player2.position.set(elevatorPose2.x, elevatorPose2.y, elevatorPose2.z);
+        player2.velocity.set(0, 0, 0);
+        player2.onGround = false;
+        player2.updateMotion(false, false);
+        player2.syncAvatar();
+      } else {
+        player2.step(delta, (x, y, z) => world.getBlock(x, y, z) !== 0, {
+          forward: p2Forward,
+          right: p2Right,
+          jump: p2Jump,
+          sprint: p2Sprint,
+        });
+      }
       if (p2Jump && wasOnGround2 && !player2.onGround && player2.velocity.y > 0 && !nearTrampoline2) {
         audio.play("jump", { rate: 1.15, volume: 0.9 });
       }
@@ -2307,7 +2386,8 @@ async function boot(): Promise<void> {
         audio.play("jump", { rate: 1.5, volume: 1.0 });
       },
       player.velocity.y,
-      () => tycoonFeedback(player, camera, false, "expand", 6)
+      () => tycoonFeedback(player, camera, false, "expand", 6),
+      (item, count) => dispenserReward(player, camera, false, item, count)
     );
 
     if (splitScreen.isSplitScreen) {
@@ -2323,7 +2403,8 @@ async function boot(): Promise<void> {
           audio.play("jump", { rate: 1.5, volume: 1.0 });
         },
         player2.velocity.y,
-        () => tycoonFeedback(player2, camera2, true, "expand", 6)
+        () => tycoonFeedback(player2, camera2, true, "expand", 6),
+        (item, count) => dispenserReward(player2, camera2, true, item, count)
       );
     }
     hud.updateTycoonFeedback(delta);
@@ -2335,7 +2416,7 @@ async function boot(): Promise<void> {
       camera.getWorldDirection(dir);
       const toDummy = trainingDummy.position.clone().sub(player.position).normalize();
       if (dir.dot(toDummy) > 0.6) {
-        trainingDummy.hit();
+        trainingDummy.hit(inventory.getCombatMultiplier());
         player.avatar?.playOnce("hit");
         audio.play("dig_wood");
       }

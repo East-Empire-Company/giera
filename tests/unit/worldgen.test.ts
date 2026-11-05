@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BLOCK_ID, getBlockDef } from "../../src/shared/blocks";
 import { CHUNK_SIZE, getBlockIndex } from "../../src/shared/chunk";
 import { citySurfaceColumnTop, generateBlock, generateChunk, generateChunkWithCityTints, MAX_GENERATED_BLOCK_Y, surfaceHeight } from "../../src/shared/worldgen";
-import { MAX_TYCOON_SLOTS, tycoonSlotOrigin } from "../../src/shared/tycoon-slots";
+import { MAX_TYCOON_SLOTS, tycoonSiteSlot, tycoonSlotOrigin } from "../../src/shared/tycoon-slots";
 
 describe("world generation", () => {
   it("is deterministic for a seed and coordinates", () => {
@@ -103,12 +103,16 @@ describe("world generation", () => {
     expect(generateChunkWithCityTints(8, 3, 8, 424242).cityTintIds).toBeUndefined();
   });
 
-  it("pins the tycoon floor height and keeps it dry across seeds", () => {
+  it("keeps every reserved tycoon floor at its slot height and dry across seeds", () => {
     for (const seed of [17, 424242, 1337]) {
       for (let z = 4; z <= 20; z++) {
         for (let x = 4; x <= 20; x++) {
-          expect(surfaceHeight(x, z, seed)).toBe(60);
-          expect(generateBlock(x, 60, z, seed)).toBe(x <= 7 && z === 4 ? BLOCK_ID.asphalt : BLOCK_ID.grass);
+          const slot = tycoonSiteSlot(x, z);
+          if (slot === null) continue;
+          const at = tycoonSlotOrigin(slot);
+          const floor = surfaceHeight(at.x, at.z, seed);
+          expect(surfaceHeight(x, z, seed)).toBe(floor);
+          expect(generateBlock(x, floor, z, seed)).toBe(x <= 7 && z === 4 ? BLOCK_ID.asphalt : BLOCK_ID.grass);
           expect(generateBlock(x, 40, z, seed)).not.toBe(BLOCK_ID.water);
         }
       }

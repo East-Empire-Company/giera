@@ -20,7 +20,11 @@
     "brick": "assets/textures/pbr/Bricks097/Bricks097_1K-JPG_Color.jpg",
     "plaster": "assets/textures/pbr/Plaster001/Plaster001_1K-JPG_Color.jpg",
     "roof_tile": "assets/textures/pbr/RoofingTiles013A/RoofingTiles013A_1K-JPG_Color.jpg",
-    "tnt": "assets/textures/pbr/tnt/tnt_1K-JPG_Color.jpg"
+    "tnt": "assets/textures/pbr/tnt/tnt_1K-JPG_Color.jpg",
+    "hero_floor": "assets/textures/tiles/hero_floor.png",
+    "hero_wall": "assets/textures/tiles/hero_wall.png",
+    "hero_glass": "assets/textures/tiles/hero_glass.png",
+    "neon_block": "assets/textures/tiles/neon_block.png"
   },
   "models": {
     "ziemek": "assets/models/characters/ziemek.glb",

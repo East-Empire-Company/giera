@@ -252,3 +252,205 @@ test("lan: two clients join one room, exchange a block edit, server persists the
   await ctxA.close();
   await ctxB.close();
 });
+
+test("lan: HQ restoration is shared and duplicate-free, remote dispensers never grant or write", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const room = "QAHQ";
+  const saveFile = resolve(SAVE_DIR, `world-${room}.json`);
+  const readSave = (): { savedAt: string; edits: Record<string, number> } | undefined => {
+    try {
+      if (!existsSync(saveFile)) return undefined;
+      return JSON.parse(readFileSync(saveFile, "utf8")) as { savedAt: string; edits: Record<string, number> };
+    } catch {
+      return undefined;
+    }
+  };
+  const ctxA = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const ctxB = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const A = await ctxA.newPage();
+  const B = await ctxB.newPage();
+  const errorsA: string[] = [];
+  const errorsB: string[] = [];
+  A.on("pageerror", (error) => errorsA.push(error.message));
+  B.on("pageerror", (error) => errorsB.push(error.message));
+
+  const initialSeedA = 313131;
+  await boot(A, initialSeedA);
+  await manualJoin(A, room);
+  await A.waitForFunction(
+    (initialSeed) => {
+      const game = (window as unknown as G).__GIERA__;
+      const status = document.querySelector("#lan-status")?.textContent;
+      return game?.ready && (
+        game.seed !== initialSeed ||
+        (status === "Połączono" && sessionStorage.getItem("giera.pendingLanJoin") === null)
+      );
+    },
+    initialSeedA,
+    { timeout: 30_000 },
+  );
+  const roomSeed = await A.evaluate(() => (window as unknown as G).__GIERA__.seed);
+  if (roomSeed === initialSeedA) await A.locator("#pause-resume").click();
+  else await A.locator("#launch-start").click();
+
+  await boot(B, roomSeed === 424242 ? 424243 : 424242);
+  await manualJoin(B, room);
+  await B.waitForFunction(
+    (seed) => {
+      const game = (window as unknown as G).__GIERA__;
+      return game?.ready === true && game.seed === seed;
+    },
+    roomSeed,
+    { timeout: 30_000 },
+  );
+  await B.goto(`/?seed=${roomSeed}&qa=1`);
+  await B.waitForFunction(() => {
+    const game = (window as unknown as G).__GIERA__;
+    return game?.ready === true && Boolean(game.qa);
+  }, null, { timeout: 30_000 });
+  await expect.poll(() => A.evaluate(() => (window as unknown as G).__GIERA__.remoteTycoons.size), { timeout: 20_000 }).toBe(1);
+  await expect.poll(() => B.evaluate(() => (window as unknown as G).__GIERA__.remoteTycoons.size), { timeout: 20_000 }).toBe(1);
+
+  const originA = await A.evaluate(() => {
+    const g = (window as unknown as G).__GIERA__;
+    g.tycoon.addStars(g.tycoon.expansionSlots.find((slot: { index: number }) => slot.index === 0).cost);
+    const slot = g.tycoon.expansionSlots.find((entry: { index: number }) => entry.index === 0);
+    g.player.position.set(g.tycoon.origin.x + slot.x, g.tycoon.origin.y + 1.2, g.tycoon.origin.z + slot.z - 1.4);
+    g.player.velocity.set(0, 0, 0);
+    g.player.yaw = 0;
+    g.player.syncAvatar();
+    return { x: g.tycoon.origin.x, y: g.tycoon.origin.y, z: g.tycoon.origin.z };
+  });
+  await A.keyboard.down("s");
+  try {
+    await A.waitForFunction(
+      () => (window as unknown as G).__GIERA__.tycoon.toJSON().expansions?.includes(0),
+      null,
+      { timeout: 10_000 },
+    );
+  } finally {
+    await A.keyboard.up("s");
+  }
+
+  const foundation = { x: originA.x, y: originA.y, z: originA.z };
+  const finalFoundation = { x: originA.x + 5, y: originA.y, z: originA.z + 8 };
+  for (const page of [A, B]) {
+    await page.waitForFunction(
+      ([first, last]) => {
+        const world = (window as unknown as G).__GIERA__.world;
+        return world.getBlock(first.x, first.y, first.z) === 21 && world.getBlock(last.x, last.y, last.z) === 21;
+      },
+      [foundation, finalFoundation],
+      { timeout: 25_000 },
+    );
+  }
+
+  const finalEditKey = `${finalFoundation.x},${finalFoundation.y},${finalFoundation.z}`;
+  await expect.poll(() => readSave()?.edits[finalEditKey], { timeout: 45_000, intervals: [500] }).toBe(21);
+  const beforeReload = readSave();
+  expect(beforeReload).toBeDefined();
+  const editCountBeforeReload = Object.keys(beforeReload!.edits).length;
+
+  await A.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await A.waitForFunction(async () => {
+    const rawSession = sessionStorage.getItem("giera.activeLanRoom");
+    if (!rawSession) return false;
+    const session = JSON.parse(rawSession) as { url: string; room: string };
+    const key = `room:${new URL(session.url).origin}:${session.room.trim().replace(/\s+/g, "").toLowerCase()}`;
+    const request = indexedDB.open("giera_save_db", 1);
+    const db = await new Promise<IDBDatabase>((resolveOpen, rejectOpen) => {
+      request.onsuccess = () => resolveOpen(request.result);
+      request.onerror = () => rejectOpen(request.error);
+    });
+    const get = db.transaction("saves", "readonly").objectStore("saves").get(key);
+    const saved = await new Promise<{ tycoon?: { expansions?: number[] } } | undefined>((resolveGet, rejectGet) => {
+      get.onsuccess = () => resolveGet(get.result as { tycoon?: { expansions?: number[] } } | undefined);
+      get.onerror = () => rejectGet(get.error);
+    });
+    db.close();
+    return saved?.tycoon?.expansions?.includes(0) === true;
+  }, null, { timeout: 10_000 });
+
+  await A.reload();
+  await A.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 30_000 });
+  if (await A.locator("#launch-start").isVisible()) await A.locator("#launch-start").click();
+  await expect.poll(
+    () => A.evaluate(([seed, first, last]) => {
+      const g = (window as unknown as G).__GIERA__;
+      if (!g?.ready) return { ready: false };
+      return {
+        ready: true,
+        seed: g.seed,
+        expansions: g.tycoon.toJSON().expansions,
+        origin: { x: g.tycoon.origin.x, y: g.tycoon.origin.y, z: g.tycoon.origin.z },
+        foundation: g.world.getBlock(first.x, first.y, first.z),
+        finalFoundation: g.world.getBlock(last.x, last.y, last.z),
+        qa: Boolean(g.qa),
+        activeRoom: sessionStorage.getItem("giera.activeLanRoom"),
+        remoteCount: g.remoteTycoons.size,
+        url: location.href,
+      };
+    }, [roomSeed, foundation, finalFoundation]),
+    { timeout: 35_000 },
+  ).toMatchObject({ ready: true, seed: roomSeed, expansions: [0], origin: originA, foundation: 21, finalFoundation: 21 });
+  const restored = await A.evaluate(() => {
+    const g = (window as unknown as G).__GIERA__;
+    return {
+      expansions: g.tycoon.toJSON().expansions,
+      origin: { x: g.tycoon.origin.x, y: g.tycoon.origin.y, z: g.tycoon.origin.z },
+    };
+  });
+  expect(restored.expansions).toEqual([0]);
+  expect(restored.origin).toEqual(originA);
+  await expect.poll(() => B.evaluate(() => (window as unknown as G).__GIERA__.remoteTycoons.size), { timeout: 20_000 }).toBe(1);
+
+  await expect.poll(() => readSave()?.savedAt ?? "", { timeout: 45_000, intervals: [500] }).not.toBe(beforeReload!.savedAt);
+  const afterReload = readSave();
+  expect(afterReload).toBeDefined();
+  expect(Object.keys(afterReload!.edits)).toHaveLength(editCountBeforeReload);
+
+  const beforeRemote = await B.evaluate(() => {
+    const g = (window as unknown as G).__GIERA__;
+    const remote = [...g.remoteTycoons.values()][0];
+    remote.restore({ vaultCoins: 0, collectedStars: 0, dropperTier: 1, expansions: [4] });
+    g.player.position.set(remote.origin.x - 5, remote.origin.y + 1.2, remote.origin.z + 7);
+    g.player.velocity.set(0, 0, 0);
+    g.player.yaw = 0;
+    g.player.syncAvatar();
+    const inventory = g.inventory.toJSON();
+    return {
+      frame: g.qa.frame,
+      expansions: remote.toJSON().expansions,
+      items: inventory.items,
+      blocks: inventory.blocks,
+      edits: g.world.exportEdits(),
+    };
+  });
+  expect(beforeRemote.expansions).toEqual([4]);
+  await B.waitForFunction(
+    (frame) => {
+      const g = (window as unknown as G).__GIERA__;
+      return g.player.onGround && g.qa.frame >= (frame as number) + 120;
+    },
+    beforeRemote.frame,
+    { timeout: 15_000 },
+  );
+  const afterRemote = await B.evaluate(() => {
+    const g = (window as unknown as G).__GIERA__;
+    const inventory = g.inventory.toJSON();
+    return { items: inventory.items, blocks: inventory.blocks, edits: g.world.exportEdits() };
+  });
+  expect(afterRemote.items).toEqual(beforeRemote.items);
+  expect(afterRemote.blocks).toEqual(beforeRemote.blocks);
+  expect(afterRemote.edits).toEqual(beforeRemote.edits);
+
+  await expect.poll(() => readSave()?.savedAt ?? "", { timeout: 45_000, intervals: [500] }).not.toBe(afterReload!.savedAt);
+  const afterRemoteSave = readSave();
+  expect(afterRemoteSave).toBeDefined();
+  expect(Object.keys(afterRemoteSave!.edits)).toHaveLength(editCountBeforeReload);
+  expect(afterRemoteSave!.edits).toEqual(afterReload!.edits);
+  expect(errorsA).toEqual([]);
+  expect(errorsB).toEqual([]);
+  await ctxA.close();
+  await ctxB.close();
+});

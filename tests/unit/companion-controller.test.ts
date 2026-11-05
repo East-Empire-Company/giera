@@ -99,4 +99,12 @@ describe("companion controller", () => {
     expect(sent.lines).toContainEqual({ line: "stuck", evidence: undefined });
   });
 
+  it("approaches a valid build site beyond one path segment", () => {
+    const { controller, sent } = makeController();
+    controller.reserveBuild("plan-far", [{ x: -7, y: 1, z: 18, id: 3 }]);
+    tick(controller, 400);
+    expect(sent.stops).toBe(0);
+    expect(sent.places).toContainEqual({ id: "buddy-1", planId: "plan-far", blockIndex: 0 });
+  });
+
 });

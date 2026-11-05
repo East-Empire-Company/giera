@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BLOCKS, BlockId, getBlockDef } from "../../src/shared/blocks";
+import { BLOCKS, BLOCK_ID, BlockId, getBlockDef } from "../../src/shared/blocks";
 
 describe("block registry", () => {
   it("keeps stable unique IDs and an unbreakable bedrock floor", () => {
@@ -22,5 +22,14 @@ describe("block registry", () => {
     expect(getBlockDef(20).solid).toBe(true);
     expect(getBlockDef(15).name).toBe("Asfalt");
     expect(getBlockDef(19).name).toBe("Dachówka");
+  });
+
+  it("defines four solid placeable headquarters block types", () => {
+    expect(BLOCK_ID.hero_floor).toBe(21);
+    expect(BLOCK_ID.hero_wall).toBe(22);
+    expect(BLOCK_ID.hero_glass).toBe(23);
+    expect(BLOCK_ID.neon_block).toBe(24);
+    for (const id of [21, 22, 23, 24]) expect(getBlockDef(id).solid).toBe(true);
+    expect(getBlockDef(23).tiles.side).toBe("hero_glass");
   });
 });

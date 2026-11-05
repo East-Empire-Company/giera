@@ -1,6 +1,5 @@
 import { BLOCK_BY_ID, BLOCK_ID } from "../src/shared/blocks";
 import { CHUNK_SIZE, WORLD_HEIGHT } from "../src/shared/chunk";
-import { SLOT_PAD_HALF_SIZE } from "../src/shared/worldgen";
 import {
   COMPANION_ANIMS,
   COMPANION_TASKS,
@@ -17,7 +16,7 @@ import {
 } from "../src/shared/lan-protocol";
 import { COMPANION_PROFILES } from "../src/shared/companion";
 import { createHousePlan } from "../src/shared/house-plan";
-import { MAX_TYCOON_SLOTS, tycoonSlotOrigin } from "../src/shared/tycoon-slots";
+import { MAX_TYCOON_SLOTS, TYCOON_SITE_BOUNDS, tycoonSiteSlot, tycoonSlotOrigin } from "../src/shared/tycoon-slots";
 import type { RoomState } from "./room";
 
 export const DEFAULT_ROOM = "DOM1";
@@ -486,10 +485,7 @@ function handleCompanionSay(ws: WsSocket, msg: Record<string, unknown>, deps: Ws
 }
 
 function protectedBlock(x: number, z: number): boolean {
-  for (let slot = 0; slot < MAX_TYCOON_SLOTS; slot++) {
-    const origin = tycoonSlotOrigin(slot);
-    if (Math.abs(x - origin.x) <= SLOT_PAD_HALF_SIZE + 1 && Math.abs(z - origin.z) <= SLOT_PAD_HALF_SIZE + 1) return true;
-  }
+  if (tycoonSiteSlot(x, z) !== null) return true;
   if (Math.hypot(x - TRAINING_DUMMY_POS.x, z - TRAINING_DUMMY_POS.z) <= PROTECTED_DUMMY_RADIUS) return true;
   return false;
 }
@@ -527,7 +523,12 @@ function handleBuildPreview(ws: WsSocket, msg: Record<string, unknown>, deps: Ws
     const maxZ = Math.ceil(z + radius);
     for (let slot = 0; slot < MAX_TYCOON_SLOTS; slot++) {
       const origin = tycoonSlotOrigin(slot);
-      if (maxX >= origin.x - SLOT_PAD_HALF_SIZE - 1 && minX <= origin.x + SLOT_PAD_HALF_SIZE + 1 && maxZ >= origin.z - SLOT_PAD_HALF_SIZE - 1 && minZ <= origin.z + SLOT_PAD_HALF_SIZE + 1) return true;
+      if (
+        maxX >= origin.x + TYCOON_SITE_BOUNDS.minX &&
+        minX <= origin.x + TYCOON_SITE_BOUNDS.maxX &&
+        maxZ >= origin.z + TYCOON_SITE_BOUNDS.minZ &&
+        minZ <= origin.z + TYCOON_SITE_BOUNDS.maxZ
+      ) return true;
     }
     if (Math.hypot(x - TRAINING_DUMMY_POS.x, z - TRAINING_DUMMY_POS.z) <= radius + PROTECTED_DUMMY_RADIUS) return true;
     return false;

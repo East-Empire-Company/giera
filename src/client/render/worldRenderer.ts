@@ -294,7 +294,7 @@ export function createTileMaterials(
   for (const [name, tile] of Object.entries(atlasManifest.tiles)) {
     const rect = rectOf(name as keyof typeof atlasManifest.tiles);
     const water = name === "water";
-    const glass = name === "glass";
+    const glass = name === "glass" || name === "hero_glass";
     const ore = ORE_STYLES[name];
     const material = createAtlasMaterial({
       atlasTexture,
@@ -415,6 +415,8 @@ export class WorldRenderer {
   private completed = 0;
   private readonly decor = new THREE.Group();
   private decorCenter: { x: number; z: number } | null = null;
+  private decorView: { worldX: number; worldZ: number; radius: number } | null = null;
+  private decorRefreshQueued = false;
   private decorToken = 0;
   private shadowMaterialRegistrar: ((material: THREE.Material) => void) | null = null;
   private shadowOrigins: { x: number; z: number }[] | null = null;
@@ -536,9 +538,20 @@ export class WorldRenderer {
     return missing.length - batch.length;
   }
 
-  private refreshGroundDecor(worldX: number, worldZ: number, radius: number): void {
+  refreshGroundDecorNow(): void {
+    if (this.decorRefreshQueued) return;
+    this.decorRefreshQueued = true;
+    queueMicrotask(() => {
+      this.decorRefreshQueued = false;
+      const view = this.decorView;
+      if (view) this.refreshGroundDecor(view.worldX, view.worldZ, view.radius, true);
+    });
+  }
+
+  private refreshGroundDecor(worldX: number, worldZ: number, radius: number, force = false): void {
+    this.decorView = { worldX, worldZ, radius };
     const center = { x: Math.round(worldX / 8) * 8, z: Math.round(worldZ / 8) * 8 };
-    if (this.decorCenter && this.decorCenter.x === center.x && this.decorCenter.z === center.z) return;
+    if (!force && this.decorCenter && this.decorCenter.x === center.x && this.decorCenter.z === center.z) return;
     this.decorCenter = center;
 
     const token = ++this.decorToken;
@@ -777,6 +790,7 @@ export class WorldRenderer {
 
   dispose(): void {
     this.decorToken++;
+    this.decorView = null;
     for (const child of this.decor.children) {
       if (child instanceof THREE.Group) disposeGroundDecor(child);
     }

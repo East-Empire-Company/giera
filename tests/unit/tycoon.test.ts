@@ -294,7 +294,7 @@ describe("TycoonManager", () => {
     expect(bounces).toBe(1);
   });
 
-  it("charges stars for an expansion circle and keeps it owned", () => {
+  it("charges stars for a headquarters stage and keeps it owned", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     tycoon.addStars(25);
     expect(tycoon.buyExpansion(0)).toBe(true);
@@ -304,14 +304,14 @@ describe("TycoonManager", () => {
     expect(tycoon.collectedStars).toBe(5);
   });
 
-  it("refuses an expansion circle the player cannot afford", () => {
+  it("refuses a headquarters stage the player cannot afford", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     tycoon.addStars(4);
     expect(tycoon.buyExpansion(0)).toBe(false);
     expect(tycoon.collectedStars).toBe(4);
   });
 
-  it("buys expansion circles in order", () => {
+  it("buys headquarters stages in order", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     tycoon.addStars(60);
     expect(tycoon.buyNextExpansion()).toBe(true);
@@ -320,7 +320,7 @@ describe("TycoonManager", () => {
     expect(tycoon.toJSON().expansions).toEqual([0, 1]);
   });
 
-  it("buys an expansion circle when the player walks onto it", () => {
+  it("buys a headquarters stage when the player walks onto it", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     tycoon.addStars(25);
     const slot = tycoon.expansionSlots[0];
@@ -340,7 +340,7 @@ describe("TycoonManager", () => {
     expect(tycoon.collectedStars).toBe(5);
   });
 
-  it("restores saves made before expansion circles existed", () => {
+  it("restores saves made before headquarters stages existed", () => {
     const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     tycoon.restore({ vaultCoins: 1, collectedStars: 2, dropperTier: 3 });
     expect(tycoon.toJSON().expansions).toEqual([]);
@@ -374,19 +374,86 @@ describe("TycoonManager", () => {
     expect(tycoon.buyNextExpansionWithPrice()).toEqual({ bought: false, stars: 5, cost: 20 });
   });
 
-  it("includes solid expansion modules in one persistent collision array", () => {
-    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
-    tycoon.expansion.bindFactoryParts({
-      clonePart: () => new THREE.Group().add(
-        new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial())
-      ),
+  it("checks construction preflight before deducting stars", () => {
+    let starts = 0;
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 }, undefined, {
+      base: {
+        preflight: () => false,
+        start: () => { starts++; return true; },
+        restore: () => undefined,
+        update: () => undefined,
+        dispose: () => undefined,
+      },
     });
+    tycoon.addStars(25);
+
+    expect(tycoon.buyExpansion(0)).toBe(false);
+    expect(tycoon.collectedStars).toBe(25);
+    expect(tycoon.toJSON().expansions).toEqual([]);
+    expect(starts).toBe(0);
+  });
+
+  it("gates elevator rides on stage 2 and synchronizes the visual platform", () => {
+    const tycoon = new TycoonManager({ x: 0, y: 60, z: 0 }, new THREE.Scene());
+    const ground = { x: 1.5, y: 61, z: 1.5 };
+    expect(tycoon.stepElevator(0, ground, 1 / 60)).toBeNull();
+
+    tycoon.restore({ vaultCoins: 0, collectedStars: 0, dropperTier: 1, expansions: [2] });
+    expect(tycoon.stepElevator(0, ground, 1 / 60)).toEqual(ground);
+    let pose = ground;
+    for (let frame = 0; frame < 90; frame++) pose = tycoon.stepElevator(0, pose, 1 / 60) ?? pose;
+    tycoon.updateVisuals(0);
+
+    expect(pose).toEqual({ x: 1.5, y: 65, z: 3.5 });
+    expect(tycoon.object?.getObjectByName("hq-elevator-platform")?.position.y).toBe(5.1);
+  });
+
+  it("gates dispenser rewards by stage, range, height, and an exact eight-second cooldown", () => {
+    const tycoon = new TycoonManager({ x: 0, y: 60, z: 0 });
+    const onFloorPad = { x: -5, y: 61, z: 7 };
+    const rewards: Array<[string, number]> = [];
+    const reward = (item: string, count: number) => rewards.push([item, count]);
+
+    expect(tycoon.tryDispenser(onFloorPad, reward)).toBeNull();
+    tycoon.restore({ vaultCoins: 0, collectedStars: 0, dropperTier: 1, expansions: [4] });
+    expect(tycoon.tryDispenser({ ...onFloorPad, y: 62 }, reward)).toBeNull();
+    expect(tycoon.tryDispenser({ ...onFloorPad, x: -4 } , reward)).toBeNull();
+    expect(tycoon.tryDispenser(onFloorPad, reward)).toBe("floor");
+    expect(rewards).toEqual([["hero_floor", 8]]);
+    expect(tycoon.tryDispenser(onFloorPad, reward)).toBeNull();
+
+    for (let frame = 0; frame < 479; frame++) tycoon.updateVisuals(1 / 60);
+    expect(tycoon.tryDispenser(onFloorPad, reward)).toBeNull();
+    tycoon.updateVisuals(1 / 60);
+    expect(tycoon.tryDispenser(onFloorPad, reward)).toBe("floor");
+    expect(rewards).toEqual([["hero_floor", 8], ["hero_floor", 8]]);
+  });
+
+  it("shares dispenser cooldowns between primary and secondary without granting from visuals", () => {
+    const tycoon = new TycoonManager({ x: 0, y: 60, z: 0 });
+    tycoon.restore({ vaultCoins: 0, collectedStars: 0, dropperTier: 1, expansions: [4] });
+    const onFloorPad = { x: -5, y: 61, z: 7 };
+    const rewards: Array<[string, number]> = [];
+    const reward = (item: string, count: number) => rewards.push([item, count]);
+
+    tycoon.update(0, onFloorPad, undefined, undefined, undefined, 0, undefined, reward);
+    tycoon.updateSecondary(0, onFloorPad, undefined, undefined, undefined, 0, undefined, reward);
+    expect(rewards).toEqual([["hero_floor", 8]]);
+
+    tycoon.updateVisuals(8);
+    expect(rewards).toEqual([["hero_floor", 8]]);
+    tycoon.updateSecondary(0, onFloorPad, undefined, undefined, undefined, 0, undefined, reward);
+    expect(rewards).toEqual([["hero_floor", 8], ["hero_floor", 8]]);
+  });
+
+  it("keeps a factory-only collision array and adds no broad HQ cylinders", () => {
+    const tycoon = new TycoonManager({ x: -3, y: 50, z: 8 });
     tycoon.addStars(20);
     expect(tycoon.buyExpansion(0)).toBe(true);
     tycoon.updateVisuals(0.6);
 
     const bodies = tycoon.getCollisionBodies();
-    expect(bodies).toHaveLength(1);
+    expect(bodies).toHaveLength(0);
     expect(tycoon.getCollisionBodies()).toBe(bodies);
     expect(tycoon.collectedStars).toBe(0);
     expect(tycoon.toJSON().expansions).toEqual([0]);

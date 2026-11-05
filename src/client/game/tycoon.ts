@@ -5,6 +5,9 @@ import type { TycoonTheme } from "../../shared/tycoon-slots";
 import type { Cylinder } from "../../shared/entity-collision";
 import { selectTycoonPresentation, type TycoonPresentationState } from "./tycoon-presentation";
 import { TycoonLabelView } from "./tycoon-visuals";
+import { createHeadquartersArt, type HeadquartersArt } from "./tycoon-headquarters-art";
+import { TycoonElevator, type ElevatorPlayer, type Position3 } from "./tycoon-elevator";
+import { HQ_DISPENSERS } from "../../shared/tycoon-base-plan";
 
 export type TycoonUpgrade = {
   tier: number;
@@ -12,11 +15,22 @@ export type TycoonUpgrade = {
   name: string;
 };
 
+export type TycoonConstruction = {
+  preflight(stage: number): boolean;
+  start(stage: number): boolean;
+  restore(stages: readonly number[]): void;
+  update(delta: number): void;
+  dispose(): void;
+};
+
 export type TycoonOptions = {
   surfaceAt?: (x: number, z: number) => number;
   blocked?: (x: number, z: number) => boolean;
   theme?: TycoonTheme;
   label?: string;
+  base?: TycoonConstruction;
+  constructionReady?: () => boolean;
+  headquarters?: HeadquartersArt;
 };
 
 const EMPTY_COLLISION_BODIES: readonly Cylinder[] = [];
@@ -86,6 +100,7 @@ export class TycoonManager {
   private trampolineCooldown = 0;
   private secondaryTrampolineCooldown = 0;
   private pulseTime = 0;
+  private readonly dispenserCooldowns = new Map<string, number>();
 
   readonly object?: THREE.Group;
   readonly expansion: TycoonExpansion;
@@ -97,12 +112,20 @@ export class TycoonManager {
   private readonly collectorLabel = new TycoonLabelView();
   private readonly upgradeLabel = new TycoonLabelView();
   private readonly collisionBodies: Cylinder[] = [];
+  private readonly base?: TycoonConstruction;
+  private readonly constructionReady: () => boolean;
+  private readonly elevator: TycoonElevator;
+  private readonly headquarters?: HeadquartersArt;
 
   constructor(spawn: { x: number; y: number; z: number }, scene?: THREE.Scene, options?: TycoonOptions) {
     this.origin = new THREE.Vector3(spawn.x, spawn.y, spawn.z);
     this.collectorPadPos = new THREE.Vector3(spawn.x, spawn.y, spawn.z - 2);
     this.upgradePadPos = new THREE.Vector3(spawn.x + 2, spawn.y, spawn.z - 2);
     this.trampolinePos = new THREE.Vector3(spawn.x - 2, spawn.y, spawn.z - 2);
+    this.base = options?.base;
+    this.constructionReady = options?.constructionReady ?? (() => true);
+    this.elevator = new TycoonElevator(spawn);
+    this.headquarters = options?.headquarters ?? (scene ? createHeadquartersArt() : undefined);
 
     const surfaceAt = options?.surfaceAt;
     const blockedAt = options?.blocked;
@@ -116,10 +139,18 @@ export class TycoonManager {
     const expansionSlots = blockedAt
       ? EXPANSION_SLOTS.filter((slot) => !blockedAt(this.origin.x + slot.x, this.origin.z + slot.z))
       : undefined;
+    const base = this.base;
     this.expansion = new TycoonExpansion({
       groundAt: groundOffset,
       slots: expansionSlots,
       render: Boolean(scene),
+      preflight: base ? (index) => this.constructionReady() && base.preflight(index) : undefined,
+      build: base ? (index, restored) => {
+        if (!this.constructionReady()) return;
+        if (restored) base.restore([index]);
+        else base.start(index);
+      } : undefined,
+      art: this.headquarters,
     });
 
     if (scene) {
@@ -192,7 +223,6 @@ export class TycoonManager {
         blocked: blockedAt
           ? (localX, localZ) => blockedAt(this.origin.x + localX, this.origin.z + localZ)
           : undefined,
-        onPartsReady: (parts) => this.expansion.bindFactoryParts(parts),
       });
       scene.add(this.plot.group);
     }
@@ -261,8 +291,12 @@ export class TycoonManager {
 
   buyExpansion(index: number): boolean {
     if (!this.expansion.canAfford(index, this.collectedStars)) return false;
-    this.collectedStars -= this.expansion.costOf(index);
-    this.expansion.claim(index);
+    const cost = this.expansion.costOf(index);
+    if (!this.expansion.claim(index)) {
+      this.expansion.refresh(this.collectedStars);
+      return false;
+    }
+    this.collectedStars -= cost;
     this.expansion.refresh(this.collectedStars);
     return true;
   }
@@ -287,7 +321,8 @@ export class TycoonManager {
     onUpgrade?: () => void,
     onBounce?: () => void,
     verticalVelocity = 0,
-    onExpand?: (index: number) => void
+    onExpand?: (index: number) => void,
+    onDispenser?: (item: string, count: number) => void
   ): void {
     this.dropTimer += delta;
     const interval = Math.max(0.6, 2.5 / this.dropperTier);
@@ -297,13 +332,35 @@ export class TycoonManager {
       this.plot?.produce();
     }
 
-    this.updatePlayerInteractions(delta, playerPos, onCollect, onUpgrade, onBounce, verticalVelocity, false, onExpand);
+    this.updatePlayerInteractions(delta, playerPos, onCollect, onUpgrade, onBounce, verticalVelocity, false, onExpand, onDispenser);
 
     this.updateVisuals(delta);
   }
 
+  stepElevator(player: ElevatorPlayer, position: Position3, delta: number): Position3 | null {
+    return this.elevator.step(player, position, delta, this.expansion.isOwned(2));
+  }
+
+  tryDispenser(position: Position3, onReward: (item: string, count: number) => void): string | null {
+    const found = HQ_DISPENSERS.find((dispenser) =>
+      this.expansion.isOwned(dispenser.stage) &&
+      Math.hypot(position.x - (this.origin.x + dispenser.x), position.z - (this.origin.z + dispenser.z)) < 0.85 &&
+      Math.abs(position.y - (this.origin.y + 1)) < 1
+    );
+    if (!found || (this.dispenserCooldowns.get(found.id) ?? 0) > 0) return null;
+    this.dispenserCooldowns.set(found.id, 8);
+    onReward(found.item, found.count);
+    return found.id;
+  }
+
   updateVisuals(delta: number): void {
     this.pulseTime += delta;
+    for (const [id, cooldown] of this.dispenserCooldowns) {
+      const remaining = cooldown - delta;
+      this.dispenserCooldowns.set(id, remaining <= 1e-9 ? 0 : remaining);
+    }
+    if (this.label) this.label.visible = true;
+    this.expansion.setLabelsHidden(false);
     const view = this.getPresentationState();
     this.collectorLabel.update({
       icon: "star",
@@ -322,12 +379,16 @@ export class TycoonManager {
     if (this.collectorMesh) this.collectorMesh.scale.set(collectorScale, 1, collectorScale);
     if (this.upgradeMesh) this.upgradeMesh.scale.set(upgradeScale, 1, upgradeScale);
 
+    if (this.constructionReady()) this.base?.update(delta);
     this.plot?.update(delta, this.dropperTier);
     this.expansion.update(delta);
+    this.headquarters?.setElevatorHeight(1.1 + this.elevator.platformHeight());
   }
 
   updateMenuVisuals(delta: number): void {
     this.updateVisuals(delta);
+    if (this.label) this.label.visible = false;
+    this.expansion.setLabelsHidden(true);
     this.plot?.updateMenuPreview(delta);
   }
 
@@ -338,9 +399,10 @@ export class TycoonManager {
     onUpgrade?: () => void,
     onBounce?: () => void,
     verticalVelocity = 0,
-    onExpand?: (index: number) => void
+    onExpand?: (index: number) => void,
+    onDispenser?: (item: string, count: number) => void
   ): void {
-    this.updatePlayerInteractions(delta, playerPos, onCollect, onUpgrade, onBounce, verticalVelocity, true, onExpand);
+    this.updatePlayerInteractions(delta, playerPos, onCollect, onUpgrade, onBounce, verticalVelocity, true, onExpand, onDispenser);
   }
 
   private updatePlayerInteractions(
@@ -351,7 +413,8 @@ export class TycoonManager {
     onBounce: (() => void) | undefined,
     verticalVelocity: number,
     isSecondary: boolean,
-    onExpand: ((index: number) => void) | undefined
+    onExpand: ((index: number) => void) | undefined,
+    onDispenser: ((item: string, count: number) => void) | undefined
   ): void {
     if (isSecondary) {
       if (this.secondaryTrampolineCooldown > 0) this.secondaryTrampolineCooldown -= delta;
@@ -396,6 +459,8 @@ export class TycoonManager {
       else this.trampolineCooldown = 0.6;
       onBounce?.();
     }
+
+    if (onDispenser) this.tryDispenser(playerPos, onDispenser);
   }
 
 
@@ -406,6 +471,8 @@ export class TycoonManager {
   }
 
   dispose(): void {
+    this.elevator.reset();
+    this.base?.dispose();
     this.plot?.dispose();
     this.plot = undefined;
     this.expansion.dispose();

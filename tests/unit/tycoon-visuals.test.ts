@@ -17,6 +17,9 @@ describe("tycoon star visuals", () => {
     expect(size.z).toBeGreaterThan(0.1);
     expect(center.length()).toBeLessThan(0.001);
     expect(mesh.castShadow).toBe(true);
+    expect(material.emissiveIntensity).toBeGreaterThan(0.8);
+    expect(token.getObjectByName("tycoon-star-halo")).toBeInstanceOf(THREE.Mesh);
+    expect(token.getObjectByName("tycoon-star-core")).toBeInstanceOf(THREE.Mesh);
   });
 
   it("updates labels safely when no DOM canvas is available", () => {

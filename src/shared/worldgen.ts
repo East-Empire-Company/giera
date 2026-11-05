@@ -1,6 +1,6 @@
 import { BLOCK_ID, getBlockDef } from "./blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, getBlockIndex, WORLD_HEIGHT } from "./chunk";
-import { MAX_TYCOON_SLOTS, tycoonSlotOrigin } from "./tycoon-slots";
+import { MAX_TYCOON_SLOTS, tycoonSiteSlot, tycoonSlotOrigin } from "./tycoon-slots";
 import { NO_CITY_TINT, lookupWarsawConnectorHeight, lookupWarsawGroundHeight, lookupWarsawPaletteIndex } from "./warsaw-city-data";
 import { WARSAW_CITY_PALETTE_BLOCK_IDS, WARSAW_CITY_PALETTE_TINT_IDS } from "./warsaw-city-data.generated";
 const MAX_SURFACE_HEIGHT = Math.round(32 + 23 + 3 / 2 + 24 + 14);
@@ -102,6 +102,11 @@ function slotPadWeight(x: number, z: number, slot: number): number {
 }
 
 function terrainSurfaceHeight(x: number, z: number, seed: number): number {
+  const reservedSlot = tycoonSiteSlot(x, z);
+  if (reservedSlot !== null) {
+    return reservedSlot === 0 ? TYCOON_SURFACE_HEIGHT : slotPadHeight(reservedSlot, seed);
+  }
+
   const natural = naturalSurfaceHeight(x, z, seed);
   let weight = 0;
   let target = TYCOON_SURFACE_HEIGHT;

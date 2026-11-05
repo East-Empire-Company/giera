@@ -1,6 +1,7 @@
 export const MAX_TYCOON_SLOTS = 8;
 export const TYCOON_SLOT_SPACING = 14;
 export const TYCOON_SLOT_BASE = { x: 12, z: 12 };
+export const TYCOON_SITE_BOUNDS = { minX: -7, maxX: 5, minZ: -8, maxZ: 8 } as const;
 
 export type TycoonTheme = {
   accent: number;
@@ -36,6 +37,17 @@ export function tycoonTheme(slot: number): TycoonTheme {
 export function tycoonSlotOrigin(slot: number): { x: number; z: number } {
   const s = clampTycoonSlot(slot);
   return { x: TYCOON_SLOT_BASE.x + s * TYCOON_SLOT_SPACING, z: TYCOON_SLOT_BASE.z };
+}
+
+export function tycoonSiteSlot(x: number, z: number): number | null {
+  for (let slot = 0; slot < MAX_TYCOON_SLOTS; slot++) {
+    const at = tycoonSlotOrigin(slot);
+    if (
+      x >= at.x + TYCOON_SITE_BOUNDS.minX && x <= at.x + TYCOON_SITE_BOUNDS.maxX &&
+      z >= at.z + TYCOON_SITE_BOUNDS.minZ && z <= at.z + TYCOON_SITE_BOUNDS.maxZ
+    ) return slot;
+  }
+  return null;
 }
 
 export function nextFreeTycoonSlot(used: readonly number[]): number {

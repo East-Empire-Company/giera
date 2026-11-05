@@ -20,6 +20,10 @@ export const BLOCK_ID = {
   plaster: 18,
   roof_tile: 19,
   tnt: 20,
+  hero_floor: 21,
+  hero_wall: 22,
+  hero_glass: 23,
+  neon_block: 24,
 } as const;
 
 export type BlockId = (typeof BLOCK_ID)[keyof typeof BLOCK_ID];
@@ -58,6 +62,10 @@ export const BLOCK_BY_ID: Record<BlockId, BlockDef> = {
   18: { id: BLOCK_ID.plaster, name: "Tynk", tiles: { top: "plaster", bottom: "plaster", side: "plaster" }, hardness: 1.2, solid: true, liquid: false },
   19: { id: BLOCK_ID.roof_tile, name: "Dachówka", tiles: { top: "roof_tile", bottom: "roof_tile", side: "roof_tile" }, hardness: 1.5, solid: true, liquid: false },
   20: { id: BLOCK_ID.tnt, name: "TNT", tiles: { top: "tnt", bottom: "tnt", side: "tnt" }, hardness: 0.1, solid: true, liquid: false },
+  21: { id: BLOCK_ID.hero_floor, name: "Podłoga bohatera", tiles: { top: "hero_floor", bottom: "hero_floor", side: "hero_floor" }, hardness: 1.5, solid: true, liquid: false },
+  22: { id: BLOCK_ID.hero_wall, name: "Ściana bohatera", tiles: { top: "hero_wall", bottom: "hero_wall", side: "hero_wall" }, hardness: 1.5, solid: true, liquid: false },
+  23: { id: BLOCK_ID.hero_glass, name: "Szkło bohatera", tiles: { top: "hero_glass", bottom: "hero_glass", side: "hero_glass" }, hardness: 0.3, solid: true, liquid: false },
+  24: { id: BLOCK_ID.neon_block, name: "Neon", tiles: { top: "neon_block", bottom: "neon_block", side: "neon_block" }, hardness: 1.2, solid: true, liquid: false },
 };
 
 export const BLOCKS = Object.values(BLOCK_BY_ID);

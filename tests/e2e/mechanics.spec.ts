@@ -1095,6 +1095,15 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     const errors = collectErrors(page);
     await boot(page);
     const cost = SPEC.upgradeCostPerTier;
+    await page.waitForFunction(() => {
+      let authored = false;
+      let halo = false;
+      (window as unknown as G).__GIERA__.scene.traverse((node) => {
+        if (node.name === "factory-authored-art") authored = true;
+        if (node.name === "tycoon-star-halo") halo = true;
+      });
+      return authored && halo;
+    });
 
     await page.evaluate(() => {
       const g = (window as unknown as G).__GIERA__;
@@ -1168,7 +1177,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(errors).toEqual([]);
   });
 
-  test("tycoon: a walked-on expansion charges once and restores its module without rewards", async ({ page }) => {
+  test("tycoon: a walked-on expansion charges once and restores its HQ foundation without rewards", async ({ page }) => {
     test.setTimeout(90_000);
     const errors = collectErrors(page);
     await boot(page);
@@ -1176,11 +1185,11 @@ test.describe("Giera mechanics (qa deterministic)", () => {
       const g = (window as unknown as G).__GIERA__;
       const slot = g.tycoon.expansionSlots[0];
       g.tycoon.addStars(slot.cost);
-      g.player.position.set(g.tycoon.origin.x + slot.x, g.player.position.y, g.tycoon.origin.z + slot.z - 1.4);
+      g.player.position.set(g.tycoon.origin.x + slot.x, g.tycoon.origin.y + 1.2, g.tycoon.origin.z + slot.z - 1.4);
       g.player.velocity.set(0, 0, 0);
       g.player.yaw = 0;
       g.player.syncAvatar();
-      return { frame: g.qa.frame, cost: slot.cost };
+      return { frame: g.qa.frame };
     });
     await page.keyboard.down("s");
     await page.waitForFunction(() => (window as unknown as G).__GIERA__.tycoon.toJSON().expansions?.includes(0), null, { timeout: 5_000 });
@@ -1189,23 +1198,26 @@ test.describe("Giera mechanics (qa deterministic)", () => {
 
     const purchased = await page.evaluate(() => {
       const g = (window as unknown as G).__GIERA__;
-      let modules = 0;
-      let scale = 0;
+      let kiosks = 0;
+      let kioskVisible = true;
       g.scene.traverse((node) => {
-        if (node.name === "expansion-module-0") {
-          modules++;
-          scale = node.scale.x;
+        if (node.name === "hq-kiosk-0") {
+          kiosks++;
+          kioskVisible = node.visible;
         }
       });
       const events = g.qa.events.filter((event) => event.id === "celebrate_win").length;
-      g.player.position.set(g.tycoon.origin.x + 20, g.player.position.y, g.tycoon.origin.z + 20);
+      const at = g.tycoon.origin;
+      const floor = g.world.getBlock(at.x, at.y, at.z);
+      g.player.position.set(at.x + 20, g.player.position.y, at.z + 20);
       g.qa.paused = true;
-      return { state: g.tycoon.toJSON(), modules, scale, events };
+      return { state: g.tycoon.toJSON(), kiosks, kioskVisible, floor, events };
     });
     expect(purchased.state.collectedStars).toBe(0);
     expect(purchased.state.expansions).toEqual([0]);
-    expect(purchased.modules).toBe(1);
-    expect(purchased.scale).toBe(1);
+    expect(purchased.kiosks).toBe(1);
+    expect(purchased.kioskVisible).toBe(false);
+    expect(purchased.floor).toBe(21);
     expect(purchased.events).toBe(1);
 
     await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
@@ -1225,18 +1237,10 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await page.reload();
     await page.waitForFunction(() => {
       const g = (window as unknown as G).__GIERA__;
-      if (!g) return false;
+      if (!g?.ready) return false;
       g.qa.paused = true;
-      return g.ready;
+      return g.world.getBlock(g.tycoon.origin.x, g.tycoon.origin.y, g.tycoon.origin.z) === 21;
     }, null, { timeout: 30_000 });
-    await page.waitForFunction(() => {
-      const g = (window as unknown as G).__GIERA__;
-      let restored = false;
-      g.scene.traverse((node) => {
-        if (node.name === "expansion-module-0" && node.scale.x === 1) restored = true;
-      });
-      return restored;
-    }, null, { timeout: 15_000 });
     const restored = await page.evaluate(() => {
       const g = (window as unknown as G).__GIERA__;
       return {
@@ -1355,7 +1359,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(errors).toEqual([]);
   });
 
-  test("collision: a purchased expansion is solid but its pad and label are not", async ({ page }) => {
+  test("collision: a constructed HQ wall is solid but its kiosk and label are not", async ({ page }) => {
     const errors = collectErrors(page);
     await boot(page);
     await page.waitForFunction(() => {
@@ -1376,38 +1380,33 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(bought).toBe(true);
     await page.waitForFunction(() => {
       const g = (window as unknown as G).__GIERA__;
-      let built = false;
-      g.scene.traverse((node) => {
-        if (node.name === "expansion-module-2" && node.scale.x === 1) built = true;
-      });
-      return built;
+      const at = g.tycoon.origin;
+      return g.world.getBlock(at.x + 2, at.y + 5, at.z) !== 0 &&
+        g.world.getBlock(at.x, at.y + 8, at.z) === 19;
     }, null, { timeout: 15_000 });
     const setup = await page.evaluate(() => {
       const g = (window as unknown as G).__GIERA__;
-      const slot = g.tycoon.expansionSlots.find((entry) => entry.index === 2)!;
-      const centerX = g.tycoon.origin.x + slot.x;
-      const centerZ = g.tycoon.origin.z + slot.z;
-      const bodies = g.tycoon.getCollisionBodies();
-      const body = [...bodies].sort((a, b) =>
-        Math.hypot(a.x - centerX, a.z - centerZ) - Math.hypot(b.x - centerX, b.z - centerZ)
-      )[0];
-      g.player.position.set(body.x, g.player.position.y, body.z - 2.5);
+      const at = g.tycoon.origin;
+      g.player.position.set(at.x + 2, at.y + 5.05, at.z + 2.5);
       g.player.velocity.set(0, 0, 0);
       g.player.yaw = 0;
       g.player.syncAvatar();
-      return { body, bodyCount: bodies.length, frame: g.qa.frame };
+      return {
+        bodyCount: g.tycoon.getCollisionBodies().length,
+        frame: g.qa.frame,
+        startZ: g.player.position.z,
+        wallZ: at.z,
+      };
     });
-    expect(setup.bodyCount).toBe(initialBodies + 1);
+    expect(setup.bodyCount).toBe(initialBodies);
+    await page.waitForFunction(() => (window as unknown as G).__GIERA__.player.onGround, null, { timeout: 5_000 });
 
     await page.keyboard.down("w");
     await page.waitForFunction((frame) => (window as unknown as G).__GIERA__.qa.frame >= frame + 60, setup.frame);
     await page.keyboard.up("w");
-    const after = await page.evaluate(() => {
-      const g = (window as unknown as G).__GIERA__;
-      return { x: g.player.position.x, z: g.player.position.z };
-    });
-    expect(Math.hypot(after.x - setup.body.x, after.z - setup.body.z)).toBeGreaterThanOrEqual(setup.body.radius);
-    expect(after.z).toBeLessThan(setup.body.z);
+    const after = await page.evaluate(() => (window as unknown as G).__GIERA__.player.position.z);
+    expect(after).toBeGreaterThanOrEqual(setup.wallZ + 1.25);
+    expect(after).toBeLessThan(setup.startZ);
     expect(errors).toEqual([]);
   });
 

@@ -21,6 +21,7 @@ const BUCKET_BY_TILE: Record<string, number> = {
   default_mineral_iron: TERRAIN_MATERIAL.iron,
   water: TERRAIN_MATERIAL.water,
   glass: TERRAIN_MATERIAL.glass,
+  hero_glass: TERRAIN_MATERIAL.glass,
 };
 
 export function terrainMaterialFor(tileName: string): number {

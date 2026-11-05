@@ -34,3 +34,9 @@ reason: Avatar ground-follow rework: footprint-sampled smoothGroundOffset with p
 ## 2026-11-04T00:32:13.652Z stage=goldens
 reason: Visually reviewed expected/captured/diff for all 3. Intended changes only: Warsaw city connector (asphalt y=60 at x4..6,z<=4, probed via generateBlock) visible beside spawn; city district now fills tycoon-view background (camera looks toward -z); family avatars calibrated to 1.2 m (kids) so smaller at same positions. HUD, terrain, avatars intact; no blank or corrupt frames. Atlas TNT tile addition verified not to alter existing tiles (MAD<=2.85).
 
+## 2026-11-04T22:57:53.719Z stage=goldens
+reason: Player approved the authored 3D tycoon factory, animated conveyor and products, expansion machinery, and closer launch presentation.
+
+## 2026-11-05T20:45:18.112Z stage=goldens
+reason: Owner approved the constructed superhero headquarters, interiors, elevator, and functional lab presentation.
+

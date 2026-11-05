@@ -6,6 +6,7 @@ import { withRetry } from "../../shared/retry";
 import type { Cylinder } from "../../shared/entity-collision";
 import { TycoonCollisionRoots } from "./tycoon-collision";
 import { createStarToken } from "./tycoon-visuals";
+import { createMainFactoryArt, type TycoonFactoryArt } from "./tycoon-factory-art";
 
 export type FactoryModel =
   | "factoryConveyor"
@@ -16,14 +17,9 @@ export type FactoryModel =
   | "factoryButton"
   | "factoryGear";
 
-export type FactoryPartProvider = {
-  clonePart(name: FactoryModel): THREE.Group | undefined;
-};
-
 export type TycoonPlotOptions = {
   surfaceAt: (x: number, z: number) => number;
   blocked?: (x: number, z: number) => boolean;
-  onPartsReady?: (provider: FactoryPartProvider) => void;
 };
 
 type Stage = { tier: number; object: THREE.Group; age: number };
@@ -45,7 +41,7 @@ const MAIN_MACHINE_SCALE = 1.8;
 const SIDE_MACHINE_SCALE = 1.25;
 const PRODUCT_POOL_SIZE = 6;
 const PRODUCT_DURATION = 2.4;
-const PRODUCT_SCALE = 0.38;
+const PRODUCT_SCALE = 0.56;
 const PRODUCT_START_X = -2.35;
 const PRODUCT_END_X = 4.45;
 const PRODUCT_Z = -4.6;
@@ -54,7 +50,6 @@ export class TycoonPlot {
   readonly group = new THREE.Group();
   private readonly surfaceAt: (x: number, z: number) => number;
   private readonly blocked?: (x: number, z: number) => boolean;
-  private readonly onPartsReady?: (provider: FactoryPartProvider) => void;
   private readonly originY: number;
   private readonly templates = new Map<FactoryModel, THREE.Group>();
   private readonly clips = new Map<FactoryModel, THREE.AnimationClip[]>();
@@ -64,6 +59,7 @@ export class TycoonPlot {
   private readonly buttons: AnimatedButton[] = [];
   private readonly products: Product[] = [];
   private menuPreview?: Product;
+  private factoryArt?: TycoonFactoryArt;
   private pendingProducts = 0;
   private productBeltTop = 0;
   private productBottom = 0;
@@ -84,7 +80,6 @@ export class TycoonPlot {
   constructor(origin: THREE.Vector3, options: TycoonPlotOptions) {
     this.surfaceAt = options.surfaceAt;
     this.blocked = options.blocked;
-    this.onPartsReady = options.onPartsReady;
     this.originY = origin.y;
     this.group.position.copy(origin);
     this.group.name = "tycoon-plot";
@@ -97,6 +92,7 @@ export class TycoonPlot {
   registerShadowMaterials(register: (material: THREE.Material) => void): void {
     this.shadowMaterialRegistrar = register;
     for (const template of this.templates.values()) this.registerModelMaterials(template);
+    if (this.factoryArt) this.registerModelMaterials(this.factoryArt.root);
   }
 
   private async loadModels(): Promise<void> {
@@ -137,11 +133,14 @@ export class TycoonPlot {
     }
     this.buildFactory();
     this.initializeProductPool();
+    this.factoryArt = createMainFactoryArt({
+      groundAt: (x, z) => this.groundAt(x, z),
+      beltTop: this.productBeltTop,
+    });
+    this.group.add(this.factoryArt.root);
+    this.registerModelMaterials(this.factoryArt.root);
     this.lastTier = 0;
     this.syncTier(this.tier);
-    this.onPartsReady?.({
-      clonePart: (name) => this.templates.get(name)?.clone(true) as THREE.Group | undefined,
-    });
   }
 
   private registerModelMaterials(root: THREE.Object3D): void {
@@ -295,10 +294,11 @@ export class TycoonPlot {
     const x = PRODUCT_START_X + (PRODUCT_END_X - PRODUCT_START_X) * progress;
     product.object.position.set(
       x,
-      this.groundAt(x, PRODUCT_Z) + this.productBeltTop - this.productBottom,
+      this.groundAt(x, PRODUCT_Z) + this.productBeltTop - this.productBottom + 0.07 + Math.sin(product.age * 5) * 0.06,
       PRODUCT_Z
     );
     product.object.rotation.y = product.age * Math.PI * 2;
+    product.object.rotation.z = Math.sin(product.age * 4) * 0.1;
   }
 
   private updateProducts(delta: number): void {
@@ -335,6 +335,7 @@ export class TycoonPlot {
 
   updateMenuPreview(delta: number): void {
     if (this.disposed || !this.menuPreview) return;
+    this.factoryArt?.update(delta);
     this.menuPreview.age = (this.menuPreview.age + delta) % PRODUCT_DURATION;
     this.menuPreview.object.visible = true;
     this.positionProduct(this.menuPreview);
@@ -343,6 +344,7 @@ export class TycoonPlot {
   update(delta: number, tier: number): void {
     if (this.disposed) return;
     if (this.menuPreview) this.menuPreview.object.visible = false;
+    this.factoryArt?.update(delta);
     this.time += delta;
     this.tier = tier;
     for (const gear of this.gears) gear.rotation.x = this.time * 1.25;
@@ -394,6 +396,8 @@ export class TycoonPlot {
       button.mixer.uncacheRoot(button.root);
     }
     this.buttons.length = 0;
+    this.factoryArt?.dispose();
+    this.factoryArt = undefined;
     this.group.removeFromParent();
     this.group.clear();
     this.disposeScenes([...this.templates.values()]);

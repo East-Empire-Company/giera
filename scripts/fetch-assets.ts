@@ -32,7 +32,8 @@ type AssetSourceId =
   | "quaternius-nature"
   | "kenney-factory-kit"
   | "valid-rocketbox"
-  | "local-tnt-texture";
+  | "local-tnt-texture"
+  | "giera-original";
 type AssetPick = { source: AssetSourceId; member: string; path: string; preplaced?: boolean };
 
 const sourceInfo: Record<AssetSourceId, { title: string; author: string; license: string; url: string }> = {
@@ -53,6 +54,7 @@ const sourceInfo: Record<AssetSourceId, { title: string; author: string; license
   "kenney-factory-kit": { title: "Factory Kit 3.0", author: "Kenney", license: "CC0", url: "https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip" },
   "valid-rocketbox": { title: "Validated Avatar Library (VALID) / Microsoft Rocketbox", author: "Tiffany Do, Microsoft Rocketbox", license: "MIT", url: "https://github.com/c-frame/valid-avatars-glb" },
   "local-tnt-texture": { title: "TNT block texture (supplied locally; original source not recorded)", author: "Unknown (provenance not recorded)", license: "Unverified", url: "" },
+  "giera-original": { title: "Giera original headquarters textures", author: "Giera contributors", license: "MIT", url: "" },
 };
 
 export const assetPicks: Record<string, Record<string, AssetPick>> = {
@@ -79,6 +81,10 @@ export const assetPicks: Record<string, Record<string, AssetPick>> = {
     plaster: { source: "ambientcg-pbr", member: "Plaster001_1K-JPG_Color.jpg", path: "assets/textures/pbr/Plaster001/Plaster001_1K-JPG_Color.jpg", preplaced: true },
     roof_tile: { source: "ambientcg-pbr", member: "RoofingTiles013A_1K-JPG_Color.jpg", path: "assets/textures/pbr/RoofingTiles013A/RoofingTiles013A_1K-JPG_Color.jpg", preplaced: true },
     tnt: { source: "local-tnt-texture", member: "tnt_1K-JPG_Color.jpg", path: "assets/textures/pbr/tnt/tnt_1K-JPG_Color.jpg", preplaced: true },
+    hero_floor: { source: "giera-original", member: "hero_floor.png", path: "assets/textures/tiles/hero_floor.png", preplaced: true },
+    hero_wall: { source: "giera-original", member: "hero_wall.png", path: "assets/textures/tiles/hero_wall.png", preplaced: true },
+    hero_glass: { source: "giera-original", member: "hero_glass.png", path: "assets/textures/tiles/hero_glass.png", preplaced: true },
+    neon_block: { source: "giera-original", member: "neon_block.png", path: "assets/textures/tiles/neon_block.png", preplaced: true },
   },
   models: {
     playerOne: { source: "kaykit-adventurers", member: "Characters/gltf/Knight.glb", path: "assets/models/kaykit/knight.glb", preplaced: true },
@@ -288,7 +294,7 @@ async function packagePbrAssets(): Promise<void> {
   const manifestPath = resolve("src/shared/asset-manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, Record<string, string>>;
   for (const [key, pick] of Object.entries(assetPicks.tiles)) {
-    if (pick.source === "ambientcg-pbr") manifest.tiles[key] ??= pick.path;
+    if (pick.source === "ambientcg-pbr" || pick.source === "giera-original") manifest.tiles[key] ??= pick.path;
   }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
@@ -297,9 +303,10 @@ async function packagePbrAssets(): Promise<void> {
   let notices = (await readFile(noticesPath, "utf8")).replaceAll(oldTitle, sourceInfo["ambientcg-pbr"].title);
   const additions: string[] = [];
   for (const pick of Object.values(assetPicks.tiles)) {
-    if (pick.source !== "ambientcg-pbr" || notices.includes(`| \`${pick.path}\` |`)) continue;
+    if ((pick.source !== "ambientcg-pbr" && pick.source !== "giera-original") || notices.includes(`| \`${pick.path}\` |`)) continue;
     const info = sourceInfo[pick.source];
-    additions.push(`| \`${pick.path}\` | [${info.title}](${info.url}) / \`${pick.member}\` | ${info.author} | ${info.license} |`);
+    const source = info.url ? `[${info.title}](${info.url})` : info.title;
+    additions.push(`| \`${pick.path}\` | ${source} / \`${pick.member}\` | ${info.author} | ${info.license} |`);
   }
   if (additions.length) notices = `${notices.endsWith("\n") ? notices : `${notices}\n`}${additions.join("\n")}\n`;
   await writeFile(noticesPath, notices);

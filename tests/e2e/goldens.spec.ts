@@ -27,7 +27,11 @@ type Giera = {
     pitch: number;
     syncAvatar: () => void;
   };
-  world: { loadedChunkCount: number; decor: { children: { name?: string }[] } };
+  world: {
+    loadedChunkCount: number;
+    decor: { children: { name?: string }[] };
+    getBlock: (x: number, y: number, z: number) => number;
+  };
   scene: { traverse: (fn: (node: any) => void) => void };
   tycoon: {
     origin: { x: number; y: number; z: number };
@@ -156,12 +160,8 @@ test.describe("Giera graphics goldens", () => {
     });
     await page.waitForFunction(() => {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;
-      const built = new Set<number>();
-      g.scene.traverse((node) => {
-        const match = /^expansion-module-([01])$/.exec(node.name);
-        if (match && node.scale.x === 1) built.add(Number(match[1]));
-      });
-      return built.size === 2;
+      const { x, y, z } = g.tycoon.origin;
+      return g.world.getBlock(x, y, z) === 21 && g.world.getBlock(x - 4, y + 1, z) === 22;
     }, null, { timeout: 15_000 });
     const frame = await page.evaluate(() => {
       const g = (window as unknown as { __GIERA__: Giera }).__GIERA__;

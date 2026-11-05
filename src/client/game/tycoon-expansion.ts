@@ -1,8 +1,7 @@
 import * as THREE from "three";
 import type { Cylinder } from "../../shared/entity-collision";
-import { TycoonCollisionRoots } from "./tycoon-collision";
-import type { FactoryModel, FactoryPartProvider } from "./tycoon-plot";
 import { TycoonLabelView } from "./tycoon-visuals";
+import type { HeadquartersArt } from "./tycoon-headquarters-art";
 
 export type ExpansionSlot = {
   index: number;
@@ -24,81 +23,76 @@ export const EXPANSION_SLOTS: readonly ExpansionSlot[] = [
 
 const LOCKED_COLOR = 0x526675;
 const AFFORDABLE_COLOR = 0xf6c445;
-const OWNED_COLOR = 0xf6c445;
-const GROW_SECONDS = 0.6;
 
 export type TycoonExpansionOptions = {
   groundAt: (localX: number, localZ: number) => number;
   slots?: readonly ExpansionSlot[];
   render?: boolean;
+  preflight?: (index: number) => boolean;
+  build?: (index: number, restored: boolean) => void;
+  art?: HeadquartersArt;
 };
 
 export class TycoonExpansion {
   readonly group = new THREE.Group();
   readonly slots: readonly ExpansionSlot[];
-  private readonly groundAt: (localX: number, localZ: number) => number;
   private readonly states = new Map<number, ExpansionState>();
-  private readonly growth = new Map<number, number>();
-  private readonly rings = new Map<number, THREE.Mesh>();
-  private readonly discs = new Map<number, THREE.Mesh>();
-  private readonly markers = new Map<number, THREE.Mesh>();
+  private readonly kiosks = new Map<number, THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>>();
+  private readonly holograms = new Map<number, THREE.Mesh<THREE.OctahedronGeometry, THREE.MeshStandardMaterial>>();
   private readonly labels = new Map<number, TycoonLabelView>();
-  private readonly modules = new Map<number, THREE.Group>();
-  private readonly collision = new TycoonCollisionRoots();
-  private parts?: FactoryPartProvider;
+  private readonly collisionBodies: readonly Cylinder[] = [];
+  private readonly preflight?: (index: number) => boolean;
+  private readonly build?: (index: number, restored: boolean) => void;
+  private readonly art?: HeadquartersArt;
   private time = 0;
 
   constructor(options: TycoonExpansionOptions) {
     this.slots = options.slots ?? EXPANSION_SLOTS;
-    this.groundAt = options.groundAt;
+    this.preflight = options.preflight;
+    this.build = options.build;
+    this.art = options.art;
+    if (this.art) {
+      this.group.add(this.art.root);
+      this.art.setOwned([]);
+    }
     const render = options.render ?? true;
+
     for (const slot of this.slots) {
       this.states.set(slot.index, "locked");
       if (!render) continue;
 
-      const y = options.groundAt(slot.x, slot.z) + 0.08;
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(1.05, 0.13, 10, 36),
+      const y = options.groundAt(slot.x, slot.z) + 0.04;
+      const kiosk = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 0.08, 1.5),
         new THREE.MeshStandardMaterial({
           color: LOCKED_COLOR,
           emissive: LOCKED_COLOR,
           emissiveIntensity: 0.2,
           roughness: 0.45,
-        })
+        }),
       );
-      ring.name = `expansion-ring-${slot.index}`;
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(slot.x, y, slot.z);
-      ring.receiveShadow = true;
-      this.group.add(ring);
-      this.rings.set(slot.index, ring);
+      kiosk.name = `hq-kiosk-${slot.index}`;
+      kiosk.position.set(slot.x, y, slot.z);
+      kiosk.receiveShadow = true;
+      this.group.add(kiosk);
+      this.kiosks.set(slot.index, kiosk);
 
-      const disc = new THREE.Mesh(
-        new THREE.CircleGeometry(0.92, 36),
-        new THREE.MeshStandardMaterial({
-          color: LOCKED_COLOR,
-          roughness: 0.7,
-          transparent: true,
-          opacity: 0.25,
-          depthWrite: false,
-        })
-      );
-      disc.name = `expansion-disc-${slot.index}`;
-      disc.rotation.x = -Math.PI / 2;
-      disc.position.set(slot.x, y - 0.02, slot.z);
-      this.group.add(disc);
-      this.discs.set(slot.index, disc);
-
-      const marker = new THREE.Mesh(
+      const hologram = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.32),
-        new THREE.MeshStandardMaterial({ color: OWNED_COLOR, emissive: OWNED_COLOR, emissiveIntensity: 0.5, roughness: 0.3 })
+        new THREE.MeshStandardMaterial({
+          color: AFFORDABLE_COLOR,
+          emissive: AFFORDABLE_COLOR,
+          emissiveIntensity: 0.5,
+          roughness: 0.3,
+          transparent: true,
+          opacity: 0.78,
+          depthWrite: false,
+        }),
       );
-      marker.name = `expansion-marker-${slot.index}`;
-      marker.position.set(slot.x, y + 1.2, slot.z);
-      marker.castShadow = true;
-      marker.visible = false;
-      this.group.add(marker);
-      this.markers.set(slot.index, marker);
+      hologram.name = `hq-hologram-${slot.index}`;
+      hologram.position.set(slot.x, y + 0.85, slot.z);
+      this.group.add(hologram);
+      this.holograms.set(slot.index, hologram);
 
       const label = new TycoonLabelView();
       if (label.sprite) {
@@ -110,13 +104,8 @@ export class TycoonExpansion {
     }
   }
 
-  bindFactoryParts(parts: FactoryPartProvider): void {
-    this.parts = parts;
-    for (const index of this.ownedIndices()) this.buildModule(index, true);
-  }
-
   getCollisionBodies(): readonly Cylinder[] {
-    return this.collision.get(this.group);
+    return this.collisionBodies;
   }
 
   stateOf(index: number): ExpansionState {
@@ -125,6 +114,12 @@ export class TycoonExpansion {
 
   isOwned(index: number): boolean {
     return this.stateOf(index) === "owned";
+  }
+
+  setLabelsHidden(hidden: boolean): void {
+    for (const [index, label] of this.labels) {
+      if (label.sprite) label.sprite.visible = !hidden && !this.isOwned(index);
+    }
   }
 
   ownedIndices(): number[] {
@@ -152,9 +147,11 @@ export class TycoonExpansion {
 
   claim(index: number): boolean {
     if (this.isOwned(index) || !this.slots.some((slot) => slot.index === index)) return false;
+    if (!(this.preflight?.(index) ?? true)) return false;
     this.states.set(index, "owned");
     this.paint(index);
-    this.buildModule(index, false);
+    this.art?.setOwned(this.ownedIndices());
+    this.build?.(index, false);
     return true;
   }
 
@@ -164,16 +161,9 @@ export class TycoonExpansion {
       const ownedSlot = list.includes(slot.index);
       this.states.set(slot.index, ownedSlot ? "owned" : "locked");
       this.paint(slot.index);
-      if (!ownedSlot) continue;
-      const module = this.modules.get(slot.index);
-      if (module) {
-        module.scale.setScalar(1);
-        this.growth.set(slot.index, 1);
-        this.collision.markDirty();
-      } else {
-        this.buildModule(slot.index, true);
-      }
+      if (ownedSlot) this.build?.(slot.index, true);
     }
+    this.art?.setOwned(this.ownedIndices());
   }
 
   registerShadowMaterials(register: (material: THREE.Material) => void): void {
@@ -188,83 +178,33 @@ export class TycoonExpansion {
 
   update(delta: number): void {
     this.time += delta;
+    this.art?.update(delta);
     for (const slot of this.slots) {
-      const module = this.modules.get(slot.index);
-      if (module) {
-        const current = this.growth.get(slot.index) ?? 1;
-        if (current < 1) {
-          const next = Math.min(1, current + delta / GROW_SECONDS);
-          this.growth.set(slot.index, next);
-          const eased = 1 - Math.pow(1 - next, 3);
-          module.scale.setScalar(next === 1 ? 1 : 0.001 + (1 - 0.001) * eased);
-          this.collision.markDirty();
-        }
-        continue;
-      }
       if (this.isOwned(slot.index)) continue;
       const pulse = 1 + Math.sin(this.time * 3 + slot.index) * 0.04;
-      this.rings.get(slot.index)?.scale.setScalar(pulse);
-      this.discs.get(slot.index)?.scale.setScalar(pulse);
+      this.kiosks.get(slot.index)?.scale.setScalar(pulse);
+      const hologram = this.holograms.get(slot.index);
+      if (hologram) {
+        hologram.scale.setScalar(pulse);
+        hologram.rotation.y = this.time * 0.8 + slot.index;
+      }
     }
   }
 
   dispose(): void {
-    for (const owned of [this.rings, this.discs, this.markers]) {
-      for (const mesh of owned.values()) {
+    for (const meshes of [this.kiosks, this.holograms]) {
+      for (const mesh of meshes.values()) {
         mesh.geometry.dispose();
-        const material = mesh.material;
-        if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
-        else material.dispose();
+        mesh.material.dispose();
       }
     }
     for (const label of this.labels.values()) label.dispose();
+    this.art?.dispose();
     this.group.removeFromParent();
     this.group.clear();
-    this.rings.clear();
-    this.discs.clear();
-    this.markers.clear();
+    this.kiosks.clear();
+    this.holograms.clear();
     this.labels.clear();
-    this.modules.clear();
-    this.collision.clear();
-  }
-
-  private buildModule(index: number, restored: boolean): void {
-    if (this.modules.has(index) || !this.parts || !this.isOwned(index)) return;
-    const slot = this.slots.find((entry) => entry.index === index);
-    if (!slot) return;
-    const root = new THREE.Group();
-    root.name = `expansion-module-${index}`;
-    root.position.set(slot.x, this.groundAt(slot.x, slot.z), slot.z);
-    const add = (name: FactoryModel, x: number, y: number, z: number, scale: number): void => {
-      const part = this.parts?.clonePart(name);
-      if (!part) return;
-      part.position.set(x, y, z);
-      part.scale.setScalar(scale);
-      root.add(part);
-    };
-    if (index === 0) add("factoryLongConveyor", 0, 0, 0, 0.65);
-    if (index === 1) {
-      add("factoryMachine", 0, 0, 0, 0.55);
-      add("factoryHopper", 0, 1.3 * 0.55, 0, 0.55);
-    }
-    if (index === 2) add("factoryScanner", 0, 0, 0, 0.75);
-    if (index === 3) {
-      add("factoryMachine", 0, 0, 0, 0.55);
-      add("factoryHopper", 0, 1.3 * 0.55, 0, 0.55);
-    }
-    if (index === 4) {
-      add("factoryButton", 0, 0, 0, 0.8);
-      add("factoryGear", 0.55, 0.55, 0, 0.45);
-    }
-    if (index === 5) {
-      add("factoryMachine", -0.45, 0, 0, 0.5);
-      add("factoryScanner", 0.55, 0, 0, 0.6);
-    }
-    root.scale.setScalar(restored ? 1 : 0.001);
-    this.group.add(root);
-    this.modules.set(index, root);
-    this.growth.set(index, restored ? 1 : 0);
-    this.collision.add(root);
   }
 
   private paint(index: number): void {
@@ -272,23 +212,22 @@ export class TycoonExpansion {
     const slot = this.slots.find((entry) => entry.index === index);
     const color = state === "affordable" ? AFFORDABLE_COLOR : LOCKED_COLOR;
     const visible = state !== "owned";
-    const ring = this.rings.get(index);
-    if (ring) {
-      ring.visible = visible;
-      const material = ring.material as THREE.MeshStandardMaterial;
-      material.color.setHex(color);
-      material.emissive.setHex(color);
-      material.emissiveIntensity = state === "affordable" ? 0.45 : 0.2;
+
+    const kiosk = this.kiosks.get(index);
+    if (kiosk) {
+      kiosk.visible = visible;
+      kiosk.material.color.setHex(color);
+      kiosk.material.emissive.setHex(color);
+      kiosk.material.emissiveIntensity = state === "affordable" ? 0.45 : 0.2;
     }
-    const disc = this.discs.get(index);
-    if (disc) {
-      disc.visible = visible;
-      const material = disc.material as THREE.MeshStandardMaterial;
-      material.color.setHex(color);
-      material.opacity = 0.25;
+
+    const hologram = this.holograms.get(index);
+    if (hologram) {
+      hologram.visible = visible;
+      hologram.material.color.setHex(color);
+      hologram.material.emissive.setHex(color);
     }
-    const marker = this.markers.get(index);
-    if (marker) marker.visible = false;
+
     const label = this.labels.get(index);
     if (label?.sprite) label.sprite.visible = visible;
     if (slot) {

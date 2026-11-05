@@ -82,6 +82,30 @@ describe("GameInventory", () => {
     inv.equipTool("iron_pickaxe");
     expect(inv.getMiningSpeedMultiplier(2)).toBe(3.5);
   });
+  it("uses exact HQ mining and combat multipliers without changing older tools", () => {
+    const inv = new GameInventory({
+      items: { star_pickaxe: 1, star_axe: 1, pulse_sword: 1, wooden_sword: 1 },
+    });
+    expect(inv.getMiningSpeedMultiplier(BLOCK_ID.stone)).toBe(5);
+    expect(inv.getMiningSpeedMultiplier(BLOCK_ID.oak_log)).toBe(5);
+    expect(inv.getCombatMultiplier()).toBe(4.5);
+
+    inv.equipTool("wooden_sword");
+    expect(inv.getCombatMultiplier()).toBe(2);
+    inv.equipTool("pulse_sword");
+    expect(inv.getCombatMultiplier()).toBe(4.5);
+    expect(new GameInventory().getCombatMultiplier()).toBe(1);
+  });
+
+  it("puts each rewarded HQ block into an empty hotbar slot", () => {
+    const inv = new GameInventory();
+    for (const [index, key] of ["hero_floor", "hero_wall", "hero_glass", "neon_block"].entries()) {
+      inv.addMinedBlock(key, 8);
+      expect(inv.getBlockCount(key)).toBe(8);
+      expect(inv.hotbar[index]).toBe(BLOCK_ID[key as keyof typeof BLOCK_ID]);
+    }
+  });
+
   it("treats city construction blocks as non-stone mining targets", () => {
     const inv = new GameInventory({ items: { wooden_pickaxe: 1 } });
 

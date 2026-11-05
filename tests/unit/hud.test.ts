@@ -14,6 +14,22 @@ describe("GameHUD child-friendly visual interface", () => {
     expect(getItemIcon(block)).toBe(`/${manifest.tiles[block]}`);
   });
 
+  it.each(["hero_floor", "hero_wall", "hero_glass", "neon_block"] as const)("resolves the rewarded %s icon to its HQ tile", (block) => {
+    expect(getItemIcon(block)).toBe(`/${manifest.tiles[block]}`);
+  });
+
+  it("shows the pulse sword in equipment with its catalog name and weapon type", () => {
+    const inventory = new GameInventory({ items: { pulse_sword: 1 } });
+    const hud = new GameHUD({ inventory, objectives: new ObjectiveManager() });
+    hud.setInventoryOpen(true, inventory);
+    document.querySelector<HTMLButtonElement>(".hud-tab-equipment")?.click();
+
+    const card = document.querySelector(".hud-equip-item-card");
+    expect(card?.textContent).toContain("Miecz Pulsujący");
+    expect(card?.textContent).toContain("Broń");
+    expect(card?.querySelector("img")?.getAttribute("src")).toBe(getItemIcon("pulse_sword"));
+  });
+
   it("renders large image icons for occupied hotbar slots without requiring reading", () => {
     const inventory = new GameInventory();
     inventory.addMinedBlock("oak_log", 1);

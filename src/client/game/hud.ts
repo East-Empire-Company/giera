@@ -1,5 +1,6 @@
 import assetManifest from "../../shared/asset-manifest.json";
 import { BLOCK_BY_ID, BLOCK_ID, type BlockId } from "../../shared/blocks";
+import { GEAR_CATALOG } from "../../shared/gear-catalog";
 import type { GameInventory } from "./inventory";
 import type { ObjectiveManager } from "./objectives";
 import { RECIPES, canCraft, craftRecipe } from "./recipes";
@@ -27,6 +28,9 @@ export function getItemIcon(key: string): string {
     iron_pickaxe: "/assets/ui/icons/pick_iron.png",
     iron_axe: "/assets/ui/icons/axe_iron.png",
     iron_sword: "/assets/ui/icons/axe_iron.png",
+    star_pickaxe: "/assets/ui/icons/pick_iron.png",
+    star_axe: "/assets/ui/icons/axe_iron.png",
+    pulse_sword: "/assets/ui/icons/axe_iron.png",
   };
   const cityIcons: Record<string, string> = {
     asphalt: `/${assetManifest.tiles.asphalt}`,
@@ -35,6 +39,10 @@ export function getItemIcon(key: string): string {
     plaster: `/${assetManifest.tiles.plaster}`,
     roof_tile: `/${assetManifest.tiles.roof_tile}`,
     tnt: `/${assetManifest.tiles.tnt}`,
+    hero_floor: `/${assetManifest.tiles.hero_floor}`,
+    hero_wall: `/${assetManifest.tiles.hero_wall}`,
+    hero_glass: `/${assetManifest.tiles.hero_glass}`,
+    neon_block: `/${assetManifest.tiles.neon_block}`,
   };
   return icons[key] ?? cityIcons[key] ?? "/assets/ui/kenney/star.png";
 }
@@ -694,15 +702,11 @@ export class GameHUD {
       this.equipmentSlotsEl.innerHTML = "";
       this.equipmentItemsEl.innerHTML = "";
 
-      const WEARABLE_ITEMS = [
-        { id: "wooden_pickaxe", name: "Drewniany Kilof", type: "Narzędzie" },
-        { id: "wooden_sword", name: "Drewniany Miecz", type: "Broń" },
-        { id: "stone_pickaxe", name: "Kamienny Kilof", type: "Narzędzie" },
-        { id: "stone_axe", name: "Kamienny Toporek", type: "Narzędzie" },
-        { id: "iron_pickaxe", name: "Żelazny Kilof", type: "Narzędzie" },
-        { id: "iron_axe", name: "Żelazny Topór", type: "Narzędzie" },
-        { id: "iron_sword", name: "Żelazny Miecz", type: "Broń" },
-      ];
+      const WEARABLE_ITEMS = GEAR_CATALOG.map((gear) => ({
+        id: gear.item,
+        name: gear.name,
+        type: gear.type,
+      }));
 
       const availableEquipment = WEARABLE_ITEMS.filter((item) => (state.items[item.id] ?? 0) > 0);
 

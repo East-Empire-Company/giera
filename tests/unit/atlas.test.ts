@@ -51,7 +51,7 @@ describe("source-pixel atlas packing", () => {
       expect(tile!.uv[3]).toBeGreaterThan(tile!.uv[1]);
     }
   });
-  it("accepts the configured 24-tile atlas capacity and rejects overflow", () => {
+  it("accepts the configured 32-tile atlas capacity and rejects overflow", () => {
     const runtimeExports = atlasBuilder as unknown as Record<string, unknown>;
     const candidate = runtimeExports["atlasGridDimensions"];
     expect(typeof candidate).toBe("function");
@@ -61,14 +61,14 @@ describe("source-pixel atlas packing", () => {
       resolution: number,
       gutter: number,
     ) => { columns: number; rows: number; cell: number; width: number; height: number };
-    expect(atlasGridDimensions(21, 512, 8)).toEqual({
+    expect(atlasGridDimensions(25, 512, 8)).toEqual({
       columns: 4,
-      rows: 6,
+      rows: 7,
       cell: 528,
       width: 2112,
-      height: 3168,
+      height: 3696,
     });
-    expect(() => atlasGridDimensions(25, 512, 8)).toThrow(RangeError);
+    expect(() => atlasGridDimensions(33, 512, 8)).toThrow(RangeError);
   });
 
 
@@ -96,6 +96,22 @@ describe("source-pixel atlas packing", () => {
     let difference = 0;
     for (let i = 0; i < expected.length; i++) difference += Math.abs(expected[i] - actual[i]);
     expect(difference / expected.length).toBeLessThan(8);
+  });
+
+  it("preserves neutral AO and roughness in generated HQ atlas tiles", async () => {
+    for (const name of ["hero_floor", "hero_wall", "neon_block"] as const) {
+      const tile = atlasManifest.tiles[name];
+      const x = Math.round(tile.uv[0] * atlasManifest.width - 0.5) + 16;
+      const y = Math.round((1 - tile.uv[3]) * atlasManifest.height - 0.5) + 16;
+      const pixel = await sharp("public/assets/textures/atlas-orm.webp")
+        .extract({ left: x, top: y, width: 1, height: 1 })
+        .raw()
+        .toBuffer();
+      expect(pixel[0], `${name} AO`).toBeGreaterThan(250);
+      expect(pixel[1], `${name} roughness`).toBeGreaterThan(225);
+      expect(pixel[1], `${name} roughness`).toBeLessThan(235);
+      expect(pixel[2], `${name} metalness`).toBe(0);
+    }
   });
 });
 

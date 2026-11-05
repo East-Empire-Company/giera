@@ -56,9 +56,9 @@ export class TrainingDummy {
     this.pivot.add(head);
   }
 
-  hit(): void {
+  hit(multiplier = 1): void {
     // Impulse hit
-    this.wobbleVelocity = 14.0;
+    this.wobbleVelocity = 14.0 * multiplier;
     this.wobbleAngle = 0.45;
   }
 

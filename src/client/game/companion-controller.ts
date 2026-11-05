@@ -210,7 +210,6 @@ export function createCompanionController(options: CompanionControllerOptions): 
     for (let x = block.x - 5; x <= block.x + 5; x += 1) {
       for (let z = block.z - 5; z <= block.z + 5; z += 1) {
         if (columns.has(key2(x, z))) continue;
-        if (Math.abs(x - from.x) + Math.abs(z - from.z) > 12) continue;
         for (let y = block.y - 8; y <= block.y + 1; y += 1) {
           if (!options.isLoaded(x, y - 1, z) || !options.isLoaded(x, y, z) || !options.isLoaded(x, y + 1, z)) continue;
           if (options.world(x, y - 1, z) === 0 || options.world(x, y, z) !== 0 || options.world(x, y + 1, z) !== 0) continue;

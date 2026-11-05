@@ -68,3 +68,7 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 | `assets/models/props/*` | [Ultimate Stylized Nature](https://quaternius.com/packs/ultimatestylizednature.html) / `glTF/{Grass_Small,Bush_Small_Flowers,Flower_1}.*` | Quaternius | CC0 |
 | `assets/sky/kloofendal_48d_partly_cloudy_1k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `1k HDR` | Poly Haven | CC0 |
 | `assets/textures/pbr/*` (except `tnt/`) | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |
+| `assets/textures/tiles/hero_floor.png` | Giera original headquarters textures / `hero_floor.png` | Giera contributors | MIT |
+| `assets/textures/tiles/hero_wall.png` | Giera original headquarters textures / `hero_wall.png` | Giera contributors | MIT |
+| `assets/textures/tiles/hero_glass.png` | Giera original headquarters textures / `hero_glass.png` | Giera contributors | MIT |
+| `assets/textures/tiles/neon_block.png` | Giera original headquarters textures / `neon_block.png` | Giera contributors | MIT |

@@ -19,6 +19,15 @@ describe("TrainingDummy", () => {
     expect(Math.abs(dummy.wobbleAngle)).toBeLessThan(0.05);
   });
 
+  it("keeps the default impulse at 14 and scales it exactly with combat gear", () => {
+    const dummy = new TrainingDummy({ x: 2, y: 50, z: 2 });
+    const impulse = () => (dummy as unknown as { wobbleVelocity: number }).wobbleVelocity;
+    dummy.hit();
+    expect(impulse()).toBe(14);
+    dummy.hit(4.5);
+    expect(impulse()).toBe(63);
+  });
+
   it("gives every vertex-coloured mesh a colour attribute so shared tile materials do not render black", () => {
     const tileMaterial = new THREE.MeshStandardMaterial({ vertexColors: true });
     const dummy = new TrainingDummy({ x: 2, y: 50, z: 2 }, { planks: tileMaterial, bark: tileMaterial });

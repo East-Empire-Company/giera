@@ -55,7 +55,7 @@ export default defineConfig({
     },
     {
       name: "mechanics",
-      testMatch: "**/mechanics.spec.ts",
+      testMatch: "**/{mechanics,tycoon-headquarters}.spec.ts",
       use: devices["Desktop Chrome"],
     },
     {

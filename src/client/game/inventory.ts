@@ -1,5 +1,6 @@
 import { BLOCK_ID, isStoneFamily, type BlockId } from "../../shared/blocks";
-import { RECIPES, type InventoryState } from "./recipes";
+import { GEAR_CATALOG, gearBonus, type GearBonus } from "../../shared/gear-catalog";
+import { type InventoryState } from "./recipes";
 
 export const MAX_EDITS_PER_CHUNK = 20_000;
 
@@ -104,6 +105,25 @@ export class GameInventory {
     return true;
   }
 
+  private getGearMultiplier(material: GearBonus["material"]): number {
+    if (this.equippedTool && (this.items[this.equippedTool] ?? 0) > 0) {
+      const equippedBonus = gearBonus(this.equippedTool);
+      if (equippedBonus?.material === material) return equippedBonus.speedMultiplier;
+    }
+
+    let best = 1;
+    for (const gear of GEAR_CATALOG) {
+      if (
+        gear.bonus.material === material &&
+        (this.items[gear.item] ?? 0) > 0 &&
+        gear.bonus.speedMultiplier > best
+      ) {
+        best = gear.bonus.speedMultiplier;
+      }
+    }
+    return best;
+  }
+
   getMiningSpeedMultiplier(blockId: number): number {
     const isWood =
       blockId === BLOCK_ID.oak_log ||
@@ -112,28 +132,11 @@ export class GameInventory {
     const isStoneOrOre = isStoneFamily(blockId);
 
     if (!isWood && !isStoneOrOre) return 1;
-    const targetMaterial = isWood ? "wood" : "stone";
+    return this.getGearMultiplier(isWood ? "wood" : "stone");
+  }
 
-    // If an equipped tool matches the material, return its multiplier
-    if (this.equippedTool && (this.items[this.equippedTool] ?? 0) > 0) {
-      const eqRecipe = RECIPES.find((r) => r.output.item === this.equippedTool);
-      if (eqRecipe?.toolBonus?.material === targetMaterial) {
-        return eqRecipe.toolBonus.speedMultiplier;
-      }
-    }
-
-    // Otherwise find best owned tool for this material
-    let best = 1;
-    for (const recipe of RECIPES) {
-      if (
-        recipe.toolBonus?.material === targetMaterial &&
-        (this.items[recipe.output.item] ?? 0) > 0 &&
-        recipe.toolBonus.speedMultiplier > best
-      ) {
-        best = recipe.toolBonus.speedMultiplier;
-      }
-    }
-    return best;
+  getCombatMultiplier(): number {
+    return this.getGearMultiplier("combat");
   }
 
   getBlockCount(key: string): number {

@@ -21,11 +21,14 @@ export function createStarToken(): THREE.Group {
     steps: 1,
   });
   geometry.center();
-  const material = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshPhysicalMaterial({
     color: 0xffd84d,
-    emissive: 0x7a4d00,
-    emissiveIntensity: 0.35,
-    roughness: 0.38,
+    emissive: 0xd88700,
+    emissiveIntensity: 1.15,
+    metalness: 0.35,
+    roughness: 0.28,
+    clearcoat: 0.65,
+    clearcoatRoughness: 0.22,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.castShadow = true;
@@ -33,6 +36,27 @@ export function createStarToken(): THREE.Group {
   const group = new THREE.Group();
   group.name = "tycoon-star-token";
   group.add(mesh);
+
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.82, 0.045, 10, 40),
+    new THREE.MeshStandardMaterial({
+      color: 0xffed9c,
+      emissive: 0xffb813,
+      emissiveIntensity: 1.35,
+      metalness: 0.65,
+      roughness: 0.25,
+    })
+  );
+  halo.name = "tycoon-star-halo";
+  halo.castShadow = true;
+  group.add(halo);
+
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0xfff4bd, emissive: 0xffd84d, emissiveIntensity: 1.6, roughness: 0.2 })
+  );
+  core.name = "tycoon-star-core";
+  group.add(core);
   return group;
 }
 
