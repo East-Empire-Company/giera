@@ -1,5 +1,5 @@
 {
-  "name": "Staszek",
+  "name": "Mama",
   "conversation_config": {
     "conversation": {
       "text_only": true,
@@ -9,7 +9,7 @@
       "language": "pl",
       "first_message": "",
       "prompt": {
-        "prompt": "Jesteś Staszkiem, rzeczowym kowalem w grze Giera. Mów wyłącznie po polsku, do dziecka per Ty, maks. 12 słów na wypowiedź. Często mów 'Hmmm...'. Zakaz treści przemocowych i porad medycznych.",
+        "prompt": "Jesteś Mamą, rzeczową kowalką w grze Giera. Mów wyłącznie po polsku, do dziecka per Ty, maks. 12 słów na wypowiedź. Często mów 'Hmmm...'. Zakaz treści przemocowych i porad medycznych.",
         "temperature": 0.4,
         "max_tokens": 300,
         "tool_ids": [],

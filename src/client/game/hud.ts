@@ -453,12 +453,12 @@ export class GameHUD {
 
     const send = async (text: string) => {
       if (!text.trim()) return;
-      replyBubble.textContent = "Mina myśli...";
+      replyBubble.textContent = `${options.npcName} myśli...`;
       try {
         const answer = await options.onSend(text);
         replyBubble.textContent = answer;
       } catch {
-        replyBubble.textContent = "Mina chwilowo nie może odpowiedzieć. Spróbuj za chwilę!";
+        replyBubble.textContent = `${options.npcName} chwilowo nie może odpowiedzieć. Spróbuj za chwilę!`;
       }
     };
 

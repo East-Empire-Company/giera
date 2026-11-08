@@ -49,7 +49,7 @@ jobs:
             --exclude='node_modules/@*/*-linux-*' \
             --exclude='coverage' --exclude='dist' \
             package.json bun.lock tsconfig.json vite.config.ts vitest.config.ts \
-            node_modules/ src/ public/ platform/xbox-uwp-giera/ scripts/ server/ main.ts
+            node_modules/ src/ public/ platform/xbox-uwp-giera/ scripts/ server/
           scp -o StrictHostKeyChecking=accept-new -J jakubsikora@mac-studio-jakub.tail5d39b4.ts.net \
             /tmp/giera-xbox-build.tar.gz jakubsikora@desktop-fjvada8.tail5d39b4.ts.net:/tmp/giera-xbox-build.tar.gz
           ssh -o StrictHostKeyChecking=accept-new -J jakubsikora@mac-studio-jakub.tail5d39b4.ts.net \

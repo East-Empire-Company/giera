@@ -546,12 +546,12 @@ check("exploring the map", explored > 8, `walked ${explored.toFixed(1)} blocks`)
 // ---------- checkpoint 8b: talk to an NPC ----------
 const npcTalk = await page.evaluate(async () => {
   const g = window.__GIERA__;
-  const mina = g.npcManager?.npcs?.find((n) => n.def?.id === "mina") ?? g.npcManager?.npcs?.[0];
-  if (!mina) return { ok: false, reason: "no npc" };
-  g.player.position.set(mina.position.x + 1.2, mina.position.y, mina.position.z + 1.2);
+  const tata = g.npcManager?.npcs?.find((n) => n.def?.id === "tata") ?? g.npcManager?.npcs?.[0];
+  if (!tata) return { ok: false, reason: "no npc" };
+  g.player.position.set(tata.position.x + 1.2, tata.position.y, tata.position.z + 1.2);
   g.player.velocity.set(0, 0, 0);
   g.player.syncAvatar();
-  return { ok: true, id: mina.def?.id ?? "?" };
+  return { ok: true, id: tata.def?.id ?? "?" };
 });
 if (npcTalk.ok) {
   await pause(1500);

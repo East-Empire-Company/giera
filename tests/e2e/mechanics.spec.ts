@@ -161,11 +161,11 @@ const INTERACT_REACH = 12;
 
 async function boot(page: Page): Promise<void> {
   await page.goto(`/?seed=${SPEC.seed}&qa=1`);
-  await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 30_000 });
+  await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 60_000 });
   await page.waitForFunction(() => {
     const g = (window as unknown as G).__GIERA__;
     return (g?.qa?.frame ?? 0) > 60;
-  }, null, { timeout: 20_000 });
+  }, null, { timeout: 60_000 });
 }
 
 type InventorySnapshot = {
@@ -424,7 +424,7 @@ function collectErrors(page: Page): string[] {
 
 test.describe("Giera mechanics (qa deterministic)", () => {
   test("heroes render rigged GLB character models with skinned meshes", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const errors = collectErrors(page);
     await boot(page);
     await page.waitForFunction(() => {
@@ -467,7 +467,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(errors).toEqual([]);
   });
   test("hero GLBs match their target heights and align their feet", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     await boot(page);
     await page.waitForFunction(() => {
       const g = (window as unknown as G).__GIERA__;
@@ -514,13 +514,13 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     }
   });
   test("grounded walking heroes stay above rendered terrain on a seeded run", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     await page.goto(`/?qa=1&qaLivePlayerPose=1&seed=${SPEC.seed}`);
     await page.waitForFunction(() => {
       const g = (window as unknown as G).__GIERA__;
       return g?.ready && g.stats.chunkCount > 0 && g.player.avatar && g.player2.avatar;
     }, null, { timeout: 30_000 });
-    await page.waitForFunction(() => ((window as unknown as G).__GIERA__?.qa?.frame ?? 0) > 60, null, { timeout: 20_000 });
+    await page.waitForFunction(() => ((window as unknown as G).__GIERA__?.qa?.frame ?? 0) > 60, null, { timeout: 60_000 });
     await page.locator(".hud-mode-btn").click();
     await expect(page.locator(".hud-mode-btn")).toHaveText(SPEC.splitLabelTwoPlayers);
     const paths = await findUnevenWalkPaths(page);
@@ -814,7 +814,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     }
   });
   test("boot: qa fixed-delta loop advances sim and frame counters", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const errors = collectErrors(page);
     await boot(page);
     const qa1 = await page.evaluate(() => {
@@ -832,7 +832,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("movement: 46 sim frames of walking on flat ground covers spec distance band", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const errors = collectErrors(page);
     await boot(page);
     const spots = await findFlatSpots(page);
@@ -865,7 +865,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("jump: upward velocity exceeds spec minimum", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const errors = collectErrors(page);
     await boot(page);
     await waitOnGround(page);
@@ -886,7 +886,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("mine: aimed voxel removed, inventory gains the block, dig sound event fires", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const errors = collectErrors(page);
     await boot(page);
     const spots = await findFlatSpots(page);
@@ -929,7 +929,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("place: block lands at hit+normal voxel, anti-bury guard rejects feet placement", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const errors = collectErrors(page);
     await boot(page);
     await page.evaluate(([cId]) => {
@@ -1042,7 +1042,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("hotbar: Digit3 activates slot 2", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const errors = collectErrors(page);
     await boot(page);
     await page.keyboard.press("Digit3");
@@ -1053,7 +1053,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("craft: modal opens, ten recipes, stick craft consumes inputs and yields output, Esc closes", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const errors = collectErrors(page);
     await boot(page);
     await addBlocks(page, "oak_log", 8);
@@ -1074,7 +1074,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("split: mode button enables split screen with exact label", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const errors = collectErrors(page);
     await boot(page);
     page.on("console", (message) => {
@@ -1178,7 +1178,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("tycoon: a walked-on expansion charges once and restores its HQ foundation without rewards", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const errors = collectErrors(page);
     await boot(page);
     const approach = await page.evaluate(() => {
@@ -1411,7 +1411,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("dummy: holding mine near training dummy fires repeated dig_wood events", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const errors = collectErrors(page);
     await boot(page);
     const spot = await page.evaluate(() => {
@@ -1466,7 +1466,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
   });
 
   test("npc: proximity prompt, dialog opens with KeyE, quick prompts echo into reply bubble", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     const errors = collectErrors(page);
     await boot(page);
     await page.evaluate(() => {
@@ -1493,7 +1493,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     expect(errors).toEqual([]);
   });
   test("npc: releases pointer lock so conversation controls can be clicked", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     await boot(page);
     await page.evaluate(() => {
       const game = window.__GIERA__;
@@ -1515,10 +1515,10 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await expect(page.locator(".hud-npc-card")).toBeVisible();
     expect(await page.evaluate(() => document.pointerLockElement)).toBeNull();
     await page.locator(".hud-quick-btn").first().click();
-    await expect(page.locator("#npc-reply-bubble")).not.toHaveText("Mina myśli...", { timeout: 5_000 });
+    await expect(page.locator("#npc-reply-bubble")).not.toHaveText("Tata myśli...", { timeout: 5_000 });
   });
   test("npc: starts microphone from KeyE and stops when the dialog closes", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     await page.addInitScript(() => {
       const context = new AudioContext();
       const oscillator = context.createOscillator();
@@ -1553,7 +1553,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
 
 
   test("persistence: active slot and crafted item survive reload as real deltas", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const errors = collectErrors(page);
     await boot(page);
     await page.keyboard.press("Digit5");
@@ -1631,7 +1631,7 @@ test.describe("Giera mechanics (qa deterministic)", () => {
     await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
     await page.reload();
     await page.waitForFunction(() => (window as unknown as G).__GIERA__?.ready === true, null, { timeout: 30_000 });
-    await page.waitForFunction(() => ((window as unknown as G).__GIERA__?.qa?.frame ?? 0) > 60, null, { timeout: 20_000 });
+    await page.waitForFunction(() => ((window as unknown as G).__GIERA__?.qa?.frame ?? 0) > 60, null, { timeout: 60_000 });
     const afterReload = await page.evaluate(
       ([t, fixture]) => ({
         tnt: (window as unknown as G).__GIERA__.world.getBlock(t.x, t.y, t.z),

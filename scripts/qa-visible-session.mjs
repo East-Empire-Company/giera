@@ -430,16 +430,16 @@ check("split screen", split.isSplit === true, JSON.stringify(split));
 // NPC TALK
 const npc = await page.evaluate(() => {
   const g = window.__GIERA__;
-  const mina = g.npcManager?.npcs?.find((n) => n.def?.id === "mina");
-  return mina ? mina.position.toArray() : null;
+  const tata = g.npcManager?.npcs?.find((n) => n.def?.id === "tata");
+  return tata ? tata.position.toArray() : null;
 });
 if (npc) {
   await pause(1200);
   await page.evaluate(() => {
     const g = window.__GIERA__;
-    const mina = g.npcManager?.npcs?.find((n) => n.def?.id === "mina");
-    if (!mina) return;
-    g.player.position.set(mina.position.x + 0.5, mina.position.y, mina.position.z);
+    const tata = g.npcManager?.npcs?.find((n) => n.def?.id === "tata");
+    if (!tata) return;
+    g.player.position.set(tata.position.x + 0.5, tata.position.y, tata.position.z);
     g.player.velocity.set(0, 0, 0);
     g.player.yaw = -Math.PI / 2;
     g.player.syncAvatar();

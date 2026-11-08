@@ -1,23 +1,23 @@
 {
   "version": 1,
-  "updated_at": "2026-10-24T18:25:00.000Z",
+  "updated_at": "2026-11-08T23:20:00.000Z",
   "npcs": {
-    "mina": {
-      "name": "Mina",
-      "voice_id": "C8ZVSJxcymeT86xT429O",
-      "agent_id": "agent_mina_local_lock",
+    "tata": {
+      "name": "Tata",
+      "voice_id": "cgSgspJ2msm6clMCkdW9",
+      "agent_id": "agent_tata_local_lock",
       "tools": ["give_block", "give_quest", "share_map_hint"]
     },
-    "staszek": {
-      "name": "Staszek",
-      "voice_id": "onwK4e9ZLuTAKqWW03F9",
-      "agent_id": "agent_staszek_local_lock",
-      "tools": ["give_block"]
+    "mama": {
+      "name": "Mama",
+      "voice_id": "0zoGygYjh97gnqQuHI0b",
+      "agent_id": "agent_mama_local_lock",
+      "tools": ["give_block", "share_map_hint"]
     },
-    "papuga": {
-      "name": "Papuga",
-      "voice_id": "EXAVITQu4vr4xnSDxMaL",
-      "agent_id": "agent_papuga_local_lock",
+    "ciocia": {
+      "name": "Ciocia Ewelina",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+      "agent_id": "agent_ciocia_local_lock",
       "tools": ["give_block"]
     }
   }
