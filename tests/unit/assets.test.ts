@@ -35,9 +35,9 @@ describe("runtime asset manifest", () => {
     ];
     for (const path of paths) expect(existsSync(join("public", path))).toBe(true);
   });
-  it("maps the concierge avatar to the Iskra rig", () => {
-    expect(manifest.concierge.iskra).toBe("assets/models/concierge/iskra.glb");
-    expect(existsSync(join("public", manifest.concierge.iskra))).toBe(true);
+  it("maps the concierge avatar to the Tata rig", () => {
+    expect(manifest.concierge.tata).toBe("assets/models/characters/tata.glb");
+    expect(existsSync(join("public", manifest.concierge.tata))).toBe(true);
   });
 
 

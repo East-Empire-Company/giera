@@ -226,6 +226,7 @@ type RigRefs = {
   rightArm?: THREE.Object3D;
   leftForeArm?: THREE.Object3D;
   rightForeArm?: THREE.Object3D;
+  tPoseArms: boolean;
   restQuats: Map<THREE.Object3D, THREE.Quaternion>;
   morphBindings: Map<string, MorphBinding[]>;
   ledMat: THREE.MeshBasicMaterial;
@@ -234,6 +235,13 @@ type RigRefs = {
 
 const TEMPLE_LOCAL_POS = new THREE.Vector3(-0.1686, 8.5239, 6.9778);
 const TEMPLE_LOCAL_NORMAL = new THREE.Vector3(0.3053, 0.1687, 0.9372).normalize();
+
+export const TATA_TEMPLE_LOCAL_POS = new THREE.Vector3(-0.0213, 0.0968, 0.0826);
+export const TATA_TEMPLE_LOCAL_NORMAL = new THREE.Vector3(-0.2166, 0.2148, 0.9523).normalize();
+export const TATA_TEMPLE_SCALE = 0.0082;
+const TARGET_AVATAR_HEIGHT = 1.72;
+const TATA_CAMERA_POSITION = new THREE.Vector3(0.02, 1.58, 1.42);
+const TATA_CAMERA_TARGET = new THREE.Vector3(0, 1.565, 0.05);
 
 export class ConciergeAvatar {
   private renderer: THREE.WebGLRenderer | null = null;
@@ -395,13 +403,22 @@ export class ConciergeAvatar {
 
   private async loadModel(): Promise<void> {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-    const modelPath = `/${assetManifest.concierge.iskra}`;
+    const modelPath = `/${assetManifest.concierge.tata}`;
     try {
       const gltf = await withRetry(() => loader.loadAsync(modelPath));
       if (this.disposed || !this.scene) return;
       const root = gltf.scene;
       root.rotation.y = 0.2;
       root.updateMatrixWorld(true);
+
+      const bounds = new THREE.Box3().setFromObject(root);
+      const sourceHeight = bounds.getSize(new THREE.Vector3()).y;
+      if (Number.isFinite(sourceHeight) && sourceHeight > 0 && sourceHeight < 1.3) {
+        const scale = TARGET_AVATAR_HEIGHT / sourceHeight;
+        root.scale.setScalar(scale);
+        root.position.y = -bounds.min.y * scale;
+        root.updateMatrixWorld(true);
+      }
 
       const restQuats = new Map<THREE.Object3D, THREE.Quaternion>();
       const morphBindings = new Map<string, MorphBinding[]>();
@@ -455,12 +472,16 @@ export class ConciergeAvatar {
         depthWrite: false,
       });
 
-      const head = root.getObjectByName("Head") ?? undefined;
+      const head = root.getObjectByName("Head") ?? root.getObjectByName("spine006") ?? undefined;
       if (head) {
+        const isAccuRig = head.name === "spine006";
         const templeGroup = new THREE.Group();
-        templeGroup.position.copy(TEMPLE_LOCAL_POS);
-        templeGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), TEMPLE_LOCAL_NORMAL);
-
+        templeGroup.position.copy(isAccuRig ? TATA_TEMPLE_LOCAL_POS : TEMPLE_LOCAL_POS);
+        templeGroup.quaternion.setFromUnitVectors(
+          new THREE.Vector3(0, 0, 1),
+          isAccuRig ? TATA_TEMPLE_LOCAL_NORMAL : TEMPLE_LOCAL_NORMAL,
+        );
+        if (isAccuRig) templeGroup.scale.setScalar(TATA_TEMPLE_SCALE);
         const bezel = new THREE.Mesh(
           new THREE.RingGeometry(0.46, 0.92, 32),
           new THREE.MeshStandardMaterial({ color: 0x1b242c, roughness: 0.3, metalness: 0.8, side: THREE.DoubleSide }),
@@ -472,22 +493,29 @@ export class ConciergeAvatar {
 
         templeGroup.add(bezel, ledHalo, ledRing);
         head.add(templeGroup);
+        if (isAccuRig && this.camera) {
+          this.camera.position.copy(TATA_CAMERA_POSITION);
+          this.camera.lookAt(TATA_CAMERA_TARGET);
+          this.camera.updateMatrixWorld(true);
+        }
       }
 
+      const tPoseArms = Boolean(root.getObjectByName("LeftArm"));
       this.rig = {
         root,
         head,
-        neck: root.getObjectByName("Neck") ?? undefined,
-        spine1: root.getObjectByName("Spine1") ?? undefined,
-        spine2: root.getObjectByName("Spine2") ?? undefined,
+        neck: root.getObjectByName("Neck") ?? root.getObjectByName("spine004") ?? undefined,
+        spine1: root.getObjectByName("Spine1") ?? root.getObjectByName("spine002") ?? undefined,
+        spine2: root.getObjectByName("Spine2") ?? root.getObjectByName("spine003") ?? undefined,
         leftEye: root.getObjectByName("LeftEye") ?? undefined,
         rightEye: root.getObjectByName("RightEye") ?? undefined,
-        leftShoulder: root.getObjectByName("LeftShoulder") ?? undefined,
-        rightShoulder: root.getObjectByName("RightShoulder") ?? undefined,
-        leftArm: root.getObjectByName("LeftArm") ?? undefined,
-        rightArm: root.getObjectByName("RightArm") ?? undefined,
-        leftForeArm: root.getObjectByName("LeftForeArm") ?? undefined,
-        rightForeArm: root.getObjectByName("RightForeArm") ?? undefined,
+        leftShoulder: root.getObjectByName("LeftShoulder") ?? root.getObjectByName("shoulderL") ?? undefined,
+        rightShoulder: root.getObjectByName("RightShoulder") ?? root.getObjectByName("shoulderR") ?? undefined,
+        leftArm: root.getObjectByName("LeftArm") ?? root.getObjectByName("upper_armL") ?? undefined,
+        rightArm: root.getObjectByName("RightArm") ?? root.getObjectByName("upper_armR") ?? undefined,
+        leftForeArm: root.getObjectByName("LeftForeArm") ?? root.getObjectByName("forearmL") ?? undefined,
+        rightForeArm: root.getObjectByName("RightForeArm") ?? root.getObjectByName("forearmR") ?? undefined,
+        tPoseArms,
         restQuats,
         morphBindings,
         ledMat,
@@ -522,6 +550,13 @@ export class ConciergeAvatar {
   private applyRelaxedArms(breath: number): void {
     if (!this.rig) return;
     const lift = breath * 0.012;
+    if (!this.rig.tPoseArms) {
+      this.rotateBoneWorld(this.rig.leftShoulder, 0, 0, lift);
+      this.rotateBoneWorld(this.rig.rightShoulder, 0, 0, -lift);
+      this.rotateBoneWorld(this.rig.leftArm, 0, 0, lift * 0.5);
+      this.rotateBoneWorld(this.rig.rightArm, 0, 0, -lift * 0.5);
+      return;
+    }
     this.rotateBoneWorld(this.rig.leftShoulder, 0, 0, -0.12 + lift);
     this.rotateBoneWorld(this.rig.rightShoulder, 0, 0, 0.12 - lift);
     this.rotateBoneWorld(this.rig.leftArm, -0.06, 0.08, -1.24 + lift * 0.5);
@@ -598,11 +633,15 @@ export class ConciergeAvatar {
     this.smoothedHead.eyePitch += (pose.eyePitch - this.smoothedHead.eyePitch) * eyeRate;
     this.smoothedHead.eyeYaw += (pose.eyeYaw - this.smoothedHead.eyeYaw) * eyeRate;
 
+    const speechDrive =
+      rig.morphBindings.size === 0 && this.state === "speaking"
+        ? ((pose.morphs.open ?? 0) * 0.09 + (pose.morphs.aa ?? 0) * 0.06) * Math.sin(this.elapsed * 18)
+        : 0;
     this.rotateBoneWorld(rig.spine1, pose.breath * 0.008, 0, 0);
-    this.rotateBoneWorld(rig.spine2, pose.breath * 0.012, this.smoothedHead.yaw * 0.14, 0);
+    this.rotateBoneWorld(rig.spine2, pose.breath * 0.012 + speechDrive * 0.25, this.smoothedHead.yaw * 0.14, 0);
     this.applyRelaxedArms(pose.breath);
-    this.rotateBoneWorld(rig.neck, this.smoothedHead.pitch * 0.35, this.smoothedHead.yaw * 0.35, this.smoothedHead.roll * 0.35);
-    this.rotateBoneWorld(rig.head, this.smoothedHead.pitch * 0.65, this.smoothedHead.yaw * 0.65, this.smoothedHead.roll * 0.65);
+    this.rotateBoneWorld(rig.neck, (this.smoothedHead.pitch + speechDrive * 0.4) * 0.35, this.smoothedHead.yaw * 0.35, this.smoothedHead.roll * 0.35);
+    this.rotateBoneWorld(rig.head, (this.smoothedHead.pitch + speechDrive) * 0.65, this.smoothedHead.yaw * 0.65, this.smoothedHead.roll * 0.65);
     this.rotateBoneWorld(rig.leftEye, this.smoothedHead.eyePitch, this.smoothedHead.eyeYaw, 0);
     this.rotateBoneWorld(rig.rightEye, this.smoothedHead.eyePitch, this.smoothedHead.eyeYaw, 0);
 

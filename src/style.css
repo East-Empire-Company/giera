@@ -102,11 +102,11 @@ body {
 #launch-concierge-slot {
   align-self: end;
   justify-self: end;
-  width: min(300px, 28vw);
+  width: min(380px, 30vw);
 }
 
 #launch-concierge-slot .concierge-canvas {
-  height: clamp(200px, 36vh, 300px);
+  height: clamp(320px, 58vh, 460px);
 }
 
 .launch-brand {

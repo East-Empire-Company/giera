@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { ConciergeAvatar, computeConciergePose, extractVoiceBands } from "../../src/client/concierge/avatar";
+import { ConciergeAvatar, computeConciergePose, extractVoiceBands, TATA_TEMPLE_LOCAL_NORMAL, TATA_TEMPLE_LOCAL_POS, TATA_TEMPLE_SCALE } from "../../src/client/concierge/avatar";
 
 describe("ConciergeAvatar pose and lip-sync", () => {
   it("separates low-vowel and high-sibilant voice bands from output spectrum", () => {
@@ -88,5 +88,15 @@ describe("ConciergeAvatar pose and lip-sync", () => {
     avatar.hide();
     expect(avatar.isVisible).toBe(false);
     avatar.dispose();
+  });
+
+  it("anchors the Tata temple LED on the forehead, clear of the hairline", () => {
+    const temple = TATA_TEMPLE_LOCAL_POS;
+    expect(temple.y).toBeGreaterThan(0.05);
+    expect(temple.y).toBeLessThan(0.12);
+    expect(temple.z).toBeGreaterThan(0.05);
+    expect(TATA_TEMPLE_LOCAL_NORMAL.z).toBeGreaterThan(0.8);
+    expect(TATA_TEMPLE_SCALE).toBeGreaterThan(0.005);
+    expect(TATA_TEMPLE_SCALE).toBeLessThan(0.02);
   });
 });

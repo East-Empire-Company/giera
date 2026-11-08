@@ -28,10 +28,10 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
   });
 
   test("launch scene renders the concierge beside the settings panel", async ({ page }, testInfo) => {
-    const iskraStatuses: number[] = [];
+    const tataStatuses: number[] = [];
     page.on("response", (response) => {
-      if (new URL(response.url()).pathname === "/assets/models/concierge/iskra.glb") {
-        iskraStatuses.push(response.status());
+      if (new URL(response.url()).pathname === "/assets/models/characters/tata.glb") {
+        tataStatuses.push(response.status());
       }
     });
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -77,7 +77,7 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
       JSON.stringify(
         {
           url: page.url(),
-          iskraStatuses,
+          tataStatuses,
           avatarReady: await canvas.getAttribute("data-avatar-ready"),
           compositeScreenshot: screenshotPath,
           alphaScreenshot: alphaScreenshotPath,
@@ -90,12 +90,12 @@ test.describe("Giera Voxel Sandbox MVP E2E", () => {
       )
     );
     console.log(
-      `Concierge probe: ${JSON.stringify({ screenshotPath, alphaScreenshotPath, probePath, iskraStatuses, nontransparentPixels })}`
+      `Concierge probe: ${JSON.stringify({ screenshotPath, alphaScreenshotPath, probePath, tataStatuses, nontransparentPixels })}`
     );
 
     expect(bounds.robotLeft).toBeGreaterThanOrEqual(bounds.panelRight);
     expect(bounds.canvasWidth).toBeGreaterThan(300);
-    expect(iskraStatuses).toContain(200);
+    expect(tataStatuses).toContain(200);
     expect(await canvas.getAttribute("data-avatar-ready")).toBe("true");
     expect(nontransparentPixels).toBeGreaterThan(80_000);
   });

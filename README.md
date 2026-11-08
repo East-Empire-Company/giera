@@ -1,7 +1,7 @@
 # giera
 
 ## Tata world tools
-The launch and pause concierge uses the dedicated Iskra avatar, not Tata's world GLB.
+The launch and pause concierge uses Tata's world GLB.
 
 Tata can build cabins or lookout towers with randomized size and materials.
 He can dig an 8×2×2 mine through untouched stone, dirt, grass, sand, and ore.
