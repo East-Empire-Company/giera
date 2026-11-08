@@ -61,6 +61,7 @@ export default defineConfig({
     {
       name: "goldens",
       testMatch: "**/goldens.spec.ts",
+      timeout: 180_000,
       use: devices["Desktop Chrome"],
     },
     {

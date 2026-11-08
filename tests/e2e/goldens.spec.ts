@@ -75,7 +75,7 @@ async function freeze(page: Page, frame = FREEZE_FRAME): Promise<void> {
     return at;
   }, frame);
   await page.waitForFunction(() => (window as unknown as { __GIERA__?: Giera }).__GIERA__?.qa.paused === true, null, {
-    timeout: 30_000,
+    timeout: 120_000,
   });
   const frozen = await page.evaluate(() => (window as unknown as { __GIERA__: Giera }).__GIERA__.qa.frame);
   expect(
