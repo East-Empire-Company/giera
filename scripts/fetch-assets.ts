@@ -31,7 +31,7 @@ type AssetSourceId =
   | "kaykit-adventurers"
   | "quaternius-nature"
   | "kenney-factory-kit"
-  | "valid-rocketbox"
+  | "local-family-avatar"
   | "local-tnt-texture"
   | "giera-original";
 type AssetPick = { source: AssetSourceId; member: string; path: string; preplaced?: boolean };
@@ -52,7 +52,7 @@ const sourceInfo: Record<AssetSourceId, { title: string; author: string; license
   "kaykit-adventurers": { title: "KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)", author: "Kay Lousberg", license: "CC0 1.0", url: "https://kaylousberg.itch.io/kaykit-adventurers" },
   "quaternius-nature": { title: "Ultimate Stylized Nature (Grass_Small, Bush_Small_Flowers, Flower_1)", author: "Quaternius", license: "CC0", url: "https://quaternius.com/packs/ultimatestylizednature.html" },
   "kenney-factory-kit": { title: "Factory Kit 3.0", author: "Kenney", license: "CC0", url: "https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip" },
-  "valid-rocketbox": { title: "Validated Avatar Library (VALID) / Microsoft Rocketbox", author: "Tiffany Do, Microsoft Rocketbox", license: "MIT", url: "https://github.com/c-frame/valid-avatars-glb" },
+  "local-family-avatar": { title: "Family character avatar (supplied locally; original source not recorded)", author: "Unknown (provenance not recorded)", license: "Unverified", url: "" },
   "local-tnt-texture": { title: "TNT block texture (supplied locally; original source not recorded)", author: "Unknown (provenance not recorded)", license: "Unverified", url: "" },
   "giera-original": { title: "Giera original headquarters textures", author: "Giera contributors", license: "MIT", url: "" },
 };
@@ -87,10 +87,15 @@ export const assetPicks: Record<string, Record<string, AssetPick>> = {
     neon_block: { source: "giera-original", member: "neon_block.png", path: "assets/textures/tiles/neon_block.png", preplaced: true },
   },
   models: {
-    playerOne: { source: "kaykit-adventurers", member: "Characters/gltf/Knight.glb", path: "assets/models/kaykit/knight.glb", preplaced: true },
-    playerTwo: { source: "kaykit-adventurers", member: "Characters/gltf/Rogue.glb", path: "assets/models/kaykit/rogue.glb", preplaced: true },
-    mina: { source: "kaykit-adventurers", member: "Characters/gltf/Mage.glb", path: "assets/models/kaykit/mage.glb", preplaced: true },
-    staszek: { source: "kaykit-adventurers", member: "Characters/gltf/Ranger.glb", path: "assets/models/kaykit/ranger.glb", preplaced: true },
+    ziemek: { source: "local-family-avatar", member: "characters/ziemek.glb", path: "assets/models/characters/ziemek.glb", preplaced: true },
+    gniewko: { source: "local-family-avatar", member: "characters/gniewko.glb", path: "assets/models/characters/gniewko.glb", preplaced: true },
+    tata: { source: "local-family-avatar", member: "characters/tata.glb", path: "assets/models/characters/tata.glb", preplaced: true },
+    mama: { source: "local-family-avatar", member: "characters/mama.glb", path: "assets/models/characters/mama.glb", preplaced: true },
+    ciocia: { source: "local-family-avatar", member: "characters/ciocia.glb", path: "assets/models/characters/ciocia.glb", preplaced: true },
+    playerOne: { source: "local-family-avatar", member: "characters/ziemek.glb", path: "assets/models/characters/ziemek.glb", preplaced: true },
+    playerTwo: { source: "local-family-avatar", member: "characters/gniewko.glb", path: "assets/models/characters/gniewko.glb", preplaced: true },
+    ranger: { source: "kaykit-adventurers", member: "Characters/gltf/Ranger.glb", path: "assets/models/kaykit/ranger.glb", preplaced: true },
+    mage: { source: "kaykit-adventurers", member: "Characters/gltf/Mage.glb", path: "assets/models/kaykit/mage.glb", preplaced: true },
     factoryConveyor: { source: "kenney-factory-kit", member: "Models/GLB format/conveyor.glb", path: "assets/models/kenney-factory-kit/conveyor.glb" },
     factoryLongConveyor: { source: "kenney-factory-kit", member: "Models/GLB format/conveyor-long.glb", path: "assets/models/kenney-factory-kit/conveyor-long.glb" },
     factoryMachine: { source: "kenney-factory-kit", member: "Models/GLB format/machine.glb", path: "assets/models/kenney-factory-kit/machine.glb" },
@@ -99,8 +104,12 @@ export const assetPicks: Record<string, Record<string, AssetPick>> = {
     factoryButton: { source: "kenney-factory-kit", member: "Models/GLB format/button-floor-round.glb", path: "assets/models/kenney-factory-kit/button-floor-round.glb" },
     factoryGear: { source: "kenney-factory-kit", member: "Models/GLB format/cog-a.glb", path: "assets/models/kenney-factory-kit/cog-a.glb" },
   },
+  animations: {
+    companionIdle: { source: "kaykit-adventurers", member: "Animations/gltf/Rig_Medium/General.glb", path: "assets/models/kaykit/anims/Rig_Medium_General.glb", preplaced: true },
+    companionWalk: { source: "kaykit-adventurers", member: "Animations/gltf/Rig_Medium/MovementBasic.glb", path: "assets/models/kaykit/anims/Rig_Medium_MovementBasic.glb", preplaced: true },
+  },
   concierge: {
-    iskra: { source: "valid-rocketbox", member: "avatars/White/White_F_2_Casual.glb", path: "assets/models/concierge/iskra.glb", preplaced: true },
+    tata: { source: "local-family-avatar", member: "characters/tata.glb", path: "assets/models/characters/tata.glb", preplaced: true },
   },
   modelTextures: {
     factoryKit: { source: "kenney-factory-kit", member: "Models/GLB format/Textures/colormap.png", path: "assets/models/kenney-factory-kit/Textures/colormap.png" },
@@ -223,8 +232,17 @@ async function fetchPixelifySans(): Promise<string[]> {
   return ["assets/fonts/pixelify-sans.css", "assets/fonts/OFL.txt", ...files.map((file) => `assets/fonts/${file.file}`)];
 }
 
-async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
+export function buildAssetManifest(fontPaths: string[]): Record<string, Record<string, string>> {
   const manifest: Record<string, Record<string, string>> = {};
+  for (const [group, picks] of Object.entries(assetPicks)) {
+    manifest[group] = Object.fromEntries(Object.entries(picks).map(([key, pick]) => [key, pick.path]));
+  }
+  manifest.overlays = { crack: "assets/textures/crackover.png" };
+  manifest.fonts = Object.fromEntries([...fontPaths].sort().map((path, index) => [`file${index}`, path]));
+  return manifest;
+}
+
+export function buildAssetNotices(): string {
   const notices = [
     "# Third-party asset notices",
     "",
@@ -233,38 +251,52 @@ async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
     "| Runtime path | Source file | Author | License |",
     "|---|---|---|---|",
   ];
+  const attributed = new Set<string>();
+  for (const picks of Object.values(assetPicks)) {
+    for (const pick of Object.values(picks)) {
+      if (attributed.has(pick.path)) continue;
+      attributed.add(pick.path);
+      const info = sourceInfo[pick.source];
+      notices.push(`| \`${pick.path}\` | ${info.url ? `[${info.title}](${info.url})` : info.title} / \`${pick.member}\` | ${info.author} | ${info.license} |`);
+    }
+  }
+  notices.push(
+    "| `assets/textures/crackover.png` | [64x Textures an Overlays](https://opengameart.org/node/31077) / `crackover.png` | FacadeGaikan | CC0 |",
+    "| `assets/fonts/*` | [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) | Pixelify Sans Project Authors | SIL OFL 1.1 |",
+    "| `assets/models/kaykit/knight.glb`, `assets/models/kaykit/rogue.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/{Knight,Rogue}.glb` | Kay Lousberg | CC0 1.0 |",
+    "| `assets/models/props/*` | [Ultimate Stylized Nature](https://quaternius.com/packs/ultimatestylizednature.html) / `glTF/{Grass_Small,Bush_Small_Flowers,Flower_1}.*` | Quaternius | CC0 |",
+    "| `assets/sky/kloofendal_48d_partly_cloudy_1k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `1k HDR` | Poly Haven | CC0 |",
+    "| `assets/textures/pbr/*` (except `tnt/`) | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |",
+  );
+  return `${notices.join("\n")}\n`;
+}
+
+async function packageSelectedAssets(fontPaths: string[]): Promise<void> {
   for (const [group, picks] of Object.entries(assetPicks)) {
-    manifest[group] = {};
-    for (const [key, pick] of Object.entries(picks)) {
+    for (const pick of Object.values(picks)) {
       const info = sourceInfo[pick.source];
       const outputPath = join(publicRoot, pick.path.slice("assets/".length));
       await mkdir(dirname(outputPath), { recursive: true });
       if (pick.preplaced) {
         if (!existsSync(outputPath)) throw new Error(`Preplaced asset missing (manual download required): ${outputPath} — source: ${info.url}`);
-      } else {
-        const sourcePath = join(cacheRoot, "unpacked", pick.source, pick.member);
-        if (group === "models") {
-          execFileSync(resolve("node_modules/.bin/gltf-transform"), ["meshopt", sourcePath, outputPath, "--level", "medium"], { stdio: "inherit" });
-        } else {
-          await copyFile(sourcePath, outputPath);
-        }
+        continue;
       }
-      manifest[group][key] = pick.path;
-      notices.push(`| \`${pick.path}\` | ${info.url ? `[${info.title}](${info.url})` : info.title} / \`${pick.member}\` | ${info.author} | ${info.license} |`);
+      const sourcePath = join(cacheRoot, "unpacked", pick.source, pick.member);
+      if (!existsSync(sourcePath)) {
+        if (!existsSync(outputPath)) {
+          throw new Error(`Source file missing (run bun run assets:fetch): ${sourcePath} — source: ${info.url}`);
+        }
+        continue;
+      }
+      if (group === "models") {
+        execFileSync(resolve("node_modules/.bin/gltf-transform"), ["meshopt", sourcePath, outputPath, "--level", "medium"], { stdio: "inherit" });
+      } else {
+        await copyFile(sourcePath, outputPath);
+      }
     }
   }
-  manifest.overlays = { crack: "assets/textures/crackover.png" };
-  manifest.fonts = Object.fromEntries(fontPaths.map((path, index) => [`file${index}`, path]));
-  notices.push(
-    "| `assets/textures/crackover.png` | [64x Textures an Overlays](https://opengameart.org/node/31077) / `crackover.png` | FacadeGaikan | CC0 |",
-    "| `assets/fonts/*` | [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) | Pixelify Sans Project Authors | SIL OFL 1.1 |",
-    "| `assets/models/kaykit/anims/Rig_Medium_*.glb` | [KayKit - Character Pack : Adventurers 2.0](https://kaylousberg.itch.io/kaykit-adventurers) / `Animations/gltf/Rig_Medium/*.glb` | Kay Lousberg | CC0 1.0 |",
-    "| `assets/models/props/*` | [Ultimate Stylized Nature](https://quaternius.com/packs/ultimatestylizednature.html) / `glTF/{Grass_Small,Bush_Small_Flowers,Flower_1}.*` | Quaternius | CC0 |",
-    "| `assets/sky/kloofendal_48d_partly_cloudy_1k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `1k HDR` | Poly Haven | CC0 |",
-    "| `assets/textures/pbr/*` (except `tnt/`) | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |",
-  );
-  await writeFile(resolve("src/shared/asset-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  await writeFile(join(publicRoot, "NOTICES.md"), `${notices.join("\n")}\n`);
+  await writeFile(resolve("src/shared/asset-manifest.json"), `${JSON.stringify(buildAssetManifest(fontPaths), null, 2)}\n`);
+  await writeFile(join(publicRoot, "NOTICES.md"), buildAssetNotices());
 }
 
 const pbrMaterialIds = ["Grass001", "Ground020", "Rock064", "Rock058", "Ground080", "Bark001", "ScatteredLeaves009", "Planks010", "Asphalt033", "PavingStones151", "Bricks097", "Plaster001", "RoofingTiles013A"] as const;
@@ -291,25 +323,9 @@ async function fetchAmbientCgPbr(): Promise<void> {
 }
 
 async function packagePbrAssets(): Promise<void> {
-  const manifestPath = resolve("src/shared/asset-manifest.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, Record<string, string>>;
-  for (const [key, pick] of Object.entries(assetPicks.tiles)) {
-    if (pick.source === "ambientcg-pbr" || pick.source === "giera-original") manifest.tiles[key] ??= pick.path;
-  }
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-
-  const noticesPath = join(publicRoot, "NOTICES.md");
-  const oldTitle = "ambientCG PBR materials (Grass001, Ground020, Rock064, Rock058, Ground080, Bark001, ScatteredLeaves009, Planks010)";
-  let notices = (await readFile(noticesPath, "utf8")).replaceAll(oldTitle, sourceInfo["ambientcg-pbr"].title);
-  const additions: string[] = [];
-  for (const pick of Object.values(assetPicks.tiles)) {
-    if ((pick.source !== "ambientcg-pbr" && pick.source !== "giera-original") || notices.includes(`| \`${pick.path}\` |`)) continue;
-    const info = sourceInfo[pick.source];
-    const source = info.url ? `[${info.title}](${info.url})` : info.title;
-    additions.push(`| \`${pick.path}\` | ${source} / \`${pick.member}\` | ${info.author} | ${info.license} |`);
-  }
-  if (additions.length) notices = `${notices.endsWith("\n") ? notices : `${notices}\n`}${additions.join("\n")}\n`;
-  await writeFile(noticesPath, notices);
+  const fonts = (await readdir(join(publicRoot, "fonts"))).map((file) => `assets/fonts/${file}`);
+  await writeFile(resolve("src/shared/asset-manifest.json"), `${JSON.stringify(buildAssetManifest(fonts), null, 2)}\n`);
+  await writeFile(join(publicRoot, "NOTICES.md"), buildAssetNotices());
 }
 
 async function fetchHdri(): Promise<void> {

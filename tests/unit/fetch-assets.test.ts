@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import assetManifest from "../../src/shared/asset-manifest.json";
 import { assetPicks, parseGoogleFontCss, resolveKenneyZipUrl } from "../../scripts/fetch-assets";
@@ -27,5 +29,21 @@ describe("asset manifest packaging", () => {
   it("keeps every runtime tile reproducible from the source picks", () => {
     const picked = Object.fromEntries(Object.entries(assetPicks.tiles).map(([key, pick]) => [key, pick.path]));
     expect(picked).toEqual(assetManifest.tiles);
+  });
+
+  it("keeps every shipped model, animation and concierge path reproducible from the source picks", () => {
+    for (const group of ["models", "animations", "concierge"] as const) {
+      const picked = Object.fromEntries(Object.entries(assetPicks[group]).map(([key, pick]) => [key, pick.path]));
+      expect(picked).toEqual(assetManifest[group]);
+    }
+  });
+
+  it("attributes every model the manifest ships in the third-party notices", () => {
+    const notices = readFileSync(resolve("public/assets/NOTICES.md"), "utf8");
+    for (const group of ["models", "animations", "concierge"] as const) {
+      for (const path of Object.values(assetManifest[group])) {
+        expect(notices, `missing notice row for ${path}`).toContain(`| \`${path}\` |`);
+      }
+    }
   });
 });

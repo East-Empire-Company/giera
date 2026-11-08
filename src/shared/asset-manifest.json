@@ -49,7 +49,7 @@
     "companionWalk": "assets/models/kaykit/anims/Rig_Medium_MovementBasic.glb"
   },
   "concierge": {
-    "iskra": "assets/models/concierge/iskra.glb"
+    "tata": "assets/models/characters/tata.glb"
   },
   "modelTextures": {
     "factoryKit": "assets/models/kenney-factory-kit/Textures/colormap.png"
@@ -92,11 +92,11 @@
     "crack": "assets/textures/crackover.png"
   },
   "fonts": {
-    "file0": "assets/fonts/pixelify-sans.css",
+    "file0": "assets/fonts/OFL.txt",
     "file1": "assets/fonts/pixelify-sans-0.ttf",
     "file2": "assets/fonts/pixelify-sans-1.ttf",
-    "file3": "assets/fonts/OFL.txt",
+    "file3": "assets/fonts/pixelify-sans-2.ttf",
     "file4": "assets/fonts/pixelify-sans-3.ttf",
-    "file5": "assets/fonts/pixelify-sans-2.ttf"
+    "file5": "assets/fonts/pixelify-sans.css"
   }
 }

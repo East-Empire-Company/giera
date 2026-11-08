@@ -25,10 +25,17 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 | `assets/textures/pbr/Plaster001/Plaster001_1K-JPG_Color.jpg` | [ambientCG PBR materials (Grass001, Ground020, Rock064, Rock058, Ground080, Bark001, ScatteredLeaves009, Planks010, Asphalt033, PavingStones151, Bricks097, Plaster001, RoofingTiles013A)](https://ambientcg.com) / `Plaster001_1K-JPG_Color.jpg` | ambientCG | CC0 / Public Domain |
 | `assets/textures/pbr/RoofingTiles013A/RoofingTiles013A_1K-JPG_Color.jpg` | [ambientCG PBR materials (Grass001, Ground020, Rock064, Rock058, Ground080, Bark001, ScatteredLeaves009, Planks010, Asphalt033, PavingStones151, Bricks097, Plaster001, RoofingTiles013A)](https://ambientcg.com) / `RoofingTiles013A_1K-JPG_Color.jpg` | ambientCG | CC0 / Public Domain |
 | `assets/textures/pbr/tnt/tnt_1K-JPG_Color.jpg` | TNT block texture (supplied locally; original source not recorded) / `tnt_1K-JPG_Color.jpg` | Unknown (provenance not recorded) | Unverified |
-| `assets/models/kaykit/knight.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/Knight.glb` | Kay Lousberg | CC0 1.0 |
-| `assets/models/kaykit/rogue.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/Rogue.glb` | Kay Lousberg | CC0 1.0 |
-| `assets/models/kaykit/mage.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/Mage.glb` | Kay Lousberg | CC0 1.0 |
+| `assets/textures/tiles/hero_floor.png` | Giera original headquarters textures / `hero_floor.png` | Giera contributors | MIT |
+| `assets/textures/tiles/hero_wall.png` | Giera original headquarters textures / `hero_wall.png` | Giera contributors | MIT |
+| `assets/textures/tiles/hero_glass.png` | Giera original headquarters textures / `hero_glass.png` | Giera contributors | MIT |
+| `assets/textures/tiles/neon_block.png` | Giera original headquarters textures / `neon_block.png` | Giera contributors | MIT |
+| `assets/models/characters/ziemek.glb` | Family character avatar (supplied locally; original source not recorded) / `characters/ziemek.glb` | Unknown (provenance not recorded) | Unverified |
+| `assets/models/characters/gniewko.glb` | Family character avatar (supplied locally; original source not recorded) / `characters/gniewko.glb` | Unknown (provenance not recorded) | Unverified |
+| `assets/models/characters/tata.glb` | Family character avatar (supplied locally; original source not recorded) / `characters/tata.glb` | Unknown (provenance not recorded) | Unverified |
+| `assets/models/characters/mama.glb` | Family character avatar (supplied locally; original source not recorded) / `characters/mama.glb` | Unknown (provenance not recorded) | Unverified |
+| `assets/models/characters/ciocia.glb` | Family character avatar (supplied locally; original source not recorded) / `characters/ciocia.glb` | Unknown (provenance not recorded) | Unverified |
 | `assets/models/kaykit/ranger.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/Ranger.glb` | Kay Lousberg | CC0 1.0 |
+| `assets/models/kaykit/mage.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/Mage.glb` | Kay Lousberg | CC0 1.0 |
 | `assets/models/kenney-factory-kit/conveyor.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/conveyor.glb` | Kenney | CC0 |
 | `assets/models/kenney-factory-kit/conveyor-long.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/conveyor-long.glb` | Kenney | CC0 |
 | `assets/models/kenney-factory-kit/machine.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/machine.glb` | Kenney | CC0 |
@@ -36,7 +43,8 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 | `assets/models/kenney-factory-kit/scanner-low.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/scanner-low.glb` | Kenney | CC0 |
 | `assets/models/kenney-factory-kit/button-floor-round.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/button-floor-round.glb` | Kenney | CC0 |
 | `assets/models/kenney-factory-kit/cog-a.glb` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/cog-a.glb` | Kenney | CC0 |
-| `assets/models/concierge/iskra.glb` | [Validated Avatar Library (VALID) / Microsoft Rocketbox](https://github.com/c-frame/valid-avatars-glb) / `avatars/White/White_F_2_Casual.glb` | Tiffany Do, Microsoft Rocketbox | MIT |
+| `assets/models/kaykit/anims/Rig_Medium_General.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Animations/gltf/Rig_Medium/General.glb` | Kay Lousberg | CC0 1.0 |
+| `assets/models/kaykit/anims/Rig_Medium_MovementBasic.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Animations/gltf/Rig_Medium/MovementBasic.glb` | Kay Lousberg | CC0 1.0 |
 | `assets/models/kenney-factory-kit/Textures/colormap.png` | [Factory Kit 3.0](https://opengameart.org/sites/default/files/kenney_factory-kit_3.0.zip) / `Models/GLB format/Textures/colormap.png` | Kenney | CC0 |
 | `assets/sky/clouds.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Other/clouds.png` | Kenney | CC0 |
 | `assets/sky/skybox_sideClouds.png` | [Voxel Pack](https://kenney.nl/assets/voxel-pack) / `PNG/Other/skybox_sideClouds.png` | Kenney | CC0 |
@@ -64,11 +72,7 @@ Visual assets are downloaded from the sources below. Texture packing preserves s
 | `assets/textures/water-normal.jpg` | [Ice 001 NormalGL](https://ambientcg.com/view?id=Ice001) / `Ice001_1K-JPG_NormalGL.jpg` | ambientCG | CC0 / Public Domain |
 | `assets/textures/crackover.png` | [64x Textures an Overlays](https://opengameart.org/node/31077) / `crackover.png` | FacadeGaikan | CC0 |
 | `assets/fonts/*` | [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) | Pixelify Sans Project Authors | SIL OFL 1.1 |
-| `assets/models/kaykit/anims/Rig_Medium_*.glb` | [KayKit - Character Pack : Adventurers 2.0](https://kaylousberg.itch.io/kaykit-adventurers) / `Animations/gltf/Rig_Medium/*.glb` | Kay Lousberg | CC0 1.0 |
+| `assets/models/kaykit/knight.glb`, `assets/models/kaykit/rogue.glb` | [KayKit - Character Pack : Adventurers 2.0 (characters + Rig_Medium animations)](https://kaylousberg.itch.io/kaykit-adventurers) / `Characters/gltf/{Knight,Rogue}.glb` | Kay Lousberg | CC0 1.0 |
 | `assets/models/props/*` | [Ultimate Stylized Nature](https://quaternius.com/packs/ultimatestylizednature.html) / `glTF/{Grass_Small,Bush_Small_Flowers,Flower_1}.*` | Quaternius | CC0 |
 | `assets/sky/kloofendal_48d_partly_cloudy_1k.hdr` | [Kloofendal 48d Partly Cloudy](https://polyhaven.com/a/kloofendal_48d_partly_cloudy) / `1k HDR` | Poly Haven | CC0 |
 | `assets/textures/pbr/*` (except `tnt/`) | [ambientCG](https://ambientcg.com) / `<id>_1K-JPG_{Color,NormalGL,Roughness,AmbientOcclusion}.jpg` | ambientCG | CC0 / Public Domain |
-| `assets/textures/tiles/hero_floor.png` | Giera original headquarters textures / `hero_floor.png` | Giera contributors | MIT |
-| `assets/textures/tiles/hero_wall.png` | Giera original headquarters textures / `hero_wall.png` | Giera contributors | MIT |
-| `assets/textures/tiles/hero_glass.png` | Giera original headquarters textures / `hero_glass.png` | Giera contributors | MIT |
-| `assets/textures/tiles/neon_block.png` | Giera original headquarters textures / `neon_block.png` | Giera contributors | MIT |

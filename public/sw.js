@@ -1,4 +1,4 @@
-const CACHE_NAME = "giera-v3";
+const CACHE_NAME = "giera-v4";
 
 const BOOT_ASSETS = [
   "/assets/textures/atlas.webp",
@@ -12,8 +12,6 @@ const BOOT_ASSETS = [
   "/assets/fonts/pixelify-sans-0.ttf",
   "/assets/fonts/pixelify-sans-1.ttf",
   "/assets/fonts/pixelify-sans-3.ttf",
-  "/assets/models/kaykit/knight.glb",
-  "/assets/models/kaykit/rogue.glb",
   "/assets/models/kaykit/mage.glb",
   "/assets/models/kaykit/ranger.glb",
   "/assets/models/kaykit/anims/Rig_Medium_MovementBasic.glb",
