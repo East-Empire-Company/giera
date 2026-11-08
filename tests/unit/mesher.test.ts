@@ -251,6 +251,32 @@ describe("smooth terrain", () => {
     for (let i = 0; i < mesh.positions.length / 3; i++) if (mesh.normals[i * 3 + 1] === 1) tops.add(mesh.positions[i * 3 + 1]);
     expect([...tops]).toEqual([1]);
   });
+  it("keeps side vertices watertight where grass sits on stone", () => {
+    const data = new Uint8Array(CHUNK_VOLUME);
+    data[getBlockIndex(1, 0, 1)] = BLOCK_ID.stone;
+    data[getBlockIndex(1, 1, 1)] = BLOCK_ID.grass;
+    data[getBlockIndex(0, 0, 1)] = BLOCK_ID.grass;
+    const mesh = meshChunk({ data, cx: 0, cy: 0, cz: 0, getBlock: () => BLOCK_ID.air, atlas: smoothAtlas });
+    const edgeHeights = (tile: number): number[] => {
+      const heights: number[] = [];
+      for (const group of mesh.groups) {
+        if (group.tile !== tile) continue;
+        for (let offset = group.start; offset < group.start + group.count; offset++) {
+          const vertex = mesh.indices[offset];
+          const start = vertex * 3;
+          if (mesh.positions[start] === 1 && mesh.positions[start + 2] === 1 && mesh.normals[start + 2] === -1) {
+            heights.push(mesh.positions[start + 1]);
+          }
+        }
+      }
+      return heights;
+    };
+    const stoneEdge = edgeHeights(atlas.stone.id);
+    const grassEdge = edgeHeights(smoothAtlas.grass_side.id);
+    expect(stoneEdge.length).toBeGreaterThan(0);
+    expect(grassEdge).toContain(Math.max(...stoneEdge));
+  });
+
   it("keeps the four-corner mean after two deform iterations", () => {
     const heightAt = (x: number, z: number): number => (x === 1 && z === 0 ? 4 : 3);
     const getBlock = (x: number, y: number, z: number): number =>
@@ -373,6 +399,15 @@ describe("smooth ground height", () => {
   it("matches the voxel top away from steps and blends across them", () => {
     expect(smoothGroundOffset(stepWorld, 0.5, 0.5, 3)).toBeCloseTo(0, 6);
     expect(smoothGroundOffset(stepWorld, 1.9, 0.5, 3)).toBeGreaterThan(0);
+  });
+  it("follows smoothed visual ground on exposed stone beside grass", () => {
+    const mixedWorld = (x: number, y: number, z: number): number => {
+      if (x === 1 && z === 1) return y === 0 ? BLOCK_ID.stone : BLOCK_ID.air;
+      if (x === 1 && z === 0) return y >= 0 && y < 2 ? BLOCK_ID.grass : BLOCK_ID.air;
+      if (x === 0 && z === 1) return y === 0 ? BLOCK_ID.grass : BLOCK_ID.air;
+      return BLOCK_ID.air;
+    };
+    expect(smoothGroundOffset(mixedWorld, 1.5, 1.25, 1)).toBeGreaterThan(0);
   });
   it("is zero over non-smooth blocks and keeps vertices level without neighbours", () => {
     expect(smoothGroundOffset(() => BLOCK_ID.stone, 0.5, 0.5, 1)).toBe(0);

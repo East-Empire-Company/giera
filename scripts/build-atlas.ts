@@ -141,7 +141,9 @@ async function loadTileMaps(name: string, tilePath: string, res: number): Promis
     if (!existsSync(pbrPath(sourceId, map))) throw new Error(`Missing PBR map for ${name}: ${pbrPath(sourceId, map)} (run bun run assets:fetch)`);
   }
   const resize = { width: res, height: res };
-  const albedo = sharp(pbrPath(sourceId, "Color")).resize(resize).png().toBuffer();
+  const albedo = name === "ginkgo_leaves"
+    ? sharp(resolve("public", tilePath)).resize(res, res, { kernel: "nearest" }).png().toBuffer()
+    : sharp(pbrPath(sourceId, "Color")).resize(resize).png().toBuffer();
   const normal = sharp(pbrPath(sourceId, "NormalGL")).resize(resize).png().toBuffer();
   const aoPath = pbrPath(sourceId, "AmbientOcclusion");
   const [aoRaw, roughRaw] = await Promise.all([
@@ -185,7 +187,7 @@ async function addGutter(tile: Buffer, res: number): Promise<Buffer> {
     const piece = await edge(sl, st, sw, sh);
     overlays.push({ input: piece.input, left: dl, top: dt });
   }
-  return sharp({ create: { width: cell, height: cell, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } })
+  return sharp({ create: { width: cell, height: cell, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite(overlays)
     .png()
     .toBuffer();
@@ -217,7 +219,7 @@ async function main(): Promise<void> {
   }
 
   const compose = async (cells: typeof albedoCells, lossless = false): Promise<Buffer> =>
-    sharp({ create: { width: atlasWidth, height: atlasHeight, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } } })
+    sharp({ create: { width: atlasWidth, height: atlasHeight, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
       .composite(cells)
       .webp(lossless ? { lossless: true, effort: 6 } : { quality: ATLAS_WEBP_QUALITY, alphaQuality: 100, effort: 6 })
       .toBuffer();

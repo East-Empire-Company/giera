@@ -1,4 +1,4 @@
-import { getBlockDef } from "./blocks";
+import { getBlockDef, isStoneFamily } from "./blocks";
 import { CHUNK_SIZE, CHUNK_VOLUME, getBlockIndex } from "./chunk";
 import { NO_CITY_TINT, type WarsawTintColor } from "./warsaw-city-data";
 import { terrainMaterialFor } from "./terrain-materials";
@@ -58,7 +58,8 @@ export function smoothGroundOffset(getBlock: (x: number, y: number, z: number) =
   const cx = Math.floor(x);
   const cz = Math.floor(z);
   const top = Math.round(feetY);
-  if (!isSmoothBlock(getBlock(cx, top - 1, cz))) return 0;
+  const groundBlock = getBlock(cx, top - 1, cz);
+  if (!isSmoothBlock(groundBlock) && !isStoneFamily(groundBlock)) return 0;
   const fx = x - cx;
   const fz = z - cz;
   const h = (ox: number, oz: number) => smoothVertexHeight(getBlock, cx + ox, top, cz + oz);
@@ -140,7 +141,28 @@ export function meshChunk(input: {
     }
     return input.getBlock(origin[0] + x, origin[1] + y, origin[2] + z);
   };
-  const smoothHeight = (x: number, y: number, z: number): number => smoothVertexHeight(localBlock, x, y, z);
+  const heightCache = new Map<number, number>();
+  const heightKey = (x: number, y: number, z: number): number => ((x + 512) * 1024 + (y + 512)) * 1024 + (z + 512);
+  const smoothHeight = (x: number, y: number, z: number): number => {
+    const key = heightKey(x, y, z);
+    const cached = heightCache.get(key);
+    if (cached !== undefined) return cached;
+    const height = smoothVertexHeight(localBlock, x, y, z);
+    heightCache.set(key, height);
+    return height;
+  };
+  const stoneDeformCache = new Map<number, boolean>();
+  const stoneNeedsSmoothing = (x: number, y: number, z: number): boolean => {
+    const key = heightKey(x, y, z);
+    const cached = stoneDeformCache.get(key);
+    if (cached !== undefined) return cached;
+    let needed = false;
+    for (let dx = 0; dx <= 1 && !needed; dx++) for (let dy = 0; dy <= 1 && !needed; dy++) for (let dz = 0; dz <= 1 && !needed; dz++) {
+      needed = smoothHeight(x + dx, y + dy, z + dz) !== y + dy;
+    }
+    stoneDeformCache.set(key, needed);
+    return needed;
+  };
   const addFace = (face: Face, axis: typeof AXES[number], slice: number, u: number, v: number, width: number, height: number): void => {
     let mesh = meshes.get(face.tile.id);
     if (!mesh) {
@@ -241,7 +263,7 @@ export function meshChunk(input: {
               else if (corner === 2) ao2 = shade;
               else ao3 = shade;
             }
-            const smoothBlock = blockId === 4 || blockId === 5 || blockId === 6;
+            const smoothBlock = isSmoothBlock(blockId) || (isStoneFamily(blockId) && stoneNeedsSmoothing(px, py, pz));
             const leaf = blockId === 8;
             const tintId = input.cityTintIds?.[getBlockIndex(px, py, pz)] ?? NO_CITY_TINT;
             const tint = tintId === NO_CITY_TINT ? undefined : input.cityTintPalettes?.[blockId]?.[tintId];

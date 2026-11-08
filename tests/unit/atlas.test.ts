@@ -113,5 +113,24 @@ describe("source-pixel atlas packing", () => {
       expect(pixel[2], `${name} metalness`).toBe(0);
     }
   });
+
+  it("preserves transparent and opaque pixels in the leaf atlas tile", async () => {
+    const tile = atlasManifest.tiles.ginkgo_leaves;
+    const x = Math.round(tile.uv[0] * atlasManifest.width - 0.5);
+    const y = Math.round((1 - tile.uv[3]) * atlasManifest.height - 0.5);
+    const pixels = await sharp("public/assets/textures/atlas.webp")
+      .extract({ left: x, top: y, width: atlasManifest.tileRes, height: atlasManifest.tileRes })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    let transparent = 0;
+    let opaque = 0;
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] < 128) transparent++;
+      if (pixels[i] > 250) opaque++;
+    }
+    expect(transparent).toBeGreaterThan(1000);
+    expect(opaque).toBeGreaterThan(1000);
+  });
 });
 
