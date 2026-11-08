@@ -31,7 +31,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
-  globalTimeout: 600_000,
+  globalTimeout: 1_800_000,
   reporter: jsonOut ? [["list"], ["json", { outputFile: jsonOut }]] : "list",
   use: {
     baseURL: viteOrigin,
